@@ -11,9 +11,11 @@
   - Decision: env vars take precedence over config.json (needed for test isolation)
 - [x] Task 3: Planner Prompt Template (commit: 5c4fb75)
   - Files: tools/verify/prompts/planner.txt
+- [x] Task 4: Stage 1 — Planner Script (commit: 6d23ea4)
+  - Files: tools/verify/planner.sh, tools/verify/tests/test_planner.sh
 
 ## Current
-Task 4: Stage 1 — Planner Script
+Task 5: Agent Prompt Template
 
 ## Remaining
 Task 3: Planner Prompt Template
