@@ -71,9 +71,13 @@ if [ "$SKIP_SPEC" = false ]; then
     if [ -z "$SPEC_PATH" ]; then
       SPEC_PATH=$(git ls-files --others --exclude-standard 2>/dev/null | grep "^docs/plans/.*\.md$" | head -1 || true)
     fi
-    # Fall back to newest by mtime
+    # Fall back to newest by mtime (avoid xargs ls -t which breaks on spaces)
     if [ -z "$SPEC_PATH" ]; then
-      SPEC_PATH=$(find docs/plans -name "*.md" 2>/dev/null | xargs ls -t 2>/dev/null | head -1 || true)
+      SPEC_PATH=$(find docs/plans -name "*.md" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | awk '{print $2}' || true)
+      # macOS fallback: find doesn't support -printf
+      if [ -z "$SPEC_PATH" ]; then
+        SPEC_PATH=$(ls -t docs/plans/*.md 2>/dev/null | head -1 || true)
+      fi
     fi
   fi
 
