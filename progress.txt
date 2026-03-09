@@ -21,9 +21,11 @@
 - [x] Task 7: Stage 2 — Agent Orchestrator (commit: 9b7b9f2)
   - Files: tools/verify/orchestrate.sh, tools/verify/tests/test_orchestrate.sh
   - Decision: replaced mapfile with while loop (bash 3 compat on macOS)
+- [x] Task 8: Stage 3 — Judge (commit: 49d615f)
+  - Files: tools/verify/judge.sh, tools/verify/prompts/judge.txt, tools/verify/tests/test_judge.sh
 
 ## Current
-Task 8: Stage 3 — Judge
+Task 9: Reporter
 
 ## Remaining
 Task 3: Planner Prompt Template
