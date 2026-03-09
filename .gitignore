@@ -6,3 +6,6 @@
 .verify/plan.json
 .verify/.spec_path
 .verify/chrome-profile/
+.verify/*.txt
+.verify/*.log
+.playwright-mcp/
