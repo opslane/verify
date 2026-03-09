@@ -55,7 +55,9 @@ print(content.replace('REPLACE_STEPS', steps))
   done
 
   # Write MCP config to temp file (--mcp-config expects a path)
-  MCP_CONFIG_FILE=$(mktemp /tmp/verify-mcp-XXXXXX.json)
+  # Use PID-based name — avoids mktemp suffix randomization issues on macOS
+  MCP_CONFIG_FILE="/tmp/verify-mcp-$$.json"
+  rm -f "$MCP_CONFIG_FILE"
   echo '{"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp@latest","--save-video=1280x720","--caps","vision","--storage-state",".verify/auth.json","--save-trace"]}}}' > "$MCP_CONFIG_FILE"
   # shellcheck disable=SC2064
   trap "rm -f '$MCP_CONFIG_FILE'" EXIT

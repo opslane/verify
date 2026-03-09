@@ -16,7 +16,7 @@ Verify your frontend changes before pushing.
 ### Stage 0: Pre-flight
 
 ```bash
-bash tools/verify/preflight.sh
+bash ~/.claude/tools/verify/preflight.sh
 ```
 
 Stop if this fails. Fix the reported issue and re-run.
@@ -25,7 +25,7 @@ Stop if this fails. Fix the reported issue and re-run.
 
 ```bash
 SPEC_PATH=$(cat .verify/.spec_path)
-bash tools/verify/planner.sh "$SPEC_PATH"
+bash ~/.claude/tools/verify/planner.sh "$SPEC_PATH"
 ```
 
 Show the extracted ACs to the user:
@@ -47,27 +47,28 @@ COUNT=$(jq '.criteria | length' .verify/plan.json)
 
 ### Stage 2: Browser Agents
 
-Clear previous evidence first:
+Clear previous evidence and stale temp files first:
 ```bash
 rm -rf .verify/evidence .verify/prompts
+rm -f /tmp/verify-mcp-*.json
 mkdir -p .verify/evidence
 ```
 
 Run:
 ```bash
-bash tools/verify/orchestrate.sh
+bash ~/.claude/tools/verify/orchestrate.sh
 ```
 
 ### Stage 3: Judge
 
 ```bash
-bash tools/verify/judge.sh
+bash ~/.claude/tools/verify/judge.sh
 ```
 
 ### Report
 
 ```bash
-bash tools/verify/report.sh
+bash ~/.claude/tools/verify/report.sh
 ```
 
 ## Error Handling
