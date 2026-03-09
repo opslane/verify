@@ -29,9 +29,21 @@ VERIFY_SPEC_PATH="${VERIFY_SPEC_PATH:-$(jq -r '.specPath // empty' "$CONFIG_FILE
 export VERIFY_BASE_URL VERIFY_AUTH_CHECK_URL VERIFY_SPEC_PATH
 
 # 1. Dev server health check
+PORT=$(echo "$VERIFY_BASE_URL" | grep -oE ':[0-9]+' | tr -d ':')
 echo "→ Checking dev server at $VERIFY_BASE_URL..."
 if ! curl -sf --max-time 5 "$VERIFY_BASE_URL" > /dev/null 2>&1; then
-  echo "✗ Dev server not reachable at $VERIFY_BASE_URL. Start it and retry."
+  # Surface which process is occupying the port if any
+  if [ -n "$PORT" ]; then
+    OCCUPANT=$(lsof -ti :"$PORT" -sTCP:LISTEN 2>/dev/null | xargs -I{} ps -p {} -o pid=,command= 2>/dev/null | head -1 || true)
+    if [ -n "$OCCUPANT" ]; then
+      echo "✗ Port $PORT is occupied by a different process: $OCCUPANT"
+      echo "  Check your baseUrl in .verify/config.json and start the right dev server."
+    else
+      echo "✗ Dev server not reachable at $VERIFY_BASE_URL. Start it and retry."
+    fi
+  else
+    echo "✗ Dev server not reachable at $VERIFY_BASE_URL. Start it and retry."
+  fi
   exit 1
 fi
 echo "✓ Dev server reachable"
