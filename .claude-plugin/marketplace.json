@@ -1,19 +1,17 @@
 {
-  "name": "verify",
-  "description": "Automated acceptance criteria verification for Claude Code",
+  "name": "opslane-verify-marketplace",
+  "description": "Browser-based AC verification for frontend PRs",
   "owner": {
-    "name": "Abhishek Ray",
-    "github": "abhishekray07"
+    "name": "opslane"
   },
   "plugins": [
     {
-      "name": "verify",
-      "description": "Automated acceptance criteria verification for Claude Code — runs browser agents against your spec before you push",
-      "version": "0.1.0",
+      "name": "opslane-verify",
+      "description": "Browser-based acceptance criteria verification for frontend PRs using Claude + Playwright",
+      "version": "1.0.0",
       "source": "./",
       "author": {
-        "name": "Abhishek Ray",
-        "github": "abhishekray07"
+        "name": "opslane"
       }
     }
   ]

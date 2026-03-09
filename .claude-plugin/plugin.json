@@ -1,13 +1,13 @@
 {
-  "name": "verify",
-  "description": "Automated acceptance criteria verification for Claude Code — runs browser agents against your spec before you push",
-  "version": "0.1.0",
+  "name": "opslane-verify",
+  "description": "Browser-based acceptance criteria verification for frontend PRs using Claude + Playwright",
+  "version": "1.0.0",
   "author": {
-    "name": "Abhishek Ray",
-    "github": "abhishekray07"
+    "name": "Opslane",
+    "url": "https://github.com/opslane"
   },
-  "homepage": "https://github.com/opslane/verify",
-  "repository": "https://github.com/opslane/verify",
+  "homepage": "https://github.com/opslane/opslane-v3",
+  "repository": "https://github.com/opslane/opslane-v3",
   "license": "MIT",
-  "keywords": ["verify", "acceptance-criteria", "playwright", "testing", "claude-code"]
+  "keywords": ["verify", "playwright", "frontend", "acceptance-criteria", "qa"]
 }
