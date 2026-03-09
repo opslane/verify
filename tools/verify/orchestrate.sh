@@ -71,7 +71,7 @@ print(content.replace('REPLACE_STEPS', steps))
 else
   echo "  Mode: sequential"
   for AC_ID in "${AC_IDS[@]}"; do
-    "$AGENT_BIN" "$AC_ID" 90
+    "$AGENT_BIN" "$AC_ID" "${AGENT_TIMEOUT:-90}"
   done
 fi
 
