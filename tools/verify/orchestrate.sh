@@ -56,7 +56,7 @@ print(content.replace('REPLACE_STEPS', steps))
 
   # Write MCP config to temp file (--mcp-config expects a path)
   MCP_CONFIG_FILE=$(mktemp /tmp/verify-mcp-XXXXXX.json)
-  echo '{"playwright":{"command":"npx","args":["@playwright/mcp@latest","--save-video=1280x720","--caps","vision","--storage-state",".verify/auth.json","--save-trace"]}}' > "$MCP_CONFIG_FILE"
+  echo '{"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp@latest","--save-video=1280x720","--caps","vision","--storage-state",".verify/auth.json","--save-trace"]}}}' > "$MCP_CONFIG_FILE"
   # shellcheck disable=SC2064
   trap "rm -f '$MCP_CONFIG_FILE'" EXIT
 
