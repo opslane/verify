@@ -13,9 +13,11 @@
   - Files: tools/verify/prompts/planner.txt
 - [x] Task 4: Stage 1 — Planner Script (commit: 6d23ea4)
   - Files: tools/verify/planner.sh, tools/verify/tests/test_planner.sh
+- [x] Task 5: Agent Prompt Template (commit: b3fd30d)
+  - Files: tools/verify/prompts/agent.txt
 
 ## Current
-Task 5: Agent Prompt Template
+Task 6: Stage 2 — Single Browser Agent
 
 ## Remaining
 Task 3: Planner Prompt Template
