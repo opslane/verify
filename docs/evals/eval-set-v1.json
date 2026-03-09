@@ -1,0 +1,156 @@
+{
+  "version": "1",
+  "description": "Frontend verification eval set — 10 merged PRs across 3 open-source Next.js/React repos",
+  "created": "2026-03-09",
+  "repos": [
+    {
+      "id": "calcom",
+      "repo": "calcom/cal.com",
+      "url": "https://github.com/calcom/cal.com",
+      "description": "Open-source scheduling infrastructure — Next.js, TypeScript, Tailwind",
+      "stars": 40506,
+      "dev_setup": "pnpm install && cp .env.example .env && pnpm dx",
+      "base_url": "http://localhost:3000"
+    },
+    {
+      "id": "formbricks",
+      "repo": "formbricks/formbricks",
+      "url": "https://github.com/formbricks/formbricks",
+      "description": "Open-source survey & feedback platform — Next.js, TypeScript, Tailwind",
+      "stars": 11962,
+      "dev_setup": "pnpm install && docker-compose -f docker-compose.dev.yml up -d && pnpm dev",
+      "base_url": "http://localhost:3000"
+    },
+    {
+      "id": "documenso",
+      "repo": "documenso/documenso",
+      "url": "https://github.com/documenso/documenso",
+      "description": "Open-source DocuSign alternative — Next.js, TypeScript, Tailwind",
+      "stars": 12486,
+      "dev_setup": "pnpm install && pnpm dx",
+      "base_url": "http://localhost:3000"
+    }
+  ],
+  "evals": [
+    {
+      "id": "eval-001",
+      "repo": "calcom",
+      "pr": 28011,
+      "title": "fix: inconsistent hover width on My Account → Settings navigation",
+      "url": "https://github.com/calcom/cal.com/pull/28011",
+      "spec": "docs/evals/calcom/pr-28011-spec.md",
+      "test_url": "/settings/my-account/profile",
+      "expected_verdict": "pass",
+      "complexity": "low",
+      "notes": "Visual layout fix — full-width hover state on vertical nav items"
+    },
+    {
+      "id": "eval-002",
+      "repo": "calcom",
+      "pr": 27983,
+      "title": "fix: dropdown toggle indicator sync in workflow form",
+      "url": "https://github.com/calcom/cal.com/pull/27983",
+      "spec": "docs/evals/calcom/pr-27983-spec.md",
+      "test_url": "/workflows",
+      "expected_verdict": "pass",
+      "complexity": "low",
+      "notes": "Interaction fix — chevron icon rotates to match open/closed dropdown state"
+    },
+    {
+      "id": "eval-003",
+      "repo": "calcom",
+      "pr": 27965,
+      "title": "fix: hide bookings opt-in banner on mobile viewport",
+      "url": "https://github.com/calcom/cal.com/pull/27965",
+      "spec": "docs/evals/calcom/pr-27965-spec.md",
+      "test_url": "/bookings",
+      "expected_verdict": "pass",
+      "complexity": "low",
+      "notes": "Responsive fix — fixed-position banner hidden below 768px"
+    },
+    {
+      "id": "eval-004",
+      "repo": "formbricks",
+      "pr": 7422,
+      "title": "feat: feedback records table",
+      "url": "https://github.com/formbricks/formbricks/pull/7422",
+      "spec": "docs/evals/formbricks/pr-7422-spec.md",
+      "test_url": "/environments/:envId/unify/feedback-records",
+      "expected_verdict": "pass",
+      "complexity": "medium",
+      "notes": "New page — paginated table of feedback records in Unify workspace"
+    },
+    {
+      "id": "eval-005",
+      "repo": "formbricks",
+      "pr": 7399,
+      "title": "feat: add Formbricks AI toggle to organization settings",
+      "url": "https://github.com/formbricks/formbricks/pull/7399",
+      "spec": "docs/evals/formbricks/pr-7399-spec.md",
+      "test_url": "/environments/:envId/settings/organization/general",
+      "expected_verdict": "pass",
+      "complexity": "low",
+      "notes": "Settings UI — AI toggle switch visible only to org owners"
+    },
+    {
+      "id": "eval-006",
+      "repo": "formbricks",
+      "pr": 7392,
+      "title": "feat(navigation): add workflows section to main navigation",
+      "url": "https://github.com/formbricks/formbricks/pull/7392",
+      "spec": "docs/evals/formbricks/pr-7392-spec.md",
+      "test_url": "/environments/:envId/surveys",
+      "expected_verdict": "pass",
+      "complexity": "low",
+      "notes": "Navigation — Workflows section added to sidebar"
+    },
+    {
+      "id": "eval-007",
+      "repo": "formbricks",
+      "pr": 7387,
+      "title": "fix: theme styling preview shows open text question",
+      "url": "https://github.com/formbricks/formbricks/pull/7387",
+      "spec": "docs/evals/formbricks/pr-7387-spec.md",
+      "test_url": "/environments/:envId/settings/look-and-feel",
+      "expected_verdict": "pass",
+      "complexity": "medium",
+      "notes": "Theme preview — open text question visible alongside multiple choice"
+    },
+    {
+      "id": "eval-008",
+      "repo": "documenso",
+      "pr": 2541,
+      "title": "fix: make signing page left-hand sidebar collapsible",
+      "url": "https://github.com/documenso/documenso/pull/2541",
+      "spec": "docs/evals/documenso/pr-2541-spec.md",
+      "test_url": "/sign/:token",
+      "expected_verdict": "pass",
+      "complexity": "medium",
+      "notes": "Interaction — sidebar collapse/expand toggle; hidden on mobile"
+    },
+    {
+      "id": "eval-009",
+      "repo": "documenso",
+      "pr": 2506,
+      "title": "fix: update button width to fit content in public profile page",
+      "url": "https://github.com/documenso/documenso/pull/2506",
+      "spec": "docs/evals/documenso/pr-2506-spec.md",
+      "test_url": "/u/:username",
+      "expected_verdict": "pass",
+      "complexity": "low",
+      "notes": "Layout fix — template buttons use w-fit, no text overflow"
+    },
+    {
+      "id": "eval-010",
+      "repo": "documenso",
+      "pr": 2519,
+      "title": "feat: per-recipient envelope expiration",
+      "url": "https://github.com/documenso/documenso/pull/2519",
+      "spec": "docs/evals/documenso/pr-2519-spec.md",
+      "test_url": "/documents",
+      "expected_verdict": "pass",
+      "complexity": "high",
+      "notes": "Feature — expiration date field per recipient in send dialog"
+    }
+  ]
+}
