@@ -6,9 +6,12 @@
 - [x] Task 1: Project Bootstrap (commit: 610ae3c)
   - Files: .gitignore, .verify/config.json
   - Dirs: tools/verify/tests, tools/verify/prompts, .verify, .claude/skills
+- [x] Task 2: Stage 0 — Pre-flight (commit: a1b3898)
+  - Files: tools/verify/preflight.sh, tools/verify/tests/test_preflight.sh
+  - Decision: env vars take precedence over config.json (needed for test isolation)
 
 ## Current
-Task 2: Stage 0 — Pre-flight
+Task 3: Planner Prompt Template
 
 ## Remaining
 Task 3: Planner Prompt Template
