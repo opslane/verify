@@ -100,40 +100,69 @@ Then run the planner:
 VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/planner.sh .verify/spec.md
 ```
 
-Show extracted ACs grouped by testability:
+**Step 1 — Show extracted ACs (no testability labels):**
 
 ```bash
-echo "Direct ACs (will run automatically):"
-jq -r '.criteria[] | select(.testability == "direct") | "  ✓ \(.id): \(.description)"' .verify/plan.json
-
-CONDITIONAL=$(jq -r '.criteria[] | select(.testability == "conditional") | "  ? \(.id): \(.description)\n    Requires: \(.condition)"' .verify/plan.json)
-if [ -n "$CONDITIONAL" ]; then
-  echo ""
-  echo "Conditional ACs (need setup to run):"
-  echo "$CONDITIONAL"
-fi
-
 jq -r '.skipped[]? | "  ⊘ Skipped: \(.)"' .verify/plan.json
+echo ""
+echo "ACs to verify:"
+jq -r '.criteria[] | "  • \(.id): \(.description)"' .verify/plan.json
 ```
 
-**For each conditional AC**, ask the user:
-> "AC [id] requires: [condition]. Is this set up? (y = include / n = skip)"
+**Step 2 — Research each AC's setup needs**
 
-If n, remove it (substitute the actual AC id for `<ac-id>`):
-```bash
-AC_ID="<ac-id>"
-jq --arg id "$AC_ID" 'del(.criteria[] | select(.id == $id and .testability == "conditional"))' \
-  .verify/plan.json > .verify/plan.tmp && mv .verify/plan.tmp .verify/plan.json
-```
+For each AC, check its `condition` field in `plan.json` (present only when setup is needed; absent means no setup expected — but still verify). Then use these tools to understand what app state is required:
 
-Then confirm: "Does this look right? (y/n)"
-- If n: stop, ask them to refine the spec and re-run.
+- Use the **Grep** tool to search `prisma/schema.prisma`, `db/schema.*`, `src/models/**` for relevant data models
+- Use the **Glob** tool to find `**/seed*.ts`, `**/fixtures/**`, `**/factories/**` for seed scripts or factories
+- Use the **Grep** tool to search `src/app/api/**` or `src/routes/**` for API routes that create the required entity
+- Use the **Grep** tool to search `src/config/**`, `.env.example` for feature flags or config values
 
-Stop if no criteria remain:
+For each AC, determine what data, auth state, or config must exist — and what setup command (if any) would create it. Use `$VERIFY_BASE_URL` for any URLs, never hardcode them.
+
+**Step 3 — Present unified setup checklist**
+
+Present all ACs together in a single block. **Setup commands are shown here but NOT executed yet — execution happens in Step 5 after confirmation.**
+
+> Here's what I need before running:
+>
+> **AC1** — [description]
+> → Needs: [what must exist]
+> → Found: [model/route at path:line]
+> → I'll run: `curl -X POST $VERIFY_BASE_URL/api/... --data-raw '{"field":"value"}'`
+>
+> **AC2** — [description]
+> → No setup needed
+>
+> **AC3** — [description]
+> → No setup needed
+
+**Step 4 — Single confirmation**
+
+Ask:
+> "Ready to set up and run? (y = set up and run all / s [ac-id] = skip that AC / edit = adjust setup)"
+
+- `y` — proceed to Step 5
+- `s ac1` (or any AC id) — remove that AC from plan.json:
+  ```bash
+  AC_ID="ac1"  # replace with actual id
+  jq --arg id "$AC_ID" 'del(.criteria[] | select(.id == $id))' \
+    .verify/plan.json > .verify/plan.tmp && mv .verify/plan.tmp .verify/plan.json
+  ```
+  Then re-show the updated checklist (Step 3) and re-ask for confirmation (Step 4).
+- `edit` — user provides corrections; update your setup plan, re-show the updated checklist (Step 3), and re-ask for confirmation (Step 4). After 2–3 rounds without resolution, suggest: "Consider refining the spec and re-running `/verify`."
+
+**Step 5 — Execute setup, verify, then proceed**
+
+First, stop if no criteria remain:
 ```bash
 COUNT=$(jq '.criteria | length' .verify/plan.json)
 [ "$COUNT" -gt 0 ] || { echo "✗ No testable criteria."; exit 1; }
 ```
+
+Now run each proposed setup command. After each, verify it worked (e.g. check the HTTP response code, or query the DB). If a setup command fails, skip that AC, remove it from `plan.json`, and report: `"Setup for [ac-id] failed — skipping."` Then confirm to the user:
+
+> "Setup complete — all ACs ready. Proceeding to Stage 2."
 
 ---
 
@@ -146,9 +175,22 @@ rm -f /tmp/verify-mcp-*.json
 mkdir -p .verify/evidence
 ```
 
-Run:
+Run orchestrate in background so you can monitor it:
 ```bash
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/orchestrate.sh
+VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/orchestrate.sh &
+ORCH_PID=$!
+```
+
+Then poll progress until done:
+```bash
+while kill -0 $ORCH_PID 2>/dev/null; do
+  TOTAL=$(jq '.criteria | length' .verify/plan.json 2>/dev/null || echo "?")
+  DONE=$(ls .verify/evidence/*/agent.log 2>/dev/null | wc -l | tr -d ' ')
+  CURRENT=$(ls -t .verify/evidence/*/claude.log 2>/dev/null | head -1 | cut -d/ -f4)
+  echo "  Progress: $DONE/$TOTAL done${CURRENT:+ — $CURRENT running}"
+  sleep 10
+done
+wait $ORCH_PID
 ```
 
 ---
@@ -177,6 +219,7 @@ VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/report.sh
 | 0 criteria after human review | Print message, stop |
 | All agents timeout/error | Print "Check dev server and auth", suggest `/verify-setup` |
 | Judge returns invalid JSON | Print raw output, tell user to check `.verify/evidence/` manually |
+| `progress.jsonl` missing after orchestrate | Agents never started or all exited instantly — check `.verify/evidence/*/claude.log` |
 
 ## Quick Reference
 
