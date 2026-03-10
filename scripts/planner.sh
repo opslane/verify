@@ -71,15 +71,8 @@ PROMPT_FILE=".verify/planner-prompt.txt"
 # ── Call Opus ─────────────────────────────────────────────────────────────────
 RAW=$("$CLAUDE" -p --model opus --dangerously-skip-permissions < "$PROMPT_FILE")
 
-# Extract JSON object — handles preamble text and markdown fences
-PLAN_JSON=$(echo "$RAW" | python3 -c "
-import sys
-text = sys.stdin.read()
-start = text.find('{')
-end = text.rfind('}')
-if start != -1 and end != -1:
-    print(text[start:end+1])
-" | tr -d '\r')
+# Strip markdown fences if model ignores the instruction
+PLAN_JSON=$(echo "$RAW" | sed '/^```/d' | tr -d '\r')
 
 # Validate JSON
 if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then

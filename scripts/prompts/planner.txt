@@ -45,4 +45,4 @@ Rules:
 7. Screenshot labels are snake_case descriptions of page state at capture time.
 8. Avoid brittle pixel measurements. Use ratios, class checks, or relative comparisons.
 9. If code context is provided and an AC cannot be grounded in the diff, note that in the condition or skip reason.
-10. Output raw JSON only — no ```json fences.
+10. Output raw JSON only — no ```json fences, no preamble, no explanation. The FIRST character of your response must be `{`.
