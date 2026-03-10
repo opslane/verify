@@ -10,7 +10,7 @@ if [ "${VERIFY_ALLOW_DANGEROUS:-0}" != "1" ]; then
 fi
 
 AC_ID="$1"
-TIMEOUT_SECS="${2:-90}"
+TIMEOUT_SECS="${2:-240}"
 
 [ -n "$AC_ID" ] || { echo "Usage: $0 <ac_id> [timeout_secs]"; exit 1; }
 [ -f ".verify/plan.json" ] || { echo "✗ .verify/plan.json not found"; exit 1; }
