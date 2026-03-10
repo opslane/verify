@@ -4,6 +4,7 @@ Return ONLY a valid JSON object. No markdown fences, no explanation. Raw JSON on
 
 Schema:
 {
+  "slug": "<kebab-case run identifier, e.g. 'pr-7387-look-and-feel-input-color' — derived from PR number + 2-4 word feature summary>",
   "criteria": [
     {
       "id": "ac1",
