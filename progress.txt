@@ -1,51 +1,17 @@
 # Progress Tracker
-# Started: 2026-03-08
-# Plan: docs/plans/2026-03-08-verify-implementation.md
+# Started: 2026-03-12
+# Plan: docs/plans/2026-03-12-saas-auth-implementation.md
 
 ## Completed
-- [x] Task 1: Project Bootstrap (commit: 610ae3c)
-  - Files: .gitignore, .verify/config.json
-  - Dirs: tools/verify/tests, tools/verify/prompts, .verify, .claude/skills
-- [x] Task 2: Stage 0 — Pre-flight (commit: a1b3898)
-  - Files: tools/verify/preflight.sh, tools/verify/tests/test_preflight.sh
-  - Decision: env vars take precedence over config.json (needed for test isolation)
-- [x] Task 3: Planner Prompt Template (commit: 5c4fb75)
-  - Files: tools/verify/prompts/planner.txt
-- [x] Task 4: Stage 1 — Planner Script (commit: 6d23ea4)
-  - Files: tools/verify/planner.sh, tools/verify/tests/test_planner.sh
-- [x] Task 5: Agent Prompt Template (commit: b3fd30d)
-  - Files: tools/verify/prompts/agent.txt
-- [x] Task 6: Stage 2 — Single Browser Agent (commit: e309a95)
-  - Files: tools/verify/agent.sh, tools/verify/tests/test_agent.sh
-  - Decision: added mkdir -p .verify/prompts (missing from plan)
-- [x] Task 7: Stage 2 — Agent Orchestrator (commit: 9b7b9f2)
-  - Files: tools/verify/orchestrate.sh, tools/verify/tests/test_orchestrate.sh
-  - Decision: replaced mapfile with while loop (bash 3 compat on macOS)
-- [x] Task 8: Stage 3 — Judge (commit: 49d615f)
-  - Files: tools/verify/judge.sh, tools/verify/prompts/judge.txt, tools/verify/tests/test_judge.sh
-- [x] Task 9: Reporter (commit: d026d34)
-  - Files: tools/verify/report.sh, tools/verify/tests/test_report.sh
-- [x] Task 10: /verify setup Skill (commit: ba26d2e)
-  - Files: .claude/skills/verify-setup.md
-- [x] Task 11: /verify Main Skill (commit: af1bf08)
-  - Files: .claude/skills/verify.md
-
-- [x] Task 12: Run All Tests — all 6 tests PASS
-- [x] Task 13: Integration Smoke Test — SKIPPED (requires manual dev server)
+(none yet)
 
 ## Current
-COMPLETE
+Task 1: Server Scaffold
 
 ## Remaining
-(none)
-Task 3: Planner Prompt Template
-Task 4: Stage 1 — Planner Script
-Task 5: Agent Prompt Template
-Task 6: Stage 2 — Single Browser Agent
-Task 7: Stage 2 — Agent Orchestrator
-Task 8: Stage 3 — Judge
-Task 9: Reporter
-Task 10: /verify setup Skill
-Task 11: /verify Main Skill
-Task 12: Run All Tests
-Task 13: Integration Smoke Test (Manual)
+Task 2: DB Connection + Migrations
+Task 3: Landing Page
+Task 4: Auth Routes — /auth/github and /auth/callback
+Task 5: Webhook Route + Installation Handler
+Task 6: Dockerfile + env.example
+Task 7: Smoke Test (manual)
