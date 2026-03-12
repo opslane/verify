@@ -84,8 +84,12 @@
   - Files: server/src/review/parser.ts, server/src/review/parser.test.ts
   - 8 tests pass (JSON extraction, orphan handling, fallback)
 
+- [x] Task 3: GitHub PR review function (commit: 9979950)
+  - Files: server/src/github/pr.ts (added createPrReview)
+  - Existing 2 tests still pass, typecheck clean
+
 ### Current
-Task 3: GitHub PR review function
+Code review gate (tasks 1-3)
 
 ### Remaining
 Task 2: Output parser
