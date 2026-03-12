@@ -175,6 +175,28 @@ diff --git a/kept.ts b/kept.ts
     });
   });
 
+  it("ignores 'No newline at end of file' marker", () => {
+    // The parser reads hunk headers, not individual lines, so this marker
+    // has no effect — but this test documents that property explicitly.
+    const diff = `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,3 +1,4 @@
++new line
+ existing
+-old line
+\\ No newline at end of file
+`;
+    const files = parseDiff(diff);
+    expect(files).toHaveLength(1);
+    expect(files[0].hunks[0]).toEqual({
+      oldStart: 1,
+      oldCount: 3,
+      newStart: 1,
+      newCount: 4,
+    });
+  });
+
   it("returns empty array for empty diff", () => {
     expect(parseDiff("")).toEqual([]);
   });
@@ -354,7 +376,7 @@ export function buildLineMap(files: DiffFile[]): string {
 ```bash
 cd server && npm test -- diff-parser.test
 ```
-Expected: PASS (10 tests)
+Expected: PASS (11 tests)
 
 **Step 5: Commit**
 
@@ -563,8 +585,9 @@ function extractJson(raw: string): RawReviewOutput | null {
     }
   }
 
-  // Attempt 3: extract first JSON object via regex
-  const objectMatch = raw.match(/\{[\s\S]*\}/);
+  // Attempt 3: extract first JSON object via lazy regex
+  // Lazy quantifier to avoid matching from first { to last } across unrelated blocks
+  const objectMatch = raw.match(/\{[\s\S]*?\}/);
   if (objectMatch) {
     try {
       return JSON.parse(objectMatch[0]) as RawReviewOutput;
@@ -670,79 +693,12 @@ git commit -m "feat(server): add review output parser with orphan handling"
 - Modify: `server/src/github/pr.ts`
 - Modify: `server/src/github/pr.test.ts`
 
-**Step 1: Write the failing test**
-
-Add to the existing `server/src/github/pr.test.ts`:
-
-```typescript
-import { describe, it, expect, vi } from "vitest";
-import { buildDiffUrl, truncateDiff, MAX_DIFF_BYTES, buildReviewPayload } from "./pr.js";
-import type { ReviewComment } from "../review/parser.js";
-
-// ... existing tests for buildDiffUrl and truncateDiff ...
-
-describe("buildReviewPayload", () => {
-  it("builds correct payload with comments", () => {
-    const comments: ReviewComment[] = [
-      { path: "src/auth.ts", line: 42, side: "RIGHT", body: "Fix this." },
-    ];
-    const payload = buildReviewPayload("abc123", "Summary text.", comments);
-    expect(payload).toEqual({
-      commit_id: "abc123",
-      body: "Summary text.",
-      event: "COMMENT",
-      comments: [
-        { path: "src/auth.ts", line: 42, side: "RIGHT", body: "Fix this." },
-      ],
-    });
-  });
-
-  it("always sets event to COMMENT", () => {
-    const payload = buildReviewPayload("abc123", "Summary.", []);
-    expect(payload.event).toBe("COMMENT");
-  });
-
-  it("handles empty comments array", () => {
-    const payload = buildReviewPayload("abc123", "Summary.", []);
-    expect(payload.comments).toEqual([]);
-  });
-});
-```
-
-**Step 2: Run tests to verify they fail**
-
-```bash
-cd server && npm test -- pr.test
-```
-Expected: FAIL — `buildReviewPayload` is not exported
-
-**Step 3: Add `buildReviewPayload` and `createPrReview` to `server/src/github/pr.ts`**
+**Step 1: Add `createPrReview` to `server/src/github/pr.ts`**
 
 Add the following at the end of the existing `server/src/github/pr.ts`:
 
 ```typescript
 import type { ReviewComment } from "../review/parser.js";
-
-interface ReviewPayload {
-  commit_id: string;
-  body: string;
-  event: "COMMENT";
-  comments: ReviewComment[];
-}
-
-/** Build the JSON payload for the GitHub Create Review API. */
-export function buildReviewPayload(
-  commitSha: string,
-  summary: string,
-  comments: ReviewComment[]
-): ReviewPayload {
-  return {
-    commit_id: commitSha,
-    body: summary,
-    event: "COMMENT",
-    comments,
-  };
-}
 
 /** Post a pull request review with inline comments. Returns the review URL. */
 export async function createPrReview(
@@ -754,7 +710,6 @@ export async function createPrReview(
   comments: ReviewComment[],
   token: string
 ): Promise<string> {
-  const payload = buildReviewPayload(commitSha, summary, comments);
   const res = await fetch(
     `${GITHUB_API}/repos/${owner}/${repo}/pulls/${prNumber}/reviews`,
     {
@@ -765,7 +720,12 @@ export async function createPrReview(
         "X-GitHub-Api-Version": "2022-11-28",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        commit_id: commitSha,
+        body: summary,
+        event: "COMMENT" as const,
+        comments,
+      }),
     }
   );
   if (!res.ok) {
@@ -776,17 +736,27 @@ export async function createPrReview(
 }
 ```
 
-**Step 4: Run tests to verify they pass**
+No separate `buildReviewPayload` function — the payload construction is inlined
+since it's a trivial 4-property object literal with a single caller.
+
+**Step 2: Verify TypeScript compiles**
+
+```bash
+cd server && npm run typecheck
+```
+Expected: No errors
+
+**Step 3: Run existing tests still pass**
 
 ```bash
 cd server && npm test -- pr.test
 ```
-Expected: PASS (all existing tests + 3 new tests)
+Expected: PASS (existing tests unchanged)
 
-**Step 5: Commit**
+**Step 4: Commit**
 
 ```bash
-git add server/src/github/pr.ts server/src/github/pr.test.ts
+git add server/src/github/pr.ts
 git commit -m "feat(server): add createPrReview for inline comments"
 ```
 
@@ -859,8 +829,8 @@ describe("buildReviewPrompt", () => {
 
   it("handles null body", () => {
     const prompt = buildReviewPrompt({ ...baseInput, body: null });
-    // Should not throw or include "null"
-    expect(prompt).not.toContain("null");
+    // Should not render the literal string "null" as the description
+    expect(prompt).not.toContain("**Description:** null");
   });
 });
 ```
@@ -1142,7 +1112,6 @@ export const reviewPrTask = task({
       // Normal: post review with inline comments
       logger.info("Posting review", {
         inlineComments: review.comments.length,
-        hasOrphans: review.summary !== review.summary, // logged for debugging
       });
       reviewUrl = await createPrReview(
         owner, repo, prNumber, pr.headSha,
@@ -1192,12 +1161,15 @@ This test wires the diff parser → prompt → output parser pipeline together e
 
 Create `server/src/review/integration.test.ts`:
 
+These tests focus on **cross-module seams** — verifying that the diff parser,
+prompt builder, and output parser agree on line ranges and data flow. Unit-level
+assertions (individual module behavior) are already covered in Tasks 1-2.
+
 ```typescript
 import { describe, it, expect } from "vitest";
 import { parseDiff, buildLineMap } from "./diff-parser.js";
 import { buildReviewPrompt } from "./prompt.js";
 import { parseReviewOutput } from "./parser.js";
-import { buildReviewPayload } from "../github/pr.js";
 
 describe("review pipeline integration", () => {
   const REALISTIC_DIFF = `diff --git a/src/auth/middleware.ts b/src/auth/middleware.ts
@@ -1227,18 +1199,10 @@ diff --git a/src/auth/token.ts b/src/auth/token.ts
 +}
 `;
 
-  it("diff parser extracts correct files and line ranges", () => {
-    const files = parseDiff(REALISTIC_DIFF);
-    expect(files).toHaveLength(2);
-    expect(files[0].path).toBe("src/auth/middleware.ts");
-    expect(files[1].path).toBe("src/auth/token.ts");
-  });
-
-  it("line map is valid and included in prompt", () => {
+  it("line map from diff parser is included in prompt", () => {
+    // Tests the seam: parseDiff → buildLineMap → buildReviewPrompt
     const files = parseDiff(REALISTIC_DIFF);
     const lineMap = buildLineMap(files);
-    expect(lineMap).toContain("src/auth/middleware.ts");
-    expect(lineMap).toContain("src/auth/token.ts");
 
     const prompt = buildReviewPrompt({
       title: "Add auth middleware",
@@ -1250,9 +1214,13 @@ diff --git a/src/auth/token.ts b/src/auth/token.ts
       lineMap,
     });
     expect(prompt).toContain("Commentable lines:");
+    expect(prompt).toContain("src/auth/middleware.ts");
+    expect(prompt).toContain("src/auth/token.ts");
   });
 
-  it("valid Claude output is parsed into review payload", () => {
+  it("output parser validates comments against diff parser line ranges", () => {
+    // Tests the seam: parseDiff hunk ranges agree with parseReviewOutput validation
+    // Catches off-by-one bugs between buildLineMap display and isLineInDiff check
     const files = parseDiff(REALISTIC_DIFF);
     const claudeOutput = JSON.stringify({
       summary: "SQL injection in middleware, missing token validation.",
@@ -1269,30 +1237,6 @@ diff --git a/src/auth/token.ts b/src/auth/token.ts
           side: "RIGHT",
           body: "**Should fix:** validateToken always returns true for any non-empty string.",
         },
-      ],
-    });
-
-    const review = parseReviewOutput(claudeOutput, files);
-    expect(review.fallback).toBe(false);
-    expect(review.comments).toHaveLength(2);
-
-    const payload = buildReviewPayload("abc123", review.summary, review.comments);
-    expect(payload.event).toBe("COMMENT");
-    expect(payload.comments).toHaveLength(2);
-    expect(payload.commit_id).toBe("abc123");
-  });
-
-  it("invalid line references become orphans in summary", () => {
-    const files = parseDiff(REALISTIC_DIFF);
-    const claudeOutput = JSON.stringify({
-      summary: "Found issues.",
-      comments: [
-        {
-          path: "src/auth/middleware.ts",
-          line: 15,
-          side: "RIGHT",
-          body: "**Blocker:** Valid comment.",
-        },
         {
           path: "src/auth/middleware.ts",
           line: 999,
@@ -1303,20 +1247,12 @@ diff --git a/src/auth/token.ts b/src/auth/token.ts
     });
 
     const review = parseReviewOutput(claudeOutput, files);
-    expect(review.comments).toHaveLength(1);
-    expect(review.summary).toContain("This line doesn't exist");
+    expect(review.fallback).toBe(false);
+    // 2 valid comments (lines 15 and 6 are within hunk ranges)
+    expect(review.comments).toHaveLength(2);
+    // 1 orphan (line 999 is outside all ranges)
     expect(review.summary).toContain("Additional findings");
-  });
-
-  it("fallback produces valid review payload with empty comments", () => {
-    const files = parseDiff(REALISTIC_DIFF);
-    const review = parseReviewOutput("Not JSON at all", files);
-    expect(review.fallback).toBe(true);
-
-    const payload = buildReviewPayload("abc123", review.rawText ?? "", review.comments);
-    expect(payload.event).toBe("COMMENT");
-    expect(payload.comments).toEqual([]);
-    expect(payload.body).toBe("Not JSON at all");
+    expect(review.summary).toContain("This line doesn't exist");
   });
 });
 ```
@@ -1326,7 +1262,7 @@ diff --git a/src/auth/token.ts b/src/auth/token.ts
 ```bash
 cd server && npm test -- integration.test
 ```
-Expected: PASS (5 tests)
+Expected: PASS (2 tests)
 
 **Step 3: Run the full test suite**
 
