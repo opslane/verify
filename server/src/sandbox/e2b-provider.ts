@@ -69,6 +69,13 @@ export class E2BSandboxProvider implements SandboxProvider {
     }
   }
 
+  /**
+   * Run a shell command inside the sandbox via PTY.
+   *
+   * SECURITY: `command` is passed to a shell as-is. Callers MUST ensure `command`
+   * does not contain unsanitized external input (user-controlled strings from webhooks,
+   * PR titles, branch names, etc.). Validate all inputs before interpolating into command.
+   */
   async *runCommand(sandboxId: string, command: string, opts?: RunOptions): AsyncIterable<string> {
     const sandbox = this.sandboxes.get(sandboxId);
     if (!sandbox) throw new Error(`Sandbox ${sandboxId} not found`);

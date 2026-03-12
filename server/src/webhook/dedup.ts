@@ -15,6 +15,8 @@ export class DeduplicationSet {
 
   markSeen(deliveryId: string): void {
     this.seen.add(deliveryId);
-    setTimeout(() => this.seen.delete(deliveryId), TTL_MS);
+    // .unref() prevents the timer from keeping the process alive during graceful shutdown
+    const timer = setTimeout(() => this.seen.delete(deliveryId), TTL_MS);
+    timer.unref();
   }
 }
