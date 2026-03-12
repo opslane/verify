@@ -1,5 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { createWebhookApp } from "./webhooks.js";
+
+afterEach(() => {
+  delete process.env.SVIX_WEBHOOK_SECRET;
+  delete process.env.SVIX_SKIP_VERIFICATION;
+  delete process.env.NODE_ENV;
+});
 
 describe("GET /health", () => {
   it("returns 200", async () => {

@@ -5,6 +5,12 @@ import { E2BSandboxProvider } from "../sandbox/e2b-provider.js";
 import { buildReviewPrompt } from "./prompt.js";
 import { REVIEW_COMMENT_MARKER } from "../webhook/verify.js";
 
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required env var: ${name}`);
+  return value;
+}
+
 const SANDBOX_TEMPLATE = process.env.E2B_TEMPLATE ?? "base";
 const REVIEW_TIMEOUT_MS = 180_000; // 3 minutes hard limit
 
@@ -28,8 +34,8 @@ export const reviewPrTask = task({
 
     // 1. Get GitHub installation token
     const githubApp = new GitHubAppService(
-      process.env.GITHUB_APP_ID!,
-      process.env.GITHUB_APP_PRIVATE_KEY!
+      requireEnv("GITHUB_APP_ID"),
+      requireEnv("GITHUB_APP_PRIVATE_KEY")
     );
     const { token } = await githubApp.getTokenForRepo(owner, repo);
 
@@ -57,7 +63,7 @@ export const reviewPrTask = task({
       template: SANDBOX_TEMPLATE,
       timeoutMs: REVIEW_TIMEOUT_MS + 30_000,
       envVars: {
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY!,
+        ANTHROPIC_API_KEY: requireEnv("ANTHROPIC_API_KEY"),
         GIT_TERMINAL_PROMPT: "0",
       },
       metadata: { sessionId: `pr-${owner}-${repo}-${prNumber}`, userId: "code-reviewer" },
@@ -67,9 +73,10 @@ export const reviewPrTask = task({
 
     try {
       // 7. Clone repo inside sandbox
-      // SECURITY: authenticatedCloneUrl validated above (contains only validated owner/repo/token)
-      // SECURITY: pr.headBranch validated against SAFE_BRANCH_RE above
-      const cloneCmd = `git clone --depth=1 --branch ${pr.headBranch} ${authenticatedCloneUrl} /workspace/repo`;
+      // SECURITY: branch name validated against SAFE_BRANCH_RE (no single quotes possible)
+      // SECURITY: single-quoting both args as defense-in-depth against shell injection
+      // NOTE: token in URL is also present in .git/config origin remote — accepted risk since sandbox is ephemeral
+      const cloneCmd = `git clone --depth=1 --branch '${pr.headBranch}' '${authenticatedCloneUrl}' /workspace/repo`;
       logger.info("Cloning repo", { branch: pr.headBranch });
       for await (const _ of provider.runCommand(sandbox.id, cloneCmd, { cwd: "/", timeoutMs: 60_000 })) {
         // drain output

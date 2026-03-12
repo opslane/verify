@@ -4,11 +4,11 @@ import type { reviewPrTask } from "../review/runner.js";
 import { shouldSkipVerification, verifySvixWebhook } from "../webhook/verify.js";
 import { DeduplicationSet } from "../webhook/dedup.js";
 import type { ReviewPayload } from "../review/runner.js";
-
-const dedup = new DeduplicationSet();
+import { validateOwnerRepo } from "../github/validation.js";
 
 export function createWebhookApp(): Hono {
   const app = new Hono();
+  const dedup = new DeduplicationSet(); // fresh per factory call (production uses singleton via webhookRoutes)
 
   app.get("/health", (c) => c.json({ ok: true }));
 
@@ -58,6 +58,13 @@ export function createWebhookApp(): Hono {
 
     if (!owner || !repo || !prNumber) {
       return c.json({ error: "Missing owner, repo, or PR number" }, 400);
+    }
+
+    // Validate owner/repo at the boundary before dispatching the task
+    try {
+      validateOwnerRepo(owner, repo);
+    } catch {
+      return c.json({ error: "Invalid owner or repo" }, 400);
     }
 
     // Deduplicate
