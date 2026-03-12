@@ -3,10 +3,12 @@
 # Plan: docs/plans/2026-03-12-code-reviewer-implementation.md
 
 ## Completed
-(none yet)
+- [x] Task 1: Project scaffold (commit: 1392c77)
+  - Files: server/package.json, server/tsconfig.json, server/trigger.config.ts, server/src/index.ts, server/.env.example, server/.gitignore
+  - Decisions: module→Node16 (required by moduleResolution:node16), removed rootDir (trigger.config.ts outside src/), added maxDuration to trigger config
 
 ## Current
-Task 1: Project scaffold — create server/ package with Hono + Trigger.dev + TypeScript
+Task 2: GitHub App service
 
 ## Remaining
 Task 2: GitHub App service
