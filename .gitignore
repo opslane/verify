@@ -8,8 +8,13 @@
 .verify/chrome-profile/
 .verify/*.txt
 .verify/*.log
+.verify/config.json
+.verify/progress.jsonl
+.verify/report.html
+.verify/spec.md
 .playwright-mcp/
 docs/evals/
 .worktrees/
+node_modules/
 .env
 .env.local
