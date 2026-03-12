@@ -13,4 +13,8 @@ describe("shouldSkipVerification", () => {
   it("returns true only in non-production with var set", () => {
     expect(shouldSkipVerification("development", "true")).toBe(true);
   });
+
+  it("returns false when NODE_ENV is undefined (fail-secure)", () => {
+    expect(shouldSkipVerification(undefined, "true")).toBe(false);
+  });
 });

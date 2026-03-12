@@ -3,11 +3,6 @@ import { validateOwnerRepo, validatePrNumber } from "./validation.js";
 const GITHUB_API = "https://api.github.com";
 export const MAX_DIFF_CHARS = 50_000;
 
-export function buildPrApiUrl(owner: string, repo: string, prNumber: number): string {
-  return `${GITHUB_API}/repos/${owner}/${repo}/pulls/${prNumber}`;
-}
-
-
 export function truncateDiff(diff: string): string {
   if (diff.length <= MAX_DIFF_CHARS) return diff;
   const truncated = diff.slice(0, MAX_DIFF_CHARS);
@@ -46,9 +41,10 @@ export async function fetchPullRequest(
   validatePrNumber(prNumber);
 
   const headers = githubHeaders(token);
+  const prUrl = `${GITHUB_API}/repos/${owner}/${repo}/pulls/${prNumber}`;
 
   // Fetch PR metadata
-  const prRes = await fetch(buildPrApiUrl(owner, repo, prNumber), { headers });
+  const prRes = await fetch(prUrl, { headers });
   if (!prRes.ok) {
     throw new Error(`GitHub PR fetch failed: ${prRes.status} ${await prRes.text()}`);
   }
@@ -60,16 +56,13 @@ export async function fetchPullRequest(
     diff_url: string;
   };
 
-  // Fetch unified diff
-  const diffRes = await fetch(
-    `${GITHUB_API}/repos/${owner}/${repo}/pulls/${prNumber}`,
-    {
-      headers: {
-        ...headers,
-        Accept: "application/vnd.github.v3.diff",
-      },
-    }
-  );
+  // Fetch unified diff (same URL, different Accept header)
+  const diffRes = await fetch(prUrl, {
+    headers: {
+      ...headers,
+      Accept: "application/vnd.github.v3.diff",
+    },
+  });
   if (!diffRes.ok) {
     throw new Error(`GitHub diff fetch failed: ${diffRes.status}`);
   }

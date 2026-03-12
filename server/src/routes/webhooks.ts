@@ -10,7 +10,7 @@ export function createWebhookApp(): Hono {
   const app = new Hono();
   const dedup = new DeduplicationSet(); // fresh per factory call (production uses singleton via webhookRoutes)
 
-  app.post("/webhooks/github", async (c) => {
+  app.post("/github", async (c) => {
     const rawBody = await c.req.text();
     const deliveryId = c.req.header("svix-id") ?? crypto.randomUUID();
     const eventType = c.req.header("x-github-event") ?? "";
@@ -69,17 +69,17 @@ export function createWebhookApp(): Hono {
     if (dedup.isDuplicate(deliveryId)) {
       return c.json({ accepted: false, reason: "Duplicate delivery" }, 200);
     }
-    dedup.markSeen(deliveryId);
 
     // Trigger background task — respond 202 immediately
+    // markSeen is called AFTER successful dispatch so Svix retries still work if trigger fails
     const reviewPayload: ReviewPayload = { owner, repo, prNumber, deliveryId };
 
-    // tasks.trigger is a no-op in test/dev if TRIGGER_SECRET_KEY is not set
     if (process.env.TRIGGER_SECRET_KEY) {
       await tasks.trigger<typeof reviewPrTask>("review-pr", reviewPayload);
     } else {
       console.warn("TRIGGER_SECRET_KEY not set — skipping task dispatch");
     }
+    dedup.markSeen(deliveryId);
 
     return c.json({ accepted: true, prNumber, owner, repo }, 202);
   });

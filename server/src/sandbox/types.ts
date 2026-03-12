@@ -23,7 +23,6 @@ export interface FileUpload {
 export interface RunOptions {
   cwd?: string;
   timeoutMs?: number;
-  signal?: AbortSignal;
 }
 
 export interface SandboxProvider {
@@ -31,10 +30,4 @@ export interface SandboxProvider {
   destroy(sandboxId: string): Promise<void>;
   runCommand(sandboxId: string, command: string, opts?: RunOptions): AsyncIterable<string>;
   uploadFiles(sandboxId: string, files: FileUpload[]): Promise<void>;
-  downloadFile(sandboxId: string, path: string): Promise<Buffer>;
-  getForwardedUrl(sandboxId: string, port: number): Promise<string>;
-  isAlive(sandboxId: string): Promise<boolean>;
-  listActive(): string[];
-  /** Get the raw underlying sandbox object (e.g. E2B Sandbox instance) for direct API access */
-  getRawSandbox(sandboxId: string): unknown | undefined;
 }

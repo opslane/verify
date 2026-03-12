@@ -10,7 +10,8 @@ export function shouldSkipVerification(
   nodeEnv: string | undefined,
   skipFlag: string | undefined
 ): boolean {
-  if (nodeEnv === "production") return false;
+  // Treat missing NODE_ENV as production (fail-secure: never skip in ambiguous environments)
+  if (nodeEnv === undefined || nodeEnv === "production") return false;
   return skipFlag === "true";
 }
 

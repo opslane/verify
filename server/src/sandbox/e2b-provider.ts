@@ -212,37 +212,4 @@ export class E2BSandboxProvider implements SandboxProvider {
       await sandbox.files.write(file.path, content);
     }
   }
-
-  async downloadFile(sandboxId: string, path: string): Promise<Buffer> {
-    const sandbox = this.sandboxes.get(sandboxId);
-    if (!sandbox) throw new Error(`Sandbox ${sandboxId} not found`);
-
-    const content = await sandbox.files.read(path);
-    return Buffer.from(content);
-  }
-
-  async getForwardedUrl(sandboxId: string, port: number): Promise<string> {
-    const sandbox = this.sandboxes.get(sandboxId);
-    if (!sandbox) throw new Error(`Sandbox ${sandboxId} not found`);
-
-    return sandbox.getHost(port);
-  }
-
-  async isAlive(sandboxId: string): Promise<boolean> {
-    const sandbox = this.sandboxes.get(sandboxId);
-    if (!sandbox) return false;
-    try {
-      return await sandbox.isRunning();
-    } catch {
-      return false;
-    }
-  }
-
-  listActive(): string[] {
-    return Array.from(this.sandboxes.keys());
-  }
-
-  getRawSandbox(sandboxId: string): E2BSandbox | undefined {
-    return this.sandboxes.get(sandboxId);
-  }
 }
