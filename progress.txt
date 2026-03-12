@@ -80,8 +80,12 @@
   - Files: server/src/review/diff-parser.ts, server/src/review/diff-parser.test.ts
   - 12 tests pass (parseDiff + buildLineMap)
 
+- [x] Task 2: Output parser (commit: a1c1db8)
+  - Files: server/src/review/parser.ts, server/src/review/parser.test.ts
+  - 8 tests pass (JSON extraction, orphan handling, fallback)
+
 ### Current
-Task 2: Output parser
+Task 3: GitHub PR review function
 
 ### Remaining
 Task 2: Output parser
