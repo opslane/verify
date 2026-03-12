@@ -7,11 +7,14 @@
   - Files: server/package.json, server/tsconfig.json, server/trigger.config.ts, server/src/index.ts, server/.env.example, server/.gitignore
   - Decisions: module→Node16 (required by moduleResolution:node16), removed rootDir (trigger.config.ts outside src/), added maxDuration to trigger config
 
+- [x] Task 2: GitHub App service (commit: c4b8fe5)
+  - Files: server/src/github/app-service.ts, server/src/github/app-service.test.ts
+  - Decision: replaced logger with console.log/warn/error, kept all logic identical
+
 ## Current
-Task 2: GitHub App service
+Task 3: GitHub PR functions
 
 ## Remaining
-Task 2: GitHub App service
 Task 3: GitHub PR functions
 Task 4: Svix webhook verification + dedup
 Task 5: E2B sandbox provider
