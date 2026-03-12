@@ -21,11 +21,21 @@
   - Files: server/src/sandbox/types.ts, server/src/sandbox/e2b-provider.ts
   - Decision: replaced logger with console.log/warn/error/debug, kept PTY logic identical
 
+- [x] Task 6: Review prompt builder (commit: 242bc50)
+  - Files: server/src/review/prompt.ts, server/src/review/prompt.test.ts
+- [x] Code review gate (tasks 4-6): added timer.unref() in dedup, added runCommand security doc comment (commit: 3cdbcda)
+- [x] Task 7: Trigger.dev review task (commit: 17bff9e)
+  - Files: server/src/review/runner.ts
+  - Decision: construct authenticated cloneUrl in runner (not in PullRequestMeta), single-quote shell args
+- [x] Task 8: Webhook route (commit: 0277464)
+  - Files: server/src/routes/webhooks.ts, server/src/routes/webhooks.test.ts
+- [x] Task 9: Dockerfile + Railway config (commit: 43065a9)
+  - Files: server/Dockerfile, server/railway.json
+- [x] Code review gate (tasks 7-9): requireEnv helper, single-quoted clone cmd, dedup moved inside factory, validateOwnerRepo in handler, non-root Docker user, npm ci --omit=dev (commit: 0db7558)
+- [x] Task 10: README (commit: b87778e)
+
 ## Current
-Task 6: Review prompt builder
+COMPLETE — all 10 tasks done
 
 ## Remaining
-Task 7: Trigger.dev review task
-Task 8: Webhook route
-Task 9: Dockerfile + Railway config
-Task 10: README
+(none)
