@@ -7,11 +7,15 @@
   - Files: server/package.json, server/tsconfig.json, server/src/index.ts
   - npm install clean, tsc --noEmit clean
 
+- [x] Task 2: DB Connection + Migrations (commit: 8a5fdd6)
+  - Files: server/src/db.ts, server/src/migrate.ts, server/src/migrate.test.ts, server/db/migrations/001_foundation.sql
+  - Started postgres@16 via brew; created verify_test DB
+  - Both migration tests pass (idempotent)
+
 ## Current
-Task 2: DB Connection + Migrations
+Task 3: Landing Page
 
 ## Remaining
-Task 3: Landing Page
 Task 4: Auth Routes — /auth/github and /auth/callback
 Task 5: Webhook Route + Installation Handler
 Task 6: Dockerfile + env.example
