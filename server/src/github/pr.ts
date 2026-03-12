@@ -184,7 +184,7 @@ export async function createPrReview(
       body: JSON.stringify({
         commit_id: commitSha,
         body: summary,
-        event: "COMMENT" as const,
+        event: "COMMENT",
         comments,
       }),
     }

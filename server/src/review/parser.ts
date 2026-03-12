@@ -103,9 +103,9 @@ export function parseReviewOutput(raw: string, diffFiles: DiffFile[]): ParsedRev
   const orphans: string[] = [];
 
   for (const c of parsed.comments) {
-    if (!c.path || !c.line || !c.body) continue;
+    if (!c.path || typeof c.line !== "number" || !c.body) continue;
 
-    const side = c.side === "LEFT" ? "LEFT" as const : "RIGHT" as const;
+    const side: "LEFT" | "RIGHT" = c.side === "LEFT" ? "LEFT" : "RIGHT";
 
     if (isLineInDiff(c.path, c.line, side, diffFiles)) {
       validComments.push({
