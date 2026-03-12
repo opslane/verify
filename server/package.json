@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
+    "dev": "node --env-file=.env --import tsx/esm --watch src/index.ts",
+    "start": "node --env-file=.env --import tsx/esm src/index.ts",
     "test": "NODE_OPTIONS=--experimental-vm-modules vitest run",
     "test:watch": "NODE_OPTIONS=--experimental-vm-modules vitest"
   },

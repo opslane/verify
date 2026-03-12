@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { sign } from 'hono/jwt';
 import { randomBytes } from 'node:crypto';
@@ -12,12 +12,18 @@ function env(key: string): string {
   return val;
 }
 
+function isSecure(c: Context): boolean {
+  // Trust x-forwarded-proto from proxies (ngrok, load balancers).
+  // Assumes this server always runs behind a trusted reverse proxy in production.
+  return c.req.header('x-forwarded-proto') === 'https' || process.env.NODE_ENV === 'production';
+}
+
 authRouter.get('/github', (c) => {
   const state = randomBytes(32).toString('hex');
 
   setCookie(c, 'oauth_state', state, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecure(c),
     sameSite: 'Lax',
     maxAge: 60 * 10, // 10 minutes
     path: '/',
@@ -37,16 +43,17 @@ authRouter.get('/callback', async (c) => {
   const stateParam = c.req.query('state');
   const stateCookie = getCookie(c, 'oauth_state');
 
-  if (!stateParam || !stateCookie || stateParam !== stateCookie) {
-    return c.text('Invalid state', 400);
-  }
-
-  deleteCookie(c, 'oauth_state', { path: '/' });
-
-  // User denied OAuth or code is missing
+  // User denied OAuth or code is missing — check before consuming the state cookie
   if (!code) {
     return c.redirect('/?error=cancelled');
   }
+
+  if (!stateParam || !stateCookie || stateParam !== stateCookie) {
+    console.error('[auth/callback] CSRF state mismatch', { hasCookie: !!stateCookie, hasParam: !!stateParam });
+    return c.text('Invalid OAuth state. Please try again.', 400);
+  }
+
+  deleteCookie(c, 'oauth_state', { path: '/' });
 
   // Exchange code for access token
   const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
@@ -125,11 +132,12 @@ authRouter.get('/callback', async (c) => {
 
   setCookie(c, 'session', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecure(c),
     sameSite: 'Lax',
     maxAge: 60 * 60 * 24 * 90,
     path: '/',
   });
 
-  return c.redirect(env('GITHUB_APP_INSTALL_URL'));
+  const installUrl = `https://github.com/apps/${env('GITHUB_APP_SLUG')}/installations/new`;
+  return c.redirect(installUrl);
 });
