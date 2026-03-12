@@ -76,10 +76,12 @@
 ## inline-review-comments (plan: docs/plans/2026-03-12-inline-review-comments-implementation.md)
 
 ### Completed
-(none yet)
+- [x] Task 1: Diff parser (commit: 00c1855)
+  - Files: server/src/review/diff-parser.ts, server/src/review/diff-parser.test.ts
+  - 12 tests pass (parseDiff + buildLineMap)
 
 ### Current
-Task 1: Diff parser
+Task 2: Output parser
 
 ### Remaining
 Task 2: Output parser
