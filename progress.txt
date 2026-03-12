@@ -12,11 +12,19 @@
   - Started postgres@16 via brew; created verify_test DB
   - Both migration tests pass (idempotent)
 
+- [x] Task 3: Landing Page (commit: 3313ce7)
+  - Files: server/src/public/index.html, server/src/index.ts
+- [x] Code Review Gate (tasks 1-3) + fixes (commit: a12ae6d)
+  - Fixed: cached landing HTML at startup, PORT validation, graceful shutdown, added org_id index
+  - Known limitation documented: migration versioning (all migrations must use IF NOT EXISTS DDL)
+- [x] Task 4: Auth Routes (commit: b6feb16)
+  - Files: server/src/routes/auth.ts, server/src/routes/auth.test.ts
+  - 3 tests pass (redirect with state, 400 on missing cookie, 400 on mismatch)
+
 ## Current
-Task 3: Landing Page
+Task 5: Webhook Route + Installation Handler
 
 ## Remaining
-Task 4: Auth Routes — /auth/github and /auth/callback
 Task 5: Webhook Route + Installation Handler
 Task 6: Dockerfile + env.example
 Task 7: Smoke Test (manual)
