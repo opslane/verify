@@ -16,15 +16,30 @@
   - Files: server/src/public/index.html, server/src/index.ts
 - [x] Code Review Gate (tasks 1-3) + fixes (commit: a12ae6d)
   - Fixed: cached landing HTML at startup, PORT validation, graceful shutdown, added org_id index
-  - Known limitation documented: migration versioning (all migrations must use IF NOT EXISTS DDL)
+  - Known limitation: migration versioning (all migrations must use IF NOT EXISTS DDL)
+
 - [x] Task 4: Auth Routes (commit: b6feb16)
   - Files: server/src/routes/auth.ts, server/src/routes/auth.test.ts
   - 3 tests pass (redirect with state, 400 on missing cookie, 400 on mismatch)
 
+- [x] Task 5: Webhook Route + Installation Handler (commit: 8a7ffef)
+  - Files: server/src/routes/webhooks.ts, server/src/routes/webhooks.test.ts
+
+- [x] Task 6: Dockerfile + env.example (commit: a4a366b)
+  - Files: server/Dockerfile, .env.example, .gitignore
+
+- [x] Final Code Review Gate + security fixes (commit: 4a1979a)
+  - Fixed: HMAC webhook signature verification (X-Hub-Signature-256, timing-safe)
+  - Fixed: HTTP status checks on all GitHub API calls (prevents data corruption)
+  - Fixed: Added iat claim to JWT
+  - Added: 2 new HMAC verification tests (9 total)
+
+- [x] Task 7: Smoke Test — MANUAL SKIP
+  - Requires: GitHub OAuth App, GitHub App webhook config, local Postgres with credentials
+  - All automated verification passes: 9 tests, tsc clean
+
 ## Current
-Task 5: Webhook Route + Installation Handler
+COMPLETE
 
 ## Remaining
-Task 5: Webhook Route + Installation Handler
-Task 6: Dockerfile + env.example
-Task 7: Smoke Test (manual)
+(none)
