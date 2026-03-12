@@ -1,4 +1,5 @@
 import { validateOwnerRepo, validatePrNumber } from "./validation.js";
+import type { ReviewComment } from "../review/parser.js";
 
 const GITHUB_API = "https://api.github.com";
 export const MAX_DIFF_CHARS = 50_000;
@@ -157,4 +158,40 @@ export async function updatePrComment(
   if (!res.ok) {
     throw new Error(`Failed to update PR comment: ${res.status} ${await res.text()}`);
   }
+}
+
+/** Post a pull request review with inline comments. Returns the review URL. */
+export async function createPrReview(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  commitSha: string,
+  summary: string,
+  comments: ReviewComment[],
+  token: string
+): Promise<string> {
+  validateOwnerRepo(owner, repo);
+  validatePrNumber(prNumber);
+
+  const res = await fetch(
+    `${GITHUB_API}/repos/${owner}/${repo}/pulls/${prNumber}/reviews`,
+    {
+      method: "POST",
+      headers: {
+        ...githubHeaders(token),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        commit_id: commitSha,
+        body: summary,
+        event: "COMMENT" as const,
+        comments,
+      }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to create PR review: ${res.status} ${await res.text()}`);
+  }
+  const data = await res.json() as { html_url: string };
+  return data.html_url;
 }
