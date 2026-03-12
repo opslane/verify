@@ -10,3 +10,4 @@
 .verify/*.log
 .playwright-mcp/
 docs/evals/
+.worktrees/
