@@ -11,14 +11,20 @@
   - Files: server/src/github/app-service.ts, server/src/github/app-service.test.ts
   - Decision: replaced logger with console.log/warn/error, kept all logic identical
 
+- [x] Task 3: GitHub PR functions (commit: e2dea65)
+  - Files: server/src/github/pr.ts, server/src/github/pr.test.ts
+  - Decision: diff.length instead of Buffer.byteLength (vitest ESM issue), truncation message format [diff truncated] with ] after "truncated"
+- [x] Code review gate (tasks 1-3): fixed SSRF (added validation.ts), removed token from cloneUrl, fixed unreachable fallback, tightened regex (commit: 938e1ad)
+- [x] Task 4: Svix verification + dedup (commit: 5ecf3a7)
+  - Files: server/src/webhook/verify.ts, server/src/webhook/dedup.ts + tests
+- [x] Task 5: E2B sandbox provider (commit: af1e702)
+  - Files: server/src/sandbox/types.ts, server/src/sandbox/e2b-provider.ts
+  - Decision: replaced logger with console.log/warn/error/debug, kept PTY logic identical
+
 ## Current
-Task 3: GitHub PR functions
+Task 6: Review prompt builder
 
 ## Remaining
-Task 3: GitHub PR functions
-Task 4: Svix webhook verification + dedup
-Task 5: E2B sandbox provider
-Task 6: Review prompt builder
 Task 7: Trigger.dev review task
 Task 8: Webhook route
 Task 9: Dockerfile + Railway config
