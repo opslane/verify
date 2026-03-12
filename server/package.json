@@ -1,23 +1,32 @@
 {
-  "name": "verify-server",
-  "version": "0.1.0",
+  "name": "@verify/server",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node --env-file=.env --import tsx/esm --watch src/index.ts",
-    "start": "node --env-file=.env --import tsx/esm src/index.ts",
+    "build": "tsup src/index.ts --format esm --dts",
+    "start": "node dist/index.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules vitest run",
-    "test:watch": "NODE_OPTIONS=--experimental-vm-modules vitest"
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules vitest",
+    "typecheck": "tsc --noEmit",
+    "trigger:dev": "npx trigger.dev@latest dev",
+    "trigger:deploy": "npx trigger.dev@latest deploy"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.7",
-    "hono": "^4.7.4",
-    "postgres": "^3.4.5"
+    "@hono/node-server": "^1.14.0",
+    "@trigger.dev/sdk": "^3.0.0",
+    "e2b": "^1.0.0",
+    "hono": "^4.0.0",
+    "jose": "^5.0.0",
+    "postgres": "^3.4.5",
+    "svix": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.13.10",
-    "tsx": "^4.19.3",
-    "typescript": "^5.8.2",
-    "vitest": "^3.0.8"
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
   }
 }
