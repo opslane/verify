@@ -59,6 +59,10 @@ authRouter.get('/callback', async (c) => {
     }),
   });
 
+  if (!tokenRes.ok) {
+    return c.text(`GitHub token exchange failed: ${tokenRes.status}`, 502);
+  }
+
   const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
   if (!tokenData.access_token) {
     return c.text('GitHub OAuth failed', 502);
@@ -72,6 +76,9 @@ authRouter.get('/callback', async (c) => {
 
   // Fetch user info
   const userRes = await fetch('https://api.github.com/user', { headers: ghHeaders });
+  if (!userRes.ok) {
+    return c.text(`GitHub API error fetching user: ${userRes.status}`, 502);
+  }
   const ghUser = await userRes.json() as {
     id: number;
     login: string;
@@ -83,11 +90,14 @@ authRouter.get('/callback', async (c) => {
   let email = ghUser.email;
   if (!email) {
     const emailsRes = await fetch('https://api.github.com/user/emails', { headers: ghHeaders });
-    const emails = await emailsRes.json() as Array<{ email: string; primary: boolean; verified: boolean }>;
-    email = emails.find((e) => e.primary && e.verified)?.email ?? null;
+    if (emailsRes.ok) {
+      const emails = await emailsRes.json() as Array<{ email: string; primary: boolean; verified: boolean }>;
+      email = emails.find((e) => e.primary && e.verified)?.email ?? null;
+    }
+    // Email is optional — continue without it if the API call fails
   }
 
-  // Upsert org (1:1 with user for v1)
+  // Upsert org — v1 uses 1:1 user-to-org mapping (user's github login = org identifier)
   const org = await upsertOrg(ghUser.login, ghUser.name ?? ghUser.login);
 
   // Upsert user
@@ -99,11 +109,17 @@ authRouter.get('/callback', async (c) => {
     name: ghUser.name,
   });
 
-  // Sign JWT (90-day expiry)
+  // Sign JWT: 90-day expiry, HS256
   const jwtSecret = env('JWT_SECRET');
-  const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 90;
+  const now = Math.floor(Date.now() / 1000);
   const token = await sign(
-    { sub: user.id, orgId: org.id, login: ghUser.login, exp: expiresAt },
+    {
+      sub: user.id,
+      orgId: org.id,
+      login: ghUser.login,
+      iat: now,
+      exp: now + 60 * 60 * 24 * 90,
+    },
     jwtSecret,
   );
 
