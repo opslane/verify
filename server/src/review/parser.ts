@@ -103,7 +103,7 @@ export function parseReviewOutput(raw: string, diffFiles: DiffFile[]): ParsedRev
   const orphans: string[] = [];
 
   for (const c of parsed.comments) {
-    if (!c.path || typeof c.line !== "number" || !c.body) continue;
+    if (!c.path || typeof c.line !== "number" || !Number.isFinite(c.line) || c.line < 1 || !c.body) continue;
 
     const side: "LEFT" | "RIGHT" = c.side === "LEFT" ? "LEFT" : "RIGHT";
 

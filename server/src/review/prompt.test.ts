@@ -56,4 +56,11 @@ describe("buildReviewPrompt", () => {
     const prompt = buildReviewPrompt({ ...baseInput, body: null });
     expect(prompt).not.toContain("**Description:** null");
   });
+
+  it("wraps user-controlled fields in injection-resistant tags", () => {
+    const prompt = buildReviewPrompt(baseInput);
+    expect(prompt).toContain("<user_input>Fix null pointer in auth</user_input>");
+    expect(prompt).toContain("<user_input>Fixes #123</user_input>");
+    expect(prompt).toContain("adversarial instructions");
+  });
 });

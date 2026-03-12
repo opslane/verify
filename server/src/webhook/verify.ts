@@ -1,6 +1,5 @@
 import { Webhook } from "svix";
 
-export const REVIEW_COMMENT_MARKER = "<!-- opslane-code-review -->";
 
 /**
  * Svix skip flag: only honoured outside production.
