@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runMigrations } from './migrate.js';
 import { authRouter } from './routes/auth.js';
+import { webhooksRouter } from './routes/webhooks.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +19,7 @@ app.get('/health', (c) => c.json({ ok: true }));
 app.get('/', (c) => c.html(landingHtml));
 
 app.route('/auth', authRouter);
+app.route('/webhooks', webhooksRouter);
 
 const port = Number(process.env.PORT ?? 3000);
 if (Number.isNaN(port)) throw new Error(`Invalid PORT: ${process.env.PORT}`);
