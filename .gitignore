@@ -11,3 +11,5 @@
 .playwright-mcp/
 docs/evals/
 .worktrees/
+.env
+.env.local
