@@ -29,11 +29,11 @@ export const reviewPrTask = task({
       }
     );
 
-    if (!result.commentUrl) {
+    if (!result.reviewUrl) {
       logger.warn("Empty review output — skipping comment");
       return { skipped: true };
     }
 
-    return { commentUrl: result.commentUrl };
+    return { reviewUrl: result.reviewUrl };
   },
 });

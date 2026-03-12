@@ -1,9 +1,10 @@
 import { GitHubAppService } from "../github/app-service.js";
-import { fetchPullRequest, postPrComment, findBotComment, updatePrComment } from "../github/pr.js";
+import { fetchPullRequest, createPrReview } from "../github/pr.js";
 import { E2BSandboxProvider } from "../sandbox/e2b-provider.js";
 import { buildReviewPrompt } from "./prompt.js";
+import { parseDiff, buildLineMap } from "./diff-parser.js";
+import { parseReviewOutput } from "./parser.js";
 import { requireEnv } from "../env.js";
-import { REVIEW_COMMENT_MARKER } from "../webhook/verify.js";
 
 const SANDBOX_TEMPLATE = process.env.E2B_TEMPLATE ?? "base";
 const REVIEW_TIMEOUT_MS = 180_000; // 3 minutes hard limit
@@ -25,11 +26,11 @@ export interface ReviewPipelineCallbacks {
 
 export interface ReviewPipelineResult {
   reviewText: string;
-  commentUrl: string | null;
+  reviewUrl: string | null;
 }
 
 /**
- * Run the full review pipeline: fetch PR, run Claude in E2B sandbox, post comment.
+ * Run the full review pipeline: fetch PR, run Claude in E2B sandbox, post inline review.
  *
  * Shared between the Trigger.dev task (runner.ts) and the local test script (test-live.ts).
  */
@@ -64,11 +65,27 @@ export async function runReviewPipeline(
     `https://x-access-token:${token}@github.com/`
   );
 
-  // 5. Build prompt
-  const prompt = buildReviewPrompt(pr);
+  // 5. Parse diff to extract commentable line ranges
+  const diffFiles = parseDiff(pr.diff);
+  const lineMap = buildLineMap(diffFiles);
+  log("diff", "Parsed diff", {
+    fileCount: diffFiles.length,
+    totalHunks: diffFiles.reduce((n, f) => n + f.hunks.length, 0),
+  });
+
+  // 6. Build structured prompt with line map
+  const prompt = buildReviewPrompt({
+    title: pr.title,
+    body: pr.body,
+    baseBranch: pr.baseBranch,
+    headBranch: pr.headBranch,
+    headSha: pr.headSha,
+    diff: pr.diff,
+    lineMap,
+  });
   log("prompt", `Built prompt (${prompt.length} chars)`);
 
-  // 6. Create E2B sandbox
+  // 7. Create E2B sandbox
   log("e2b", `Creating sandbox (template: ${SANDBOX_TEMPLATE})...`);
   const provider = new E2BSandboxProvider();
   const sandbox = await provider.create({
@@ -85,7 +102,7 @@ export async function runReviewPipeline(
   let reviewText = "";
 
   try {
-    // 7. Install claude CLI if using base template
+    // 8. Install claude CLI if using base template
     if (SANDBOX_TEMPLATE === "base") {
       log("e2b", "Installing claude CLI...");
       for await (const line of provider.runCommand(sandbox.id, "npm install -g @anthropic-ai/claude-code", {
@@ -96,7 +113,7 @@ export async function runReviewPipeline(
       }
     }
 
-    // 8. Clone repo
+    // 9. Clone repo
     const cloneCmd = `git clone --depth=1 --branch '${pr.headBranch}' '${authenticatedCloneUrl}' /home/user/repo`;
     log("e2b", `Cloning ${owner}/${repo}@${pr.headBranch}...`);
     for await (const _ of provider.runCommand(sandbox.id, cloneCmd, {
@@ -105,12 +122,12 @@ export async function runReviewPipeline(
     })) { /* drain */ }
     log("e2b", "Clone complete");
 
-    // 9. Upload prompt file (avoids shell ARG_MAX limits on large diffs)
+    // 10. Upload prompt file (avoids shell ARG_MAX limits on large diffs)
     await provider.uploadFiles(sandbox.id, [
       { path: "/tmp/review-prompt.txt", content: prompt },
     ]);
 
-    // 10. Run claude -p review
+    // 11. Run claude -p review
     // IMPORTANT: --output-format stream-json --verbose is required:
     //   - stream-json produces NDJSON that the E2B PTY provider can yield line-by-line
     //   - --verbose is required or stream-json mode fails silently
@@ -148,23 +165,37 @@ export async function runReviewPipeline(
   }
 
   if (!reviewText) {
-    return { reviewText: "", commentUrl: null };
+    return { reviewText: "", reviewUrl: null };
   }
 
-  // 11. Post or update PR comment
-  log("github", "Posting PR comment...");
-  const commentBody = `${REVIEW_COMMENT_MARKER}\n## Code Review\n\n${reviewText}`;
-  const existingId = await findBotComment(owner, repo, prNumber, REVIEW_COMMENT_MARKER, token);
+  // 12. Parse + validate Claude's output against diff metadata
+  const review = parseReviewOutput(reviewText, diffFiles);
 
-  let commentUrl: string;
-  if (existingId) {
-    await updatePrComment(owner, repo, existingId, commentBody, token);
-    commentUrl = `https://github.com/${owner}/${repo}/pull/${prNumber}#issuecomment-${existingId}`;
-    log("github", "Updated existing comment", { commentUrl });
+  let reviewUrl: string;
+
+  if (review.fallback) {
+    // Fallback: structured parsing failed — post raw text as summary, no inline comments
+    log("github", "Structured parsing failed — falling back to summary-only review");
+    reviewUrl = await createPrReview(
+      owner, repo, prNumber, pr.headSha,
+      review.rawText ?? reviewText,
+      [],
+      token
+    );
   } else {
-    commentUrl = await postPrComment(owner, repo, prNumber, commentBody, token);
-    log("github", "Posted new comment", { commentUrl });
+    // Normal: post review with validated inline comments
+    log("github", "Posting inline review", {
+      inlineComments: review.comments.length,
+      orphanedToSummary: reviewText.includes("Additional findings"),
+    });
+    reviewUrl = await createPrReview(
+      owner, repo, prNumber, pr.headSha,
+      review.summary,
+      review.comments,
+      token
+    );
   }
 
-  return { reviewText, commentUrl };
+  log("github", "Review posted", { reviewUrl });
+  return { reviewText, reviewUrl };
 }
