@@ -67,7 +67,7 @@ async function run() {
   console.log(result.reviewText.slice(0, 500));
   console.log("---\n");
 
-  console.log(`\n✅ Done! Review posted: ${result.commentUrl}\n`);
+  console.log(`\n✅ Done! Review posted: ${result.reviewUrl}\n`);
 }
 
 run().catch((err) => {
