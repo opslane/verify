@@ -26,3 +26,4 @@ CREATE TABLE IF NOT EXISTS github_installations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_github_login ON users(github_login);
+CREATE INDEX IF NOT EXISTS idx_users_org_id ON users(org_id);
