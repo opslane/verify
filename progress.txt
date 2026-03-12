@@ -3,13 +3,14 @@
 # Plan: docs/plans/2026-03-12-saas-auth-implementation.md
 
 ## Completed
-(none yet)
+- [x] Task 1: Server Scaffold (commit: 1eff4d1)
+  - Files: server/package.json, server/tsconfig.json, server/src/index.ts
+  - npm install clean, tsc --noEmit clean
 
 ## Current
-Task 1: Server Scaffold
+Task 2: DB Connection + Migrations
 
 ## Remaining
-Task 2: DB Connection + Migrations
 Task 3: Landing Page
 Task 4: Auth Routes — /auth/github and /auth/callback
 Task 5: Webhook Route + Installation Handler
