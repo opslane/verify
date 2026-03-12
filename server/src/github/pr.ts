@@ -1,9 +1,14 @@
+import { validateOwnerRepo, validatePrNumber } from "./validation.js";
+
 const GITHUB_API = "https://api.github.com";
 export const MAX_DIFF_BYTES = 50_000;
 
-export function buildDiffUrl(owner: string, repo: string, prNumber: number): string {
+export function buildPrApiUrl(owner: string, repo: string, prNumber: number): string {
   return `${GITHUB_API}/repos/${owner}/${repo}/pulls/${prNumber}`;
 }
+
+/** @deprecated Use buildPrApiUrl */
+export const buildDiffUrl = buildPrApiUrl;
 
 export function truncateDiff(diff: string): string {
   if (diff.length <= MAX_DIFF_BYTES) return diff;
@@ -17,8 +22,17 @@ export interface PullRequestMeta {
   baseBranch: string;
   headBranch: string;
   headSha: string;
-  cloneUrl: string;   // authenticated clone URL with token
+  /** Unauthenticated clone URL — add token at point of use: https://x-access-token:<token>@github.com/... */
+  cloneUrl: string;
   diff: string;
+}
+
+function githubHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
 }
 
 /**
@@ -30,14 +44,13 @@ export async function fetchPullRequest(
   prNumber: number,
   token: string
 ): Promise<PullRequestMeta> {
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
+  validateOwnerRepo(owner, repo);
+  validatePrNumber(prNumber);
+
+  const headers = githubHeaders(token);
 
   // Fetch PR metadata
-  const prRes = await fetch(buildDiffUrl(owner, repo, prNumber), { headers });
+  const prRes = await fetch(buildPrApiUrl(owner, repo, prNumber), { headers });
   if (!prRes.ok) {
     throw new Error(`GitHub PR fetch failed: ${prRes.status} ${await prRes.text()}`);
   }
@@ -70,7 +83,8 @@ export async function fetchPullRequest(
     baseBranch: pr.base.ref,
     headBranch: pr.head.ref,
     headSha: pr.head.sha,
-    cloneUrl: `https://x-access-token:${token}@github.com/${owner}/${repo}.git`,
+    // Token NOT embedded — consumer constructs authenticated URL at point of use
+    cloneUrl: `https://github.com/${owner}/${repo}.git`,
     diff: truncateDiff(rawDiff),
   };
 }
@@ -83,14 +97,15 @@ export async function postPrComment(
   body: string,
   token: string
 ): Promise<string> {
+  validateOwnerRepo(owner, repo);
+  validatePrNumber(prNumber);
+
   const res = await fetch(
     `${GITHUB_API}/repos/${owner}/${repo}/issues/${prNumber}/comments`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
+        ...githubHeaders(token),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ body }),
@@ -111,17 +126,17 @@ export async function findBotComment(
   marker: string,
   token: string
 ): Promise<number | null> {
+  validateOwnerRepo(owner, repo);
+  validatePrNumber(prNumber);
+
   const res = await fetch(
-    `${GITHUB_API}/repos/${owner}/${repo}/issues/${prNumber}/comments`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-    }
+    `${GITHUB_API}/repos/${owner}/${repo}/issues/${prNumber}/comments?per_page=100`,
+    { headers: githubHeaders(token) }
   );
-  if (!res.ok) return null;
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`Failed to list PR comments: ${res.status}`);
+  }
   const comments = await res.json() as Array<{ id: number; body: string }>;
   const found = comments.find((c) => c.body.includes(marker));
   return found?.id ?? null;
@@ -135,14 +150,14 @@ export async function updatePrComment(
   body: string,
   token: string
 ): Promise<void> {
+  validateOwnerRepo(owner, repo);
+
   const res = await fetch(
     `${GITHUB_API}/repos/${owner}/${repo}/issues/comments/${commentId}`,
     {
       method: "PATCH",
       headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
+        ...githubHeaders(token),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ body }),

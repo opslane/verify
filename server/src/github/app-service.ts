@@ -1,5 +1,6 @@
 import { importPKCS8, SignJWT } from "jose";
 import { createPrivateKey } from "node:crypto";
+import { validateOwnerRepo } from "./validation.js";
 
 const GITHUB_API_BASE = "https://api.github.com";
 
@@ -45,7 +46,7 @@ export class GitHubAppService {
    * Optionally accepts a pre-created JWT to avoid redundant RSA signing.
    */
   async getInstallationForRepo(owner: string, repo: string, jwt?: string): Promise<number | null> {
-    this.validateOwnerRepo(owner, repo);
+    validateOwnerRepo(owner, repo);
     const { response: res, errorBody } = await this.requestWithAppJwt(
       `${GITHUB_API_BASE}/repos/${owner}/${repo}/installation`,
       (token) => ({
@@ -77,7 +78,7 @@ export class GitHubAppService {
    * Combines installation lookup + token generation using a single JWT.
    */
   async getTokenForRepo(owner: string, repo: string): Promise<InstallationToken> {
-    this.validateOwnerRepo(owner, repo);
+    validateOwnerRepo(owner, repo);
 
     // Create JWT once and reuse for both API calls
     const jwt = await this.createAppJwt();
@@ -121,15 +122,6 @@ export class GitHubAppService {
   /**
    * Validate owner and repo params to prevent SSRF via path traversal.
    */
-  private validateOwnerRepo(owner: string, repo: string): void {
-    const GITHUB_NAME_RE = /^[\w.\-]+$/;
-    if (!GITHUB_NAME_RE.test(owner)) {
-      throw new Error(`Invalid GitHub owner: ${owner}`);
-    }
-    if (!GITHUB_NAME_RE.test(repo)) {
-      throw new Error(`Invalid GitHub repo: ${repo}`);
-    }
-  }
 
   private getNowSec(): number {
     return Math.floor(Date.now() / 1000) + this.clockOffsetSec;
@@ -176,9 +168,8 @@ export class GitHubAppService {
       return { response, errorBody: body };
     }
 
-    // Unreachable loop fallback.
-    const response = await fetch(url, initForToken(token));
-    return { response };
+    // This line is unreachable — the loop always returns on attempt 1.
+    throw new Error("Unreachable: requestWithAppJwt retry loop exhausted");
   }
 
   /**
