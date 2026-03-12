@@ -102,8 +102,12 @@
   - Changed: issue comments → PR reviews, added diff parsing + output parsing
   - Renamed: commentUrl → reviewUrl throughout
 
+- [x] Task 6: Integration smoke test (commit: 120c085)
+  - Files: server/src/review/integration.test.ts
+  - 2 integration tests pass (cross-module seam validation)
+
 ### Current
-Task 6: Integration smoke test
+COMPLETE — all 6 tasks done
 
 ### Remaining
 (none)
