@@ -1,18 +1,16 @@
 import { validateOwnerRepo, validatePrNumber } from "./validation.js";
 
 const GITHUB_API = "https://api.github.com";
-export const MAX_DIFF_BYTES = 50_000;
+export const MAX_DIFF_CHARS = 50_000;
 
 export function buildPrApiUrl(owner: string, repo: string, prNumber: number): string {
   return `${GITHUB_API}/repos/${owner}/${repo}/pulls/${prNumber}`;
 }
 
-/** @deprecated Use buildPrApiUrl */
-export const buildDiffUrl = buildPrApiUrl;
 
 export function truncateDiff(diff: string): string {
-  if (diff.length <= MAX_DIFF_BYTES) return diff;
-  const truncated = diff.slice(0, MAX_DIFF_BYTES);
+  if (diff.length <= MAX_DIFF_CHARS) return diff;
+  const truncated = diff.slice(0, MAX_DIFF_CHARS);
   return truncated + "\n\n[diff truncated] — too large for automated review";
 }
 

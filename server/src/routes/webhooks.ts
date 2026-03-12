@@ -10,8 +10,6 @@ export function createWebhookApp(): Hono {
   const app = new Hono();
   const dedup = new DeduplicationSet(); // fresh per factory call (production uses singleton via webhookRoutes)
 
-  app.get("/health", (c) => c.json({ ok: true }));
-
   app.post("/webhooks/github", async (c) => {
     const rawBody = await c.req.text();
     const deliveryId = c.req.header("svix-id") ?? crypto.randomUUID();
@@ -49,7 +47,7 @@ export function createWebhookApp(): Hono {
 
     // Only handle opened + synchronize
     if (payload.action !== "opened" && payload.action !== "synchronize") {
-      return c.json({ accepted: false, reason: `Ignoring action: ${payload.action}` });
+      return c.json({ accepted: false, reason: "Ignoring non-review action" });
     }
 
     const owner = payload.repository?.owner?.login;

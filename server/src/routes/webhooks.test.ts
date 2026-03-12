@@ -7,11 +7,20 @@ afterEach(() => {
   delete process.env.NODE_ENV;
 });
 
-describe("GET /health", () => {
-  it("returns 200", async () => {
+describe("POST /webhooks/github — missing body fields", () => {
+  it("returns 400 for PR event with missing owner", async () => {
+    process.env.SVIX_SKIP_VERIFICATION = "true";
+    process.env.NODE_ENV = "test";
     const app = createWebhookApp();
-    const res = await app.request("/health");
-    expect(res.status).toBe(200);
+    const res = await app.request("/webhooks/github", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-github-event": "pull_request",
+      },
+      body: JSON.stringify({ action: "opened", number: 42 }), // missing repository
+    });
+    expect(res.status).toBe(400);
   });
 });
 

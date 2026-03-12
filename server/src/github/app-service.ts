@@ -119,10 +119,6 @@ export class GitHubAppService {
     };
   }
 
-  /**
-   * Validate owner and repo params to prevent SSRF via path traversal.
-   */
-
   private getNowSec(): number {
     return Math.floor(Date.now() / 1000) + this.clockOffsetSec;
   }
