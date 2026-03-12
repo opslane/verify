@@ -129,7 +129,7 @@ New:
 |-----|-------------|
 | `GITHUB_OAUTH_CLIENT_ID` | OAuth App client ID |
 | `GITHUB_OAUTH_CLIENT_SECRET` | OAuth App client secret |
-| `GITHUB_APP_INSTALL_URL` | e.g. `https://github.com/apps/your-app/installations/new` |
+| `GITHUB_APP_SLUG` | The app slug from `https://github.com/apps/<slug>` — install URL is constructed automatically |
 | `DATABASE_URL` | Railway Postgres connection string |
 | `JWT_SECRET` | Random secret for signing session cookies |
 
