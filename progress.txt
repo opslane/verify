@@ -39,3 +39,9 @@ COMPLETE — all 10 tasks done
 
 ## Remaining
 (none)
+
+## Post-completion fixes (code review gate — final review 3.65/5)
+- Fixed skip guard fail-secure (undefined NODE_ENV → treat as production)
+- Fixed markSeen ordering (after dispatch, not before)
+- Applied simplifier: extracted pipeline.ts, fixed route double-prefix, removed dead sandbox methods, inlined buildPrApiUrl, extracted env.ts
+- Final: all 10 tasks done, 17 tests passing, live E2E verified
