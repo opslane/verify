@@ -93,15 +93,20 @@
   - Fixed: removed unnecessary `as const` in parser.ts and pr.ts
   - Review score: 4.2/5 APPROVE WITH CHANGES
 
+- [x] Task 4: Structured review prompt (commit: 9d371ec)
+  - Files: server/src/review/prompt.ts, server/src/review/prompt.test.ts
+  - 7 tests pass (JSON format, line map, severity tags)
+
+- [x] Task 5: Wire up runner (commit: 553af61)
+  - Files: server/src/review/pipeline.ts, server/src/review/runner.ts
+  - Changed: issue comments → PR reviews, added diff parsing + output parsing
+  - Renamed: commentUrl → reviewUrl throughout
+
 ### Current
-Task 4: Structured review prompt
+Task 6: Integration smoke test
 
 ### Remaining
-Task 2: Output parser
-Task 3: GitHub PR review function
-Task 4: Structured review prompt
-Task 5: Wire up runner
-Task 6: Integration smoke test
+(none)
 
 ## Post-completion fixes (code review gate — final review 3.65/5)
 - Fixed skip guard fail-secure (undefined NODE_ENV → treat as production)
