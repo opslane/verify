@@ -88,8 +88,13 @@
   - Files: server/src/github/pr.ts (added createPrReview)
   - Existing 2 tests still pass, typecheck clean
 
+- [x] Code review gate (tasks 1-3) + fixes (commit: dc9649c)
+  - Fixed: `!c.line` → `typeof c.line !== "number"` (line 0 guard)
+  - Fixed: removed unnecessary `as const` in parser.ts and pr.ts
+  - Review score: 4.2/5 APPROVE WITH CHANGES
+
 ### Current
-Code review gate (tasks 1-3)
+Task 4: Structured review prompt
 
 ### Remaining
 Task 2: Output parser
