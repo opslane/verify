@@ -186,7 +186,7 @@ export async function runReviewPipeline(
     // Normal: post review with validated inline comments
     log("github", "Posting inline review", {
       inlineComments: review.comments.length,
-      orphanedToSummary: reviewText.includes("Additional findings"),
+      orphanedToSummary: review.summary.includes("Additional findings"),
     });
     reviewUrl = await createPrReview(
       owner, repo, prNumber, pr.headSha,
