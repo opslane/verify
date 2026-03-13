@@ -185,13 +185,13 @@ COMPLETE — all 6 tasks done
   - Added fetchPrChangedFiles and postOrUpdateComment
   - 3 new tests (fetchChangedFiles, create comment, update comment)
 
+- [x] Task 11: E2B Template for Verify (commit: 21bb342)
+  - Files: server/e2b-templates/verify/Dockerfile, entrypoint.sh, e2b.toml
+  - Postgres 16, Redis, Node 22, pnpm/yarn/bun, Playwright + Chromium
+  - 4GB RAM, 2 CPUs
+
 ### Current
-Task 11: E2B Template for Verify
+Task 12: Wire PR Comments into Pipeline
 
 ### Remaining
-Task 7: Verify Pipeline Orchestrator
-Task 8: Browser Agent (Claude Tool-Use Loop)
-Task 9: Verify Trigger.dev Task + Webhook Wiring
-Task 10: GitHub PR Helper — Fetch Changed Files + Post Issue Comment
-Task 11: E2B Template for Verify
 Task 12: Wire PR Comments into Pipeline
