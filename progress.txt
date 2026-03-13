@@ -169,8 +169,13 @@ COMPLETE — all 6 tasks done
   - Added @anthropic-ai/sdk dependency
   - 3 tests pass (prompt builder, credentials, tool definitions)
 
+- [x] Task 9: Verify Trigger.dev Task + Webhook Wiring (commit: 012ff19)
+  - Files: server/src/verify/runner.ts, server/src/routes/webhooks.ts, server/src/routes/webhooks.test.ts
+  - 4 new webhook tests (issue_comment /verify, HMAC, ignore non-verify, no config)
+  - Also dispatches verify alongside review on PR open/sync
+
 ### Current
-Task 9: Verify Trigger.dev Task + Webhook Wiring
+Code Review Gate (tasks 7-9)
 
 ### Remaining
 Task 7: Verify Pipeline Orchestrator
