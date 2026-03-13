@@ -6,9 +6,11 @@ import type { unifiedPrTask, UnifiedPayload } from '../unified/runner.js';
 import { shouldSkipVerification, verifySvixWebhook } from '../webhook/verify.js';
 import { DeduplicationSet } from '../webhook/dedup.js';
 import type { VerifyPayload } from '../verify/runner.js';
+import type { mentionPrTask, MentionPayload } from '../review/runner.js';
 import { validateOwnerRepo } from '../github/validation.js';
 import { findUserByLogin, upsertInstallation, findRepoConfig } from '../db.js';
 import { runUnifiedPipeline } from '../unified/pipeline.js';
+import { runMentionPipeline } from '../review/mention-pipeline.js';
 
 function env(key: string): string {
   const val = process.env[key];
@@ -175,10 +177,13 @@ export function createWebhookApp(): Hono {
         return c.json({ accepted: false, reason: 'action ignored' });
       }
 
-      // Only respond to /verify command
       const commentBody = payload.comment?.body?.trim() ?? '';
-      if (commentBody !== '/verify') {
-        return c.json({ accepted: false, reason: 'not a verify command' });
+      const appSlug = process.env.GITHUB_APP_SLUG ?? 'opslane';
+      const isMention = commentBody.includes(`@${appSlug}`);
+      const isVerifyCommand = commentBody === '/verify';
+
+      if (!isMention && !isVerifyCommand) {
+        return c.json({ accepted: false, reason: 'not a recognized command' });
       }
 
       // Only PR comments (not plain issue comments)
@@ -195,7 +200,7 @@ export function createWebhookApp(): Hono {
         return c.json({ error: 'Missing required fields' }, 400);
       }
 
-      // Only allow repo collaborators/members/owners to trigger verify
+      // Only allow repo collaborators/members/owners
       const association = payload.comment?.author_association ?? '';
       if (!ALLOWED_ASSOCIATIONS.has(association)) {
         return c.json({ accepted: false, reason: 'unauthorized' });
@@ -207,13 +212,32 @@ export function createWebhookApp(): Hono {
         return c.json({ error: 'Invalid owner or repo' }, 400);
       }
 
-      // Dedup before DB query
-      const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID();
+      const deliveryId = c.req.header('svix-id') ?? crypto.randomUUID();
       if (dedup.isDuplicate(deliveryId)) {
         return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
       }
 
-      // Check repo config exists
+      if (isMention) {
+        // --- @mention: trigger code review / mention response ---
+        if (process.env.TRIGGER_SECRET_KEY) {
+          const mentionPayload: MentionPayload = { owner, repo, prNumber, deliveryId, mentionComment: commentBody };
+          await tasks.trigger<typeof mentionPrTask>('mention-pr', mentionPayload);
+        } else {
+          console.log(`[inline] Running mention pipeline for ${owner}/${repo}#${prNumber}`);
+          runMentionPipeline(
+            { owner, repo, prNumber, mentionComment: commentBody },
+            { log: (step, msg, data) => console.log(`[${step}]`, msg, data ?? '') },
+          ).then(result => {
+            console.log(`[inline] Mention pipeline complete for ${owner}/${repo}#${prNumber}`, result.commentUrl);
+          }).catch(err => {
+            console.error(`[inline] Mention pipeline failed for ${owner}/${repo}#${prNumber}`, err);
+          });
+        }
+        dedup.markSeen(deliveryId);
+        return c.json({ accepted: true, event: 'issue_comment.mention', prNumber, owner, repo }, 202);
+      }
+
+      // --- /verify command: trigger verify pipeline ---
       const repoConfig = await findRepoConfig(owner, repo);
       if (!repoConfig) {
         return c.json({ accepted: false, reason: 'no repo config' });
@@ -223,7 +247,6 @@ export function createWebhookApp(): Hono {
         const verifyPayload: VerifyPayload = { owner, repo, prNumber, deliveryId };
         await tasks.trigger<typeof verifyPrTask>('verify-pr', verifyPayload);
       } else {
-        // No Trigger.dev — run inline (fire-and-forget so webhook returns 202 immediately)
         console.log(`[inline] Running unified pipeline for ${owner}/${repo}#${prNumber}`);
         runUnifiedPipeline(
           { owner, repo, prNumber },
