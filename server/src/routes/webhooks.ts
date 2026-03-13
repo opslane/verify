@@ -2,11 +2,13 @@ import { Hono } from 'hono';
 import { timingSafeEqual, createHmac } from 'node:crypto';
 import { tasks } from '@trigger.dev/sdk/v3';
 import type { reviewPrTask } from '../review/runner.js';
+import type { verifyPrTask } from '../verify/runner.js';
 import { shouldSkipVerification, verifySvixWebhook } from '../webhook/verify.js';
 import { DeduplicationSet } from '../webhook/dedup.js';
 import type { ReviewPayload } from '../review/runner.js';
+import type { VerifyPayload } from '../verify/runner.js';
 import { validateOwnerRepo } from '../github/validation.js';
-import { findUserByLogin, upsertInstallation } from '../db.js';
+import { findUserByLogin, upsertInstallation, findRepoConfig } from '../db.js';
 
 function env(key: string): string {
   const val = process.env[key];
@@ -115,12 +117,91 @@ export function createWebhookApp(): Hono {
 
       if (process.env.TRIGGER_SECRET_KEY) {
         await tasks.trigger<typeof reviewPrTask>('review-pr', reviewPayload);
+
+        // Also dispatch verify if repo has a config
+        const repoConfig = await findRepoConfig(owner, repo);
+        if (repoConfig) {
+          const verifyPayload: VerifyPayload = { owner, repo, prNumber, deliveryId };
+          await tasks.trigger<typeof verifyPrTask>('verify-pr', verifyPayload);
+        }
       } else {
         console.warn('TRIGGER_SECRET_KEY not set — skipping task dispatch');
       }
       dedup.markSeen(deliveryId);
 
       return c.json({ accepted: true, prNumber, owner, repo }, 202);
+    }
+
+    // --- issue_comment: /verify command triggers verify pipeline ---
+    if (event === 'issue_comment') {
+      const signature = c.req.header('X-Hub-Signature-256');
+      if (!(await verifyGitHubSignature(rawBody, signature))) {
+        return c.text('Invalid signature', 401);
+      }
+
+      let payload: {
+        action?: string;
+        comment?: { body?: string; user?: { login?: string } };
+        issue?: { number?: number; pull_request?: { url?: string } };
+        repository?: { owner?: { login?: string }; name?: string };
+      };
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        return c.json({ error: 'Invalid JSON' }, 400);
+      }
+
+      // Only process newly created comments
+      if (payload.action !== 'created') {
+        return c.json({ accepted: false, reason: 'action ignored' });
+      }
+
+      // Only respond to /verify command
+      const commentBody = payload.comment?.body?.trim() ?? '';
+      if (commentBody !== '/verify') {
+        return c.json({ accepted: false, reason: 'not a verify command' });
+      }
+
+      // Only PR comments (not plain issue comments)
+      if (!payload.issue?.pull_request?.url) {
+        return c.json({ accepted: false, reason: 'not a pull request' });
+      }
+
+      const owner = payload.repository?.owner?.login;
+      const repo = payload.repository?.name;
+      const prNumber = payload.issue?.number;
+      const commenter = payload.comment?.user?.login;
+
+      if (!owner || !repo || !prNumber || !commenter) {
+        return c.json({ error: 'Missing required fields' }, 400);
+      }
+
+      try {
+        validateOwnerRepo(owner, repo);
+      } catch {
+        return c.json({ error: 'Invalid owner or repo' }, 400);
+      }
+
+      // Check repo config exists
+      const repoConfig = await findRepoConfig(owner, repo);
+      if (!repoConfig) {
+        return c.json({ accepted: false, reason: 'no repo config' });
+      }
+
+      const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID();
+      if (dedup.isDuplicate(deliveryId)) {
+        return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
+      }
+
+      if (process.env.TRIGGER_SECRET_KEY) {
+        const verifyPayload: VerifyPayload = { owner, repo, prNumber, deliveryId };
+        await tasks.trigger<typeof verifyPrTask>('verify-pr', verifyPayload);
+      } else {
+        console.warn('TRIGGER_SECRET_KEY not set — skipping verify dispatch');
+      }
+      dedup.markSeen(deliveryId);
+
+      return c.json({ accepted: true, event: 'issue_comment.verify', prNumber, owner, repo }, 202);
     }
 
     // --- all other events ---

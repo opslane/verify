@@ -7,10 +7,11 @@ vi.mock('../db.js', () => ({
   upsertInstallation: vi.fn(),
   upsertOrg: vi.fn(),
   upsertUser: vi.fn(),
+  findRepoConfig: vi.fn(),
   sql: {},
 }));
 
-import { findUserByLogin, upsertInstallation } from '../db.js';
+import { findUserByLogin, upsertInstallation, findRepoConfig } from '../db.js';
 import { createWebhookApp } from './webhooks.js';
 
 const WEBHOOK_SECRET = 'test-webhook-secret';
@@ -184,5 +185,105 @@ describe('POST /github — Svix + PR dispatch', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { accepted: boolean };
     expect(body.accepted).toBe(false);
+  });
+});
+
+// --- issue_comment: /verify command ---
+
+describe('POST /github — issue_comment (/verify)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.GITHUB_WEBHOOK_SECRET = WEBHOOK_SECRET;
+  });
+
+  function makeIssueCommentPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      action: 'created',
+      comment: { body: '/verify', user: { login: 'jsmith' } },
+      issue: { number: 42, pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/42' } },
+      repository: { owner: { login: 'org' }, name: 'repo' },
+      ...overrides,
+    };
+  }
+
+  it('returns 401 with missing signature', async () => {
+    const app = createWebhookApp();
+    const body = JSON.stringify(makeIssueCommentPayload());
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'issue_comment',
+      },
+      body,
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('accepts /verify comment when repo config exists', async () => {
+    vi.mocked(findRepoConfig).mockResolvedValue({
+      id: 'cfg-uuid', installation_id: 1, owner: 'org', repo: 'repo',
+      startup_command: 'npm start', port: 3000, install_command: null,
+      pre_start_script: null, health_path: '/', test_email: null,
+      test_password: null, env_vars: null, detected_infra: [],
+      created_at: new Date(), updated_at: new Date(),
+    });
+
+    const app = createWebhookApp();
+    const payload = makeIssueCommentPayload();
+    const body = JSON.stringify(payload);
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'issue_comment',
+        'X-Hub-Signature-256': sign(body),
+      },
+      body,
+    });
+    expect(res.status).toBe(202);
+    const json = await res.json() as { accepted: boolean; event: string };
+    expect(json.accepted).toBe(true);
+    expect(json.event).toBe('issue_comment.verify');
+  });
+
+  it('ignores non-/verify comments', async () => {
+    const app = createWebhookApp();
+    const payload = makeIssueCommentPayload({
+      comment: { body: 'looks good to me', user: { login: 'jsmith' } },
+    });
+    const body = JSON.stringify(payload);
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'issue_comment',
+        'X-Hub-Signature-256': sign(body),
+      },
+      body,
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json() as { reason: string };
+    expect(json.reason).toBe('not a verify command');
+  });
+
+  it('rejects when no repo config exists', async () => {
+    vi.mocked(findRepoConfig).mockResolvedValue(null);
+
+    const app = createWebhookApp();
+    const payload = makeIssueCommentPayload();
+    const body = JSON.stringify(payload);
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'issue_comment',
+        'X-Hub-Signature-256': sign(body),
+      },
+      body,
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json() as { reason: string };
+    expect(json.reason).toBe('no repo config');
   });
 });
