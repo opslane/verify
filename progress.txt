@@ -190,8 +190,13 @@ COMPLETE — all 6 tasks done
   - Postgres 16, Redis, Node 22, pnpm/yarn/bun, Playwright + Chromium
   - 4GB RAM, 2 CPUs
 
+- [x] Task 12: Wire PR Comments into Pipeline (commit: 91cecbf)
+  - Files: server/src/verify/pipeline.ts
+  - Wired postOrUpdateComment + VERIFY_MARKER into all 3 exit paths (no-spec, startup-failed, verified)
+  - Replaced empty changedFiles with fetchPrChangedFiles call
+
 ### Current
-Task 12: Wire PR Comments into Pipeline
+COMPLETE — all 12 tasks done
 
 ### Remaining
-Task 12: Wire PR Comments into Pipeline
+(none)
