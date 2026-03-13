@@ -1,10 +1,13 @@
+import Anthropic from '@anthropic-ai/sdk';
 import { GitHubAppService } from '../github/app-service.js';
 import { fetchPullRequest, fetchPrChangedFiles, postOrUpdateComment } from '../github/pr.js';
 import { findRepoConfig } from '../db.js';
 import { E2BSandboxProvider } from '../sandbox/e2b-provider.js';
 import { requireEnv } from '../env.js';
+import { decrypt } from '../crypto.js';
 import { discoverSpec } from './spec-discovery.js';
 import { setupSandbox } from './sandbox-setup.js';
+import { runBrowserAgent } from './browser-agent.js';
 import { VERIFY_MARKER, formatVerifyComment, formatStartupFailureComment, formatNoSpecComment } from './comment.js';
 import type { AcResult } from './comment.js';
 
@@ -125,21 +128,91 @@ export async function runVerifyPipeline(
       return { mode: 'startup-failed', comment };
     }
 
-    // 10. Run verify pipeline stages (planner → agents → judge)
-    // TODO: Implement browser agent orchestration (runBrowserAgent from browser-agent.ts)
-    log('verify', `Running verify against spec (${specContent.length} chars)`);
+    // 10. Parse spec into acceptance criteria (planner step)
+    log('verify', `Parsing spec into acceptance criteria (${specContent.length} chars)`);
+    const criteria = await parseAcceptanceCriteria(specContent);
+    log('verify', `Found ${criteria.length} acceptance criteria`);
 
-    // Placeholder — browser agent integration pending
+    // 11. Run browser agent for each AC
+    const baseUrl = `http://localhost:${config.port}`;
+    const testEmail = config.test_email ? decrypt(config.test_email) : undefined;
+    const testPassword = config.test_password ? decrypt(config.test_password) : undefined;
     const results: AcResult[] = [];
+
+    for (const ac of criteria) {
+      log('agent', `Testing AC: ${ac.id} — ${ac.description}`);
+      const verdict = await runBrowserAgent(
+        provider, sandbox.id,
+        { goal: ac.description, baseUrl, testEmail, testPassword },
+        (msg) => log('agent', msg),
+      );
+      results.push({
+        id: ac.id,
+        description: ac.description,
+        result: verdict.result === 'error' ? 'skipped' : verdict.result,
+        expected: verdict.expected,
+        observed: verdict.observed,
+        reason: verdict.result === 'error' ? verdict.error : undefined,
+      });
+    }
+
     const passed = results.filter((r) => r.result === 'pass').length;
     const specPath = spec.type === 'plan-file' ? spec.specPath : '(PR body)';
     const comment = formatVerifyComment({ specPath, port: config.port, results });
     await postOrUpdateComment(owner, repo, prNumber, comment, VERIFY_MARKER, token);
-    return { mode: 'verified', passed, total: results.length, results };
+    return { mode: 'verified', comment, passed, total: results.length, results };
 
   } finally {
     log('cleanup', 'Destroying sandbox');
     await provider.destroy(sandbox.id);
+  }
+}
+
+interface AcceptanceCriterion {
+  id: string;
+  description: string;
+}
+
+/**
+ * Use Claude to parse a spec document into individual, testable acceptance criteria.
+ */
+async function parseAcceptanceCriteria(specContent: string): Promise<AcceptanceCriterion[]> {
+  const client = new Anthropic();
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4096,
+    messages: [
+      {
+        role: 'user',
+        content: `Extract all testable acceptance criteria from the following spec. Return a JSON array where each item has "id" (e.g. "AC-1") and "description" (a single sentence describing what to verify in the browser).
+
+Only include criteria that can be verified by interacting with a web UI. Skip non-functional requirements, deployment steps, or backend-only criteria.
+
+<spec>
+${specContent}
+</spec>
+
+Respond with ONLY the JSON array, no other text.`,
+      },
+    ],
+  });
+
+  const text = response.content.find((c) => c.type === 'text')?.text ?? '[]';
+  // Extract JSON array from response (handle markdown code fences)
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return [];
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]) as unknown[];
+    return parsed
+      .filter((item): item is { id: string; description: string } =>
+        typeof item === 'object' && item !== null &&
+        'id' in item && typeof (item as Record<string, unknown>).id === 'string' &&
+        'description' in item && typeof (item as Record<string, unknown>).description === 'string'
+      )
+      .map((item) => ({ id: item.id, description: item.description }));
+  } catch {
+    return [];
   }
 }
 
