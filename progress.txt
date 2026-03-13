@@ -195,8 +195,14 @@ COMPLETE — all 6 tasks done
   - Wired postOrUpdateComment + VERIFY_MARKER into all 3 exit paths (no-spec, startup-failed, verified)
   - Replaced empty changedFiles with fetchPrChangedFiles call
 
+- [x] Code Review Gate (tasks 10-12) + fixes (commit: 74ff2db)
+  - Fixed: specPath validation near shell interpolation (defense in depth)
+  - Fixed: redundant .map() in pipeline.ts
+  - Fixed: pg_isready wait in entrypoint, template name mismatch, pinned pnpm/yarn
+  - Review score: 3.85/5 APPROVE WITH CHANGES
+
 ### Current
-COMPLETE — all 12 tasks done
+COMPLETE — all 12 tasks done, final review passed
 
 ### Remaining
 (none)
