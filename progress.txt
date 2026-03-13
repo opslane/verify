@@ -159,8 +159,13 @@ COMPLETE — all 6 tasks done
   - Fixed: replaced getServiceDefs→hasServiceDef, added edge case tests
   - Fixed: port now rendered in startup failure comment
 
+- [x] Task 7: Verify Pipeline Orchestrator (commit: 8f21435)
+  - Files: server/src/verify/pipeline.ts, server/src/verify/pipeline.test.ts
+  - 1 integration-seam test (no-config path)
+  - TODOs: browser agent (Task 8), fetchPrChangedFiles (Task 10), comment posting (Task 12)
+
 ### Current
-Task 7: Verify Pipeline Orchestrator
+Task 8: Browser Agent (Claude Tool-Use Loop)
 
 ### Remaining
 Task 7: Verify Pipeline Orchestrator
