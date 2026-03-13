@@ -121,13 +121,14 @@ COMPLETE — all 6 tasks done
 ## remote-verify-pipeline (plan: docs/plans/2026-03-12-remote-verify-implementation.md)
 
 ### Completed
-(none yet)
+- [x] Task 1: Encryption Module (commit: 5cc2cc7)
+  - Files: server/src/crypto.ts, server/src/crypto.test.ts
+  - 4 tests pass (roundtrip, unique IVs, tamper detection, missing key)
 
 ### Current
-Task 1: Encryption Module (server/src/crypto.ts)
+Task 2: Database Migration for repo_configs
 
 ### Remaining
-Task 2: Database Migration for repo_configs
 Task 3: Spec Discovery Module
 Task 4: Infra Service Manager
 Task 5: Sandbox Setup Module
