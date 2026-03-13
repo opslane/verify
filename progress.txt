@@ -149,12 +149,14 @@ COMPLETE — all 6 tasks done
   - 3 tests pass (env file generation, health check cmd, default path)
   - Decision: mock crypto.js to avoid ENCRYPTION_KEY at test load time
 
+- [x] Task 6: PR Comment Formatter (commit: 8622cf7)
+  - Files: server/src/verify/comment.ts, server/src/verify/comment.test.ts
+  - 4 tests pass (full report, startup failure, no-spec, marker detection)
+
 ### Current
-Task 6: PR Comment Formatter
+Code Review Gate (tasks 4-6)
 
 ### Remaining
-Task 5: Sandbox Setup Module
-Task 6: PR Comment Formatter
 Task 7: Verify Pipeline Orchestrator
 Task 8: Browser Agent (Claude Tool-Use Loop)
 Task 9: Verify Trigger.dev Task + Webhook Wiring
