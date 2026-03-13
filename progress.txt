@@ -127,15 +127,27 @@ COMPLETE — all 6 tasks done
   - Files: server/src/review/mention-pipeline.ts, server/src/review/mention-pipeline.test.ts
   - 1 export test passes, typecheck clean
 
+- [x] Code review gate (tasks 1-3) + fixes (commit: c7550d2)
+  - Fixed: thread comments wrapped in <user_input> tags (prompt injection)
+  - Fixed: postPrComment error no longer leaks response body
+  - Fixed: validateBranchName extracted to validation.ts (shared)
+
+- [x] Task 4: Add Trigger.dev task for mention pipeline (commit: 45cdf07)
+  - Files: server/src/review/runner.ts
+  - Added mentionPrTask + MentionPayload
+
+- [x] Task 5: Add issue_comment webhook handler (commit: 707756f)
+  - Files: server/src/routes/webhooks.ts, server/.env.example
+  - Self-trigger guard, regex escape, author_association check, dedup
+
+- [x] Task 6: Write tests for issue_comment handler (commit: ada0e88)
+  - Files: server/src/routes/webhooks.test.ts
+  - 8 new tests (15 total in webhooks.test.ts)
+
 ### Current
-Code review gate (tasks 1-3)
+COMPLETE — all 6 automated tasks done. Task 7 is manual (GitHub App settings).
 
 ### Remaining
-Task 2: Add buildMentionPrompt to review/prompt.ts
-Task 3: Create the mention pipeline
-Task 4: Add Trigger.dev task for mention pipeline
-Task 5: Add issue_comment webhook handler
-Task 6: Write tests for the issue_comment handler
 Task 7: Enable issue_comment event in GitHub App settings (manual)
 
 ## Post-completion fixes (code review gate — final review 3.65/5)
