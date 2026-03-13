@@ -225,8 +225,6 @@ export function createWebhookApp(): Hono {
         return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
       }
 
-      dedup.markSeen(deliveryId);
-
       // Strip all @mentions from the comment to get the user's actual message
       const mentionComment = commentBody.replace(
         new RegExp(`@${escapeRegExp(appSlug)}\\b`, 'gi'),
@@ -251,6 +249,8 @@ export function createWebhookApp(): Hono {
           console.error(`[mention] Pipeline failed for ${owner}/${repo}#${prNumber}:`, err);
         });
       }
+
+      dedup.markSeen(deliveryId);
 
       return c.json({ accepted: true, prNumber, owner, repo, trigger: 'mention' }, 202);
     }

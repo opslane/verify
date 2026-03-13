@@ -181,8 +181,8 @@ export async function postPrComment(
     }
   );
   if (!res.ok) {
-    const body = await res.text();
-    console.error(`[postPrComment] GitHub API error: ${res.status}`, body);
+    const errBody = await res.text();
+    console.error(`[postPrComment] GitHub API error: ${res.status}`, errBody);
     throw new Error(`Failed to post PR comment: ${res.status}`);
   }
   const data = await res.json() as { html_url: string };
