@@ -125,11 +125,14 @@ COMPLETE — all 6 tasks done
   - Files: server/src/crypto.ts, server/src/crypto.test.ts
   - 4 tests pass (roundtrip, unique IVs, tamper detection, missing key)
 
+- [x] Task 2: Database Migration for repo_configs (commit: 432cdcd)
+  - Files: server/db/migrations/002_repo_configs.sql, server/src/db.ts, server/src/db.test.ts
+  - 3 integration tests (upsert, find, conflict update) — require TEST_DATABASE_URL
+
 ### Current
-Task 2: Database Migration for repo_configs
+Task 3: Spec Discovery Module
 
 ### Remaining
-Task 3: Spec Discovery Module
 Task 4: Infra Service Manager
 Task 5: Sandbox Setup Module
 Task 6: PR Comment Formatter
