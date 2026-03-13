@@ -12,6 +12,7 @@ describe('db helpers (integration)', () => {
     await runMigrations(TEST_DB);
     sql = postgres(TEST_DB);
     // Clean slate for this test run
+    await sql`DELETE FROM repo_configs`;
     await sql`DELETE FROM github_installations`;
     await sql`DELETE FROM users`;
     await sql`DELETE FROM orgs`;

@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS repo_configs (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  installation_id   integer REFERENCES github_installations(installation_id),
+  installation_id   bigint REFERENCES github_installations(installation_id),
   owner             text NOT NULL,
   repo              text NOT NULL,
   startup_command   text NOT NULL,
@@ -17,5 +17,4 @@ CREATE TABLE IF NOT EXISTS repo_configs (
   UNIQUE (owner, repo)
 );
 
-CREATE INDEX IF NOT EXISTS idx_repo_configs_owner_repo ON repo_configs (owner, repo);
 CREATE INDEX IF NOT EXISTS idx_repo_configs_installation_id ON repo_configs (installation_id);

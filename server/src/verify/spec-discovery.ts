@@ -1,21 +1,17 @@
-interface ChangedFile {
+export interface ChangedFile {
   filename: string;
   status: string; // 'added' | 'modified' | 'removed' | etc.
 }
 
-interface SpecDiscoveryInput {
-  owner: string;
-  repo: string;
-  prNumber: number;
-  token: string;
+export interface SpecDiscoveryInput {
   changedFiles: ChangedFile[];
   prBody: string;
 }
 
-type SpecResult =
-  | { type: 'plan-file'; specPath: string; specContent?: undefined }
-  | { type: 'pr-body'; specContent: string; specPath?: undefined }
-  | { type: 'no-spec'; specPath?: undefined; specContent?: undefined };
+export type SpecResult =
+  | { type: 'plan-file'; specPath: string }
+  | { type: 'pr-body'; specContent: string }
+  | { type: 'no-spec' };
 
 const PLAN_FILE_PATTERN = /^docs\/plans\/.*\.md$/;
 
@@ -23,16 +19,15 @@ const PLAN_FILE_PATTERN = /^docs\/plans\/.*\.md$/;
 function hasAcceptanceCriteria(body: string): boolean {
   if (!body || body.trim().length < 20) return false;
   const lower = body.toLowerCase();
-  // Look for checkbox lists, "acceptance criteria" header, or "should" statements in lists
   return (
-    /- \[[ x]\]/i.test(body) ||
+    /- \[[ x]\]/.test(body) ||
     lower.includes('acceptance criteria') ||
     lower.includes('requirements') ||
     (lower.includes('should') && /^[-*]\s/m.test(body))
   );
 }
 
-export async function discoverSpec(input: SpecDiscoveryInput): Promise<SpecResult> {
+export function discoverSpec(input: SpecDiscoveryInput): SpecResult {
   // Step 1: Look for plan files in changed files
   const planFiles = input.changedFiles.filter((f) => PLAN_FILE_PATTERN.test(f.filename));
 

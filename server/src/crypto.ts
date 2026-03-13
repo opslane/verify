@@ -23,11 +23,16 @@ export function encrypt(plaintext: string): string {
 }
 
 export function decrypt(ciphertext: string): string {
-  const [ivHex, encHex, tagHex] = ciphertext.split(':');
+  const parts = ciphertext.split(':');
+  if (parts.length !== 3) {
+    throw new Error('Invalid ciphertext format: expected iv:ciphertext:authTag');
+  }
+  const [ivHex, encHex, tagHex] = parts;
   const iv = Buffer.from(ivHex, 'hex');
   const encrypted = Buffer.from(encHex, 'hex');
   const authTag = Buffer.from(tagHex, 'hex');
   const decipher = createDecipheriv(ALGORITHM, KEY, iv);
   decipher.setAuthTag(authTag);
-  return decipher.update(encrypted) + decipher.final('utf8');
+  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return decrypted.toString('utf8');
 }
