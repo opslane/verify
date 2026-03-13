@@ -153,8 +153,14 @@ COMPLETE — all 6 tasks done
   - Files: server/src/verify/comment.ts, server/src/verify/comment.test.ts
   - 4 tests pass (full report, startup failure, no-spec, marker detection)
 
+- [x] Code Review Gate (tasks 4-6) + fixes (commit: 5606899)
+  - Fixed: healthPath validation (command injection), newline escaping in env
+  - Fixed: readiness probe failures now surface in SetupResult
+  - Fixed: replaced getServiceDefs→hasServiceDef, added edge case tests
+  - Fixed: port now rendered in startup failure comment
+
 ### Current
-Code Review Gate (tasks 4-6)
+Task 7: Verify Pipeline Orchestrator
 
 ### Remaining
 Task 7: Verify Pipeline Orchestrator
