@@ -55,7 +55,7 @@ export async function runVerifyPipeline(
   // 4. Fetch changed files + spec discovery
   const changedFiles = await fetchPrChangedFiles(owner, repo, prNumber, token);
   const spec = discoverSpec({
-    changedFiles: changedFiles.map((f) => ({ filename: f.filename, status: f.status })),
+    changedFiles,
     prBody: prMeta.body ?? '',
   });
 
@@ -99,6 +99,11 @@ export async function runVerifyPipeline(
     // 8. If plan-file spec, fetch its content from the cloned repo
     let specContent: string;
     if (spec.type === 'plan-file') {
+      // Defense in depth: validate specPath before shell interpolation
+      // (spec-discovery.ts already constrains to docs/plans/*.md via PLAN_FILE_PATTERN)
+      if (!SAFE_BRANCH_RE.test(spec.specPath)) {
+        throw new Error(`Unsafe spec path: ${spec.specPath}`);
+      }
       const lines = await collect(provider.runCommand(sandbox.id, `cat '/home/user/repo/${spec.specPath}'`));
       specContent = lines.join('\n');
     } else {

@@ -20,7 +20,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --- Package managers ---
-RUN npm install -g pnpm@latest yarn@latest && \
+RUN npm install -g pnpm@9 yarn@1.22 && \
     curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 
