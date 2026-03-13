@@ -140,11 +140,14 @@ COMPLETE — all 6 tasks done
   - Fixed: db.test repo_configs cleanup
   - Review score: 3.55/5 APPROVE WITH CHANGES
 
+- [x] Task 4: Infra Service Manager (commit: 3016df0)
+  - Files: server/src/verify/infra-services.ts, server/src/verify/infra-services.test.ts
+  - 6 tests pass (install cmds, readiness probes, baked-in filtering)
+
 ### Current
-Task 4: Infra Service Manager
+Task 5: Sandbox Setup Module
 
 ### Remaining
-Task 4: Infra Service Manager
 Task 5: Sandbox Setup Module
 Task 6: PR Comment Formatter
 Task 7: Verify Pipeline Orchestrator
