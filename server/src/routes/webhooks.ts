@@ -32,11 +32,23 @@ export function createWebhookApp(): Hono {
     const rawBody = await c.req.text();
     const event = c.req.header('X-GitHub-Event') ?? '';
 
-    // --- installation.created: uses GitHub HMAC verification ---
+    // --- installation.created: uses Svix verification (webhooks routed via Svix) ---
     if (event === 'installation') {
-      const signature = c.req.header('X-Hub-Signature-256');
-      if (!(await verifyGitHubSignature(rawBody, signature))) {
-        return c.text('Invalid signature', 401);
+      const skipVerification = shouldSkipVerification(
+        process.env.NODE_ENV,
+        process.env.SVIX_SKIP_VERIFICATION
+      );
+
+      if (!skipVerification) {
+        const secret = process.env.SVIX_WEBHOOK_SECRET;
+        if (!secret) {
+          return c.json({ error: 'Webhook secret not configured' }, 503);
+        }
+        try {
+          verifySvixWebhook(rawBody, Object.fromEntries(c.req.raw.headers.entries()), secret);
+        } catch {
+          return c.json({ error: 'Invalid signature' }, 401);
+        }
       }
 
       const payload = JSON.parse(rawBody) as Record<string, unknown>;
@@ -127,9 +139,21 @@ export function createWebhookApp(): Hono {
 
     // --- issue_comment: /verify command triggers verify pipeline ---
     if (event === 'issue_comment') {
-      const signature = c.req.header('X-Hub-Signature-256');
-      if (!(await verifyGitHubSignature(rawBody, signature))) {
-        return c.text('Invalid signature', 401);
+      const skipVerification = shouldSkipVerification(
+        process.env.NODE_ENV,
+        process.env.SVIX_SKIP_VERIFICATION
+      );
+
+      if (!skipVerification) {
+        const secret = process.env.SVIX_WEBHOOK_SECRET;
+        if (!secret) {
+          return c.json({ error: 'Webhook secret not configured' }, 503);
+        }
+        try {
+          verifySvixWebhook(rawBody, Object.fromEntries(c.req.raw.headers.entries()), secret);
+        } catch {
+          return c.json({ error: 'Invalid signature' }, 401);
+        }
       }
 
       const ALLOWED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
