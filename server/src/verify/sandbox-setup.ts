@@ -2,6 +2,7 @@ import type { SandboxProvider } from '../sandbox/types.js';
 import type { RepoConfig } from '../db.js';
 import { decrypt } from '../crypto.js';
 import { buildInstallCommands, buildReadinessProbe, hasServiceDef } from './infra-services.js';
+import { drain, collect } from '../sandbox/stream.js';
 
 /** Escape a value for double-quoted .env format */
 function escapeEnvValue(value: string): string {
@@ -21,25 +22,14 @@ export function buildHealthCheckCommand(port: number, healthPath = '/'): string 
   if (!VALID_PATH.test(path)) {
     throw new Error(`Invalid health path: ${path}`);
   }
-  return `curl -sf -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:${port}${path}`;
+  // Use sentinel prefix so we can reliably extract the status code from PTY noise
+  return `curl -sf -o /dev/null -w "HEALTH_STATUS:%{http_code}" --max-time 5 http://localhost:${port}${path}`;
 }
 
 interface SetupResult {
   success: boolean;
   error?: string;
   serverLog?: string;
-}
-
-/** Drain an async iterable (consume all output, discard it) */
-async function drain(stream: AsyncIterable<string>): Promise<void> {
-  for await (const _ of stream) { /* consume */ }
-}
-
-/** Drain and collect output lines */
-async function collect(stream: AsyncIterable<string>): Promise<string[]> {
-  const lines: string[] = [];
-  for await (const line of stream) { lines.push(line); }
-  return lines;
 }
 
 export async function setupSandbox(
@@ -69,7 +59,7 @@ export async function setupSandbox(
     const commands = buildInstallCommands(infraServices);
     for (const cmd of commands) {
       log('infra', `Running: ${cmd.slice(0, 80)}...`);
-      await drain(provider.runCommand(sandboxId, cmd));
+      await drain(provider.runCommand(sandboxId, cmd, { rawOutput: true }));
     }
 
     // Wait for readiness
@@ -80,7 +70,7 @@ export async function setupSandbox(
       let ready = false;
       for (let attempt = 0; attempt < probe.maxRetries; attempt++) {
         try {
-          await drain(provider.runCommand(sandboxId, `${probe.command} && echo READY`));
+          await drain(provider.runCommand(sandboxId, `${probe.command} && echo READY`, { rawOutput: true }));
           log('infra', `${svc} is ready`);
           ready = true;
           break;
@@ -97,7 +87,9 @@ export async function setupSandbox(
   // 3. Install dependencies
   const installCmd = config.install_command ?? 'npm install';
   log('install', `Running: ${installCmd}`);
-  await drain(provider.runCommand(sandboxId, installCmd, { cwd: workDir, timeoutMs: 480_000 }));
+  await drain(provider.runCommand(sandboxId, installCmd, { cwd: workDir, timeoutMs: 480_000, rawOutput: true }));
+
+  // Playwright + Chromium are pre-installed in the opslane-verify-v2 E2B template
 
   // 4. Run pre-start script
   if (config.pre_start_script) {
@@ -106,16 +98,25 @@ export async function setupSandbox(
       path: '/tmp/verify-prestart.sh',
       content: config.pre_start_script,
     }]);
-    await drain(provider.runCommand(sandboxId, 'chmod +x /tmp/verify-prestart.sh && /tmp/verify-prestart.sh', { cwd: workDir }));
+    await drain(provider.runCommand(sandboxId, 'chmod +x /tmp/verify-prestart.sh && /tmp/verify-prestart.sh', { cwd: workDir, rawOutput: true }));
   }
 
-  // 5. Start the app
+  // 5. Start the app (fire-and-forget — health check validates it started)
   log('start', `Starting app: ${config.startup_command}`);
-  await drain(provider.runCommand(
-    sandboxId,
-    `nohup ${config.startup_command} > /tmp/server.log 2>&1 & echo $! > /tmp/server.pid`,
-    { cwd: workDir },
-  ));
+  try {
+    await drain(provider.runCommand(
+      sandboxId,
+      `nohup ${config.startup_command} > /tmp/server.log 2>&1 & echo $! > /tmp/server.pid && sleep 1`,
+      { cwd: workDir, rawOutput: true, timeoutMs: 10_000 },
+    ));
+  } catch (err) {
+    // Only suppress PTY exit-code errors — rethrow infrastructure failures
+    if (err instanceof Error && 'ptyOutput' in err) {
+      log('start', 'PTY exited (expected for background commands)');
+    } else {
+      throw err;
+    }
+  }
 
   // 6. Health check — poll until 2xx or timeout
   const healthCmd = buildHealthCheckCommand(config.port, config.health_path);
@@ -125,9 +126,10 @@ export async function setupSandbox(
 
   while (Date.now() - startTime < maxWaitMs) {
     try {
-      const output = await collect(provider.runCommand(sandboxId, healthCmd));
-      const lastLine = output[output.length - 1] ?? '';
-      const code = parseInt(lastLine.replace(/[^0-9]/g, ''), 10);
+      const output = await collect(provider.runCommand(sandboxId, healthCmd, { rawOutput: true }));
+      // Find the sentinel-prefixed status code in any output line
+      const statusLine = output.find(l => l.includes('HEALTH_STATUS:'));
+      const code = statusLine ? parseInt(statusLine.split('HEALTH_STATUS:')[1], 10) : NaN;
       if (code >= 200 && code < 400) {
         log('health', `App healthy (HTTP ${code})`);
         return { success: true };
@@ -138,10 +140,10 @@ export async function setupSandbox(
 
     // Check if process is still alive
     try {
-      await drain(provider.runCommand(sandboxId, 'kill -0 $(cat /tmp/server.pid 2>/dev/null) 2>/dev/null'));
+      await drain(provider.runCommand(sandboxId, 'kill -0 $(cat /tmp/server.pid 2>/dev/null) 2>/dev/null', { rawOutput: true }));
     } catch {
       const logOutput = await collect(
-        provider.runCommand(sandboxId, 'tail -30 /tmp/server.log 2>/dev/null || echo "No server log found"')
+        provider.runCommand(sandboxId, 'tail -30 /tmp/server.log 2>/dev/null || echo "No server log found"', { rawOutput: true })
       );
       return {
         success: false,
@@ -155,7 +157,7 @@ export async function setupSandbox(
 
   // Timed out
   const logOutput = await collect(
-    provider.runCommand(sandboxId, 'tail -30 /tmp/server.log 2>/dev/null || echo "No server log found"')
+    provider.runCommand(sandboxId, 'tail -30 /tmp/server.log 2>/dev/null || echo "No server log found"', { rawOutput: true })
   );
   return {
     success: false,

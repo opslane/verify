@@ -1,5 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { SandboxProvider } from '../sandbox/types.js';
+import { drain, collectOutput } from '../sandbox/stream.js';
+
+const MAX_TURNS = 12;
 
 interface BrowserAgentInput {
   goal: string;
@@ -9,15 +12,28 @@ interface BrowserAgentInput {
 }
 
 export function buildBrowserAgentPrompt(input: BrowserAgentInput): string {
-  let prompt = `You are a browser testing agent. Your goal is to verify the following acceptance criterion:
+  let prompt = `You are a fast, efficient browser testing agent. Verify this acceptance criterion in as few steps as possible.
 
 **Goal:** ${input.goal}
-
 **Base URL:** ${input.baseUrl}
 
-Use the provided tools to interact with the browser. Start by navigating to the base URL, then interact with the page to verify the criterion.
+RULES:
+- You have a maximum of ${MAX_TURNS} tool calls. Be efficient — plan your steps before starting.
+- Start with "navigate" to the base URL, then "snapshot" to see the page.
+- Use "snapshot" (not "screenshot") to see page content — it returns text you can analyze.
+- When you have enough evidence, call "done" immediately. Don't keep testing.
+- If a click/action fails twice, try a different selector or call "done" with "fail".
 
-When you have enough evidence to determine if the criterion passes or fails, call the "done" tool with your verdict.
+SELECTORS — CRITICAL:
+- For clicking by text: use \`text=Button Text\` (Playwright text selector)
+- For clicking buttons: use \`button:has-text("Label")\` (Playwright pseudo-class, NOT CSS :contains)
+- For links: use \`a:has-text("Link Text")\`
+- For data attributes: use \`[data-testid="foo"]\`
+- NEVER use \`:contains()\` — it is NOT valid CSS and will error.
+
+NAVIGATION PATTERN:
+- Many apps have a nav menu on the home page. If the goal mentions a specific component/page, look at the snapshot text for nav items and click the matching one FIRST, then verify.
+- Example: if snapshot shows "HomeUserCardWatcherBug" and goal mentions WatcherBug, click \`button:has-text("WatcherBug")\` first.
 `;
 
   if (input.testEmail || input.testPassword) {
@@ -95,6 +111,14 @@ export const BROWSER_TOOLS: ToolDef[] = [
     },
   },
   {
+    name: 'console',
+    description: 'Get browser console messages (errors, warnings, logs) from the current page',
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
     name: 'done',
     description: 'Report the final verdict for this acceptance criterion',
     input_schema: {
@@ -116,13 +140,188 @@ export interface AgentVerdict {
   error?: string;
 }
 
-const MAX_TURNS = 20;
+const CDP_PORT = 9222;
+const SANDBOX_ENV = 'NODE_PATH=/usr/local/lib/node_modules:/usr/lib/node_modules PLAYWRIGHT_BROWSERS_PATH=/ms-playwright';
+
+/** Chromium launch args optimized for E2B containers (matches opslane-v2) */
+const CHROMIUM_LAUNCH_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--js-flags=--jitless',
+  '--disable-features=V8Sparkplug',
+  `--remote-debugging-port=${CDP_PORT}`,
+];
+
+/**
+ * Launch a persistent Chromium browser in the sandbox.
+ * Returns once the CDP endpoint is ready on the specified port.
+ */
+async function launchPersistentBrowser(
+  provider: SandboxProvider,
+  sandboxId: string,
+  log: (msg: string) => void,
+): Promise<void> {
+  // Launch script: starts Chromium in the background, waits for CDP port
+  // Launch Chrome directly with --remote-debugging-port so all connections
+  // share the same browser state via CDP (unlike launchServer which isolates per-connection)
+  const launchScript = `const { execSync } = require('child_process');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+// Find the headless shell binary
+const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH || path.join(process.env.HOME, '.cache', 'ms-playwright');
+let chromePath;
+try {
+  chromePath = execSync(\`find \${browsersPath} -name "chrome-headless-shell" -type f 2>/dev/null | head -1\`, { encoding: 'utf-8' }).trim();
+} catch {}
+if (!chromePath) {
+  try {
+    chromePath = execSync(\`find \${browsersPath} -name "chrome" -type f 2>/dev/null | head -1\`, { encoding: 'utf-8' }).trim();
+  } catch {}
+}
+if (!chromePath) {
+  console.log(JSON.stringify({ ok: false, error: 'Chrome binary not found in ' + browsersPath }));
+  process.exit(1);
+}
+
+const args = ${JSON.stringify(CHROMIUM_LAUNCH_ARGS)}.concat([
+  '--headless',
+  '--hide-scrollbars',
+  '--mute-audio',
+  'about:blank',
+]);
+
+console.error('Launching:', chromePath);
+const proc = spawn(chromePath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+proc.stderr.on('data', (data) => {
+  const line = data.toString();
+  // Chrome prints the DevTools URL to stderr
+  const match = line.match(/DevTools listening on (ws:\\/\\/[^\\s]+)/);
+  if (match) {
+    fs.writeFileSync('/home/user/browser-ws.txt', 'http://127.0.0.1:${CDP_PORT}');
+    console.log(JSON.stringify({ ok: true, cdp: 'http://127.0.0.1:${CDP_PORT}' }));
+  }
+});
+
+proc.on('exit', (code) => {
+  console.log(JSON.stringify({ ok: false, error: 'Chrome exited with code ' + code }));
+  process.exit(1);
+});
+
+// Keep alive
+setTimeout(() => {}, 600000);
+`;
+
+  await provider.uploadFiles(sandboxId, [{ path: '/home/user/verify-browser-launch.cjs', content: launchScript }]);
+
+  // Fire-and-forget: launch browser in background
+  log('Launching persistent browser...');
+  try {
+    await drain(provider.runCommand(
+      sandboxId,
+      `nohup env ${SANDBOX_ENV} node /home/user/verify-browser-launch.cjs > /home/user/browser.log 2>&1 & sleep 2`,
+      { rawOutput: true, timeoutMs: 15_000 },
+    ));
+  } catch (err) {
+    // PTY exit is expected for background commands
+    if (!(err instanceof Error && 'ptyOutput' in err)) throw err;
+  }
+
+  // Wait for WebSocket endpoint file to appear
+  for (let i = 0; i < 10; i++) {
+    try {
+      const cdpUrl = await provider.readFile(sandboxId, '/home/user/browser-ws.txt');
+      if (cdpUrl && cdpUrl.startsWith('http://')) {
+        log(`Browser ready (CDP): ${cdpUrl.trim()}`);
+        return;
+      }
+    } catch {
+      // File not created yet
+    }
+    await new Promise(r => setTimeout(r, 1_000));
+  }
+
+  // Check browser log for errors
+  const browserLog = await collectOutput(provider.runCommand(
+    sandboxId, 'cat /home/user/browser.log 2>/dev/null | tail -5', { rawOutput: true, timeoutMs: 5_000 },
+  )).catch(() => 'No log');
+  throw new Error(`Browser not ready after 10s. Log: ${browserLog}`);
+}
+
+/**
+ * Build a tool script that connects to the persistent browser via CDP.
+ * Reuses the first page — state persists across tool calls.
+ *
+ * SAFETY: `code` is interpolated into a JS template string. All user-controlled
+ * values (URLs, selectors, fill text from LLM) MUST be escaped via JSON.stringify()
+ * before inclusion in the `code` parameter. See dispatchBrowserTool for examples.
+ */
+function buildToolScript(code: string): string {
+  return `const { chromium } = require('playwright');
+
+(async () => {
+  const browser = await chromium.connectOverCDP('http://127.0.0.1:${CDP_PORT}');
+  const contexts = browser.contexts();
+  let page;
+  if (contexts.length > 0 && contexts[0].pages().length > 0) {
+    page = contexts[0].pages()[0];
+  } else {
+    const context = contexts.length > 0 ? contexts[0] : await browser.newContext();
+    page = await context.newPage();
+  }
+  try {
+    const result = await (async () => { ${code} })();
+    console.log(JSON.stringify({ ok: true, result: result ?? null }));
+  } catch (err) {
+    console.log(JSON.stringify({ ok: false, error: err.message }));
+  } finally {
+    // Just exit — browser process stays alive, CDP connection drops naturally
+    process.exit(0);
+  }
+})();
+`;
+}
 
 /**
  * Run a browser agent loop inside an E2B sandbox.
- * Claude calls tools (navigate, click, fill, snapshot, done) and we dispatch them
- * as Playwright commands inside the sandbox via the provider.
+ * Launches a persistent Chromium browser, then Claude calls tools
+ * (navigate, click, fill, snapshot, done) that connect via CDP.
  */
+/**
+ * Ensure the persistent browser is running. Call once before the AC loop.
+ * Safe to call multiple times — checks if browser is already up.
+ */
+export async function ensureBrowserRunning(
+  provider: SandboxProvider,
+  sandboxId: string,
+  log: (msg: string) => void,
+): Promise<void> {
+  // Check if browser is already running via CDP health probe
+  try {
+    const cdpUrl = await provider.readFile(sandboxId, '/home/user/browser-ws.txt');
+    if (cdpUrl && cdpUrl.startsWith('http://')) {
+      // Verify the process is actually alive by probing the CDP endpoint
+      const probeOutput = await collectOutput(provider.runCommand(
+        sandboxId,
+        `curl -sf http://127.0.0.1:${CDP_PORT}/json/version 2>/dev/null && echo CDP_OK || echo CDP_DEAD`,
+        { rawOutput: true, timeoutMs: 5_000 },
+      ));
+      if (probeOutput.includes('CDP_OK')) {
+        log('Browser already running');
+        return;
+      }
+      log('Browser sentinel exists but CDP is dead — relaunching');
+    }
+  } catch {
+    // File doesn't exist — launch browser
+  }
+  await launchPersistentBrowser(provider, sandboxId, log);
+}
+
 export async function runBrowserAgent(
   provider: SandboxProvider,
   sandboxId: string,
@@ -146,6 +345,12 @@ export async function runBrowserAgent(
       tools: BROWSER_TOOLS as Anthropic.Tool[],
       messages,
     });
+
+    // Log agent's reasoning text
+    const textBlocks = response.content.filter((c) => c.type === 'text');
+    for (const tb of textBlocks) {
+      if (tb.type === 'text') log(`Agent: ${tb.text.slice(0, 200)}`);
+    }
 
     // Check for done or no more tool use
     if (response.stop_reason === 'end_turn') {
@@ -173,6 +378,7 @@ export async function runBrowserAgent(
 
       // Handle done tool
       if (toolUse.name === 'done') {
+        log(`Done: ${toolInput.result} | expected=${toolInput.expected ?? '-'} | observed=${toolInput.observed ?? '-'}`);
         if (toolInput.result !== 'pass' && toolInput.result !== 'fail') {
           return { result: 'error', error: `Invalid done result: ${toolInput.result}` };
         }
@@ -187,6 +393,9 @@ export async function runBrowserAgent(
       const toolResult = await dispatchBrowserTool(
         provider, sandboxId, toolUse.name, toolInput, log,
       );
+
+      // Log tool result (truncated)
+      log(`Result(${toolUse.name}): ${toolResult.slice(0, 300)}`);
 
       toolResults.push({
         type: 'tool_result',
@@ -208,53 +417,85 @@ async function dispatchBrowserTool(
   input: Record<string, string>,
   log: (msg: string) => void,
 ): Promise<string> {
-  const workDir = '/home/user/repo';
-
   try {
+    let jsCode: string;
+
     switch (toolName) {
       case 'navigate': {
         log(`Navigate: ${input.url}`);
-        const output = await collectOutput(provider.runCommand(
-          sandboxId,
-          `cd ${workDir} && npx playwright evaluate "await page.goto('${shellEscape(input.url)}', { waitUntil: 'networkidle' }); 'navigated'"`,
-        ));
-        return output || 'Navigated successfully';
+        // Inject console capture before navigation, then navigate
+        jsCode = `
+          await page.addInitScript(() => {
+            if (window.__verifyConsoleInstalled) return;
+            window.__verifyConsoleInstalled = true;
+            window.__verifyConsole = [];
+            const orig = { error: console.error, warn: console.warn };
+            console.error = (...args) => { window.__verifyConsole.push({ type: 'error', text: args.map(String).join(' ') }); orig.error.apply(console, args); };
+            console.warn = (...args) => { window.__verifyConsole.push({ type: 'warn', text: args.map(String).join(' ') }); orig.warn.apply(console, args); };
+            window.addEventListener('error', (e) => { window.__verifyConsole.push({ type: 'error', text: e.message }); });
+            window.addEventListener('unhandledrejection', (e) => { window.__verifyConsole.push({ type: 'error', text: String(e.reason) }); });
+          });
+          await page.goto(${JSON.stringify(input.url)}, { waitUntil: 'networkidle', timeout: 15000 });
+          return 'Navigated to ' + page.url();`;
+        break;
       }
       case 'click': {
         log(`Click: ${input.selector}`);
-        const output = await collectOutput(provider.runCommand(
-          sandboxId,
-          `cd ${workDir} && npx playwright evaluate "await page.click('${shellEscape(input.selector)}'); 'clicked'"`,
-        ));
-        return output || 'Clicked successfully';
+        jsCode = `await page.click(${JSON.stringify(input.selector)}, { timeout: 5000 }); return 'Clicked ' + ${JSON.stringify(input.selector)};`;
+        break;
       }
       case 'fill': {
         log(`Fill: ${input.selector}`);
-        const output = await collectOutput(provider.runCommand(
-          sandboxId,
-          `cd ${workDir} && npx playwright evaluate "await page.fill('${shellEscape(input.selector)}', '${shellEscape(input.value)}'); 'filled'"`,
-        ));
-        return output || 'Filled successfully';
+        jsCode = `await page.fill(${JSON.stringify(input.selector)}, ${JSON.stringify(input.value)}); return 'Filled ' + ${JSON.stringify(input.selector)};`;
+        break;
       }
       case 'snapshot': {
         log('Snapshot');
-        const output = await collectOutput(provider.runCommand(
-          sandboxId,
-          `cd ${workDir} && npx playwright evaluate "await page.accessibility.snapshot()"`,
-        ));
-        return output || 'Empty snapshot';
+        jsCode = `const title = await page.title(); return { title, url: page.url(), bodyText: (await page.innerText('body').catch(() => '(empty)')).slice(0, 2000) };`;
+        break;
       }
       case 'screenshot': {
         log('Screenshot');
-        const output = await collectOutput(provider.runCommand(
-          sandboxId,
-          `cd ${workDir} && npx playwright evaluate "await page.screenshot({ path: '/tmp/screenshot.png' }); 'screenshot saved'"`,
-        ));
-        return output || 'Screenshot taken';
+        jsCode = `await page.screenshot({ path: '/home/user/screenshot.png', fullPage: true }); return 'Screenshot saved';`;
+        break;
+      }
+      case 'console': {
+        log('Console');
+        jsCode = `const msgs = await page.evaluate(() => window.__verifyConsole || []);
+          if (msgs.length === 0) return 'No console errors or warnings captured.';
+          return msgs.map(m => m.type.toUpperCase() + ': ' + m.text).join('\\n');`;
+        break;
       }
       default:
         return `Unknown tool: ${toolName}`;
     }
+
+    // Upload tool script and execute — connects to persistent browser via CDP
+    const scriptPath = '/home/user/verify-browser-tool.cjs';
+    const scriptContent = buildToolScript(jsCode);
+    await provider.uploadFiles(sandboxId, [{ path: scriptPath, content: scriptContent }]);
+    const output = await collectOutput(provider.runCommand(
+      sandboxId,
+      `${SANDBOX_ENV} node ${scriptPath}`,
+      { rawOutput: true, timeoutMs: 60_000 },
+    ));
+
+    // Parse JSON result from output
+    const lines = output.split('\n').filter(l => l.trim());
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.ok) {
+          return typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+        } else {
+          return `Error: ${parsed.error}`;
+        }
+      } catch {
+        // Not JSON, skip
+      }
+    }
+
+    return output || 'No output from browser tool';
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log(`Tool error (${toolName}): ${msg}`);
@@ -262,13 +503,3 @@ async function dispatchBrowserTool(
   }
 }
 
-/** Escape a string for use inside single quotes in shell (POSIX idiom: replace ' with '\'') */
-function shellEscape(s: string): string {
-  return s.replace(/'/g, "'\\''");
-}
-
-async function collectOutput(stream: AsyncIterable<string>): Promise<string> {
-  const lines: string[] = [];
-  for await (const line of stream) { lines.push(line); }
-  return lines.join('\n');
-}
