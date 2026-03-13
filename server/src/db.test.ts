@@ -143,6 +143,60 @@ describe('db helpers (integration)', () => {
     });
   });
 
+  describe('repo configs', () => {
+    it('upserts and finds repo config', async () => {
+      const { upsertRepoConfig, findRepoConfig } = await import('./db.js');
+
+      await upsertRepoConfig({
+        installationId: 55001,
+        owner: 'testorg',
+        repo: 'testrepo',
+        startupCommand: 'npm run dev',
+        port: 3000,
+      });
+
+      const config = await findRepoConfig('testorg', 'testrepo');
+      expect(config).not.toBeNull();
+      expect(config!.startup_command).toBe('npm run dev');
+      expect(config!.port).toBe(3000);
+      expect(config!.health_path).toBe('/');
+    });
+
+    it('returns null for missing repo config', async () => {
+      const { findRepoConfig } = await import('./db.js');
+      const config = await findRepoConfig('nonexistent', 'nope');
+      expect(config).toBeNull();
+    });
+
+    it('updates repo config on conflict', async () => {
+      const { upsertRepoConfig, findRepoConfig } = await import('./db.js');
+
+      await upsertRepoConfig({
+        installationId: 55001,
+        owner: 'testorg',
+        repo: 'testrepo',
+        startupCommand: 'npm run dev',
+        port: 3000,
+      });
+
+      await upsertRepoConfig({
+        installationId: 55001,
+        owner: 'testorg',
+        repo: 'testrepo',
+        startupCommand: 'pnpm dev',
+        port: 3001,
+        healthPath: '/api/health',
+        detectedInfra: ['postgres', 'minio'],
+      });
+
+      const config = await findRepoConfig('testorg', 'testrepo');
+      expect(config!.startup_command).toBe('pnpm dev');
+      expect(config!.port).toBe(3001);
+      expect(config!.health_path).toBe('/api/health');
+      expect(config!.detected_infra).toEqual(['postgres', 'minio']);
+    });
+  });
+
   describe('findUserByLogin', () => {
     it('returns user by github_login', async () => {
       const { findUserByLogin } = await import('./db.js');

@@ -74,3 +74,73 @@ export async function findUserByLogin(githubLogin: string): Promise<User | null>
   `;
   return user ?? null;
 }
+
+export interface RepoConfig {
+  id: string;
+  installation_id: number | null;
+  owner: string;
+  repo: string;
+  startup_command: string;
+  port: number;
+  install_command: string | null;
+  pre_start_script: string | null;
+  health_path: string;
+  test_email: string | null;
+  test_password: string | null;
+  env_vars: Record<string, string> | null;
+  detected_infra: string[];
+  created_at: Date;
+  updated_at: Date;
+}
+
+export async function upsertRepoConfig(params: {
+  installationId: number | null;
+  owner: string;
+  repo: string;
+  startupCommand: string;
+  port: number;
+  installCommand?: string | null;
+  preStartScript?: string | null;
+  healthPath?: string;
+  testEmail?: string | null;
+  testPassword?: string | null;
+  envVars?: Record<string, string> | null;
+  detectedInfra?: string[];
+}): Promise<RepoConfig> {
+  const rows = await sql<RepoConfig[]>`
+    INSERT INTO repo_configs (
+      installation_id, owner, repo, startup_command, port,
+      install_command, pre_start_script, health_path,
+      test_email, test_password, env_vars, detected_infra
+    ) VALUES (
+      ${params.installationId}, ${params.owner}, ${params.repo},
+      ${params.startupCommand}, ${params.port},
+      ${params.installCommand ?? null}, ${params.preStartScript ?? null},
+      ${params.healthPath ?? '/'}, ${params.testEmail ?? null},
+      ${params.testPassword ?? null},
+      ${params.envVars ? sql.json(params.envVars) : null},
+      ${sql.json(params.detectedInfra ?? [])}
+    )
+    ON CONFLICT (owner, repo) DO UPDATE SET
+      installation_id = EXCLUDED.installation_id,
+      startup_command = EXCLUDED.startup_command,
+      port = EXCLUDED.port,
+      install_command = EXCLUDED.install_command,
+      pre_start_script = EXCLUDED.pre_start_script,
+      health_path = EXCLUDED.health_path,
+      test_email = EXCLUDED.test_email,
+      test_password = EXCLUDED.test_password,
+      env_vars = EXCLUDED.env_vars,
+      detected_infra = EXCLUDED.detected_infra,
+      updated_at = now()
+    RETURNING *
+  `;
+  return rows[0];
+}
+
+export async function findRepoConfig(owner: string, repo: string): Promise<RepoConfig | null> {
+  const rows = await sql<RepoConfig[]>`
+    SELECT * FROM repo_configs WHERE owner = ${owner} AND repo = ${repo}
+  `;
+  return rows[0] ?? null;
+}
