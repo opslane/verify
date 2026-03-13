@@ -120,7 +120,7 @@ export async function setupSandbox(
 
   // 6. Health check — poll until 2xx or timeout
   const healthCmd = buildHealthCheckCommand(config.port, config.health_path);
-  const maxWaitMs = 60_000;
+  const maxWaitMs = 120_000;
   const intervalMs = 2_000;
   const startTime = Date.now();
 

@@ -8,6 +8,7 @@ import { DeduplicationSet } from '../webhook/dedup.js';
 import type { VerifyPayload } from '../verify/runner.js';
 import { validateOwnerRepo } from '../github/validation.js';
 import { findUserByLogin, upsertInstallation, findRepoConfig } from '../db.js';
+import { runUnifiedPipeline } from '../unified/pipeline.js';
 
 function env(key: string): string {
   const val = process.env[key];
@@ -198,7 +199,16 @@ export function createWebhookApp(): Hono {
         const verifyPayload: VerifyPayload = { owner, repo, prNumber, deliveryId };
         await tasks.trigger<typeof verifyPrTask>('verify-pr', verifyPayload);
       } else {
-        console.warn('TRIGGER_SECRET_KEY not set — skipping verify dispatch');
+        // No Trigger.dev — run inline (fire-and-forget so webhook returns 202 immediately)
+        console.log(`[inline] Running unified pipeline for ${owner}/${repo}#${prNumber}`);
+        runUnifiedPipeline(
+          { owner, repo, prNumber },
+          { log: (step, msg, data) => console.log(`[${step}]`, msg, data ?? '') },
+        ).then(result => {
+          console.log(`[inline] Pipeline complete for ${owner}/${repo}#${prNumber}`, result.commentUrl);
+        }).catch(err => {
+          console.error(`[inline] Pipeline failed for ${owner}/${repo}#${prNumber}`, err);
+        });
       }
       dedup.markSeen(deliveryId);
 
