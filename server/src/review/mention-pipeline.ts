@@ -1,14 +1,12 @@
 import { GitHubAppService } from "../github/app-service.js";
 import { fetchPullRequest, fetchPrComments, postPrComment } from "../github/pr.js";
+import { validateBranchName } from "../github/validation.js";
 import { E2BSandboxProvider } from "../sandbox/e2b-provider.js";
 import { buildMentionPrompt } from "./prompt.js";
 import { requireEnv } from "../env.js";
 
 const SANDBOX_TEMPLATE = process.env.E2B_TEMPLATE ?? "base";
 const MENTION_TIMEOUT_MS = 180_000;
-
-/** Validate branch name to prevent command injection */
-const SAFE_BRANCH_RE = /^[a-zA-Z0-9._\-/]+$/;
 
 export interface MentionPipelineInput {
   owner: string;
@@ -56,9 +54,7 @@ export async function runMentionPipeline(
   log("github", `Fetched ${thread.length} comments`);
 
   // 4. Validate branch name before shell use
-  if (!SAFE_BRANCH_RE.test(pr.headBranch)) {
-    throw new Error(`Unsafe branch name: ${pr.headBranch}`);
-  }
+  validateBranchName(pr.headBranch);
 
   // 5. Build authenticated clone URL
   const authenticatedCloneUrl = pr.cloneUrl.replace(

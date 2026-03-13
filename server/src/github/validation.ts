@@ -18,3 +18,12 @@ export function validatePrNumber(prNumber: number): void {
     throw new Error(`Invalid PR number: ${prNumber}`);
   }
 }
+
+/** Validate branch name to prevent command injection in shell commands. */
+const SAFE_BRANCH_RE = /^[a-zA-Z0-9._\-/]+$/;
+
+export function validateBranchName(branch: string): void {
+  if (!SAFE_BRANCH_RE.test(branch)) {
+    throw new Error(`Unsafe branch name: ${branch}`);
+  }
+}

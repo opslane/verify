@@ -1,5 +1,6 @@
 import { GitHubAppService } from "../github/app-service.js";
 import { fetchPullRequest, createPrReview } from "../github/pr.js";
+import { validateBranchName } from "../github/validation.js";
 import { E2BSandboxProvider } from "../sandbox/e2b-provider.js";
 import { buildReviewPrompt } from "./prompt.js";
 import { parseDiff, buildLineMap } from "./diff-parser.js";
@@ -8,9 +9,6 @@ import { requireEnv } from "../env.js";
 
 const SANDBOX_TEMPLATE = process.env.E2B_TEMPLATE ?? "base";
 const REVIEW_TIMEOUT_MS = 180_000; // 3 minutes hard limit
-
-/** Validate branch name to prevent command injection */
-const SAFE_BRANCH_RE = /^[a-zA-Z0-9._\-/]+$/;
 
 export interface ReviewPipelineInput {
   owner: string;
@@ -55,9 +53,7 @@ export async function runReviewPipeline(
   log("github", `PR: "${pr.title}"`, { headBranch: pr.headBranch, diffLen: pr.diff.length });
 
   // 3. Validate branch name before shell use
-  if (!SAFE_BRANCH_RE.test(pr.headBranch)) {
-    throw new Error(`Unsafe branch name: ${pr.headBranch}`);
-  }
+  validateBranchName(pr.headBranch);
 
   // 4. Build authenticated clone URL
   const authenticatedCloneUrl = pr.cloneUrl.replace(
