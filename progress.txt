@@ -115,10 +115,12 @@ COMPLETE — all 6 tasks done
 ## mention-reviews (plan: docs/plans/2026-03-12-mention-triggered-reviews.md)
 
 ### Completed
-(none yet)
+- [x] Task 1: Add fetchPrComments and postPrComment (commit: b910cbe)
+  - Files: server/src/github/pr.ts, server/src/github/pr-comments.test.ts
+  - 6 tests pass (fetch with filtering, 404 handling, post + error)
 
 ### Current
-Task 1: Add fetchPrComments and postPrComment to github/pr.ts
+Task 2: Add buildMentionPrompt to review/prompt.ts
 
 ### Remaining
 Task 2: Add buildMentionPrompt to review/prompt.ts
