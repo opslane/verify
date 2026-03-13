@@ -5,14 +5,15 @@ import { findRepoConfig } from '../db.js';
 import { E2BSandboxProvider } from '../sandbox/e2b-provider.js';
 import { requireEnv } from '../env.js';
 import { decrypt } from '../crypto.js';
+import { drain } from '../sandbox/stream.js';
 import { discoverSpec } from './spec-discovery.js';
 import { setupSandbox } from './sandbox-setup.js';
-import { runBrowserAgent } from './browser-agent.js';
+import { runBrowserAgent, ensureBrowserRunning } from './browser-agent.js';
 import { VERIFY_MARKER, formatVerifyComment, formatStartupFailureComment, formatNoSpecComment } from './comment.js';
 import type { AcResult } from './comment.js';
 
 const VERIFY_TEMPLATE = process.env.E2B_VERIFY_TEMPLATE ?? 'opslane-verify-v2';
-const VERIFY_TIMEOUT_MS = 600_000; // 10 minutes total sandbox lifetime
+const VERIFY_TIMEOUT_MS = 900_000; // 15 minutes total sandbox lifetime
 const SAFE_BRANCH_RE = /^[a-zA-Z0-9._\-/]+$/;
 
 export interface VerifyPipelineInput {
@@ -23,6 +24,8 @@ export interface VerifyPipelineInput {
 
 interface VerifyCallbacks {
   log: (step: string, message: string, data?: unknown) => void;
+  /** If true, skip posting the PR comment — caller will handle it */
+  skipComment?: boolean;
 }
 
 export type VerifyResult =
@@ -97,6 +100,7 @@ export async function runVerifyPipeline(
     await drain(provider.runCommand(
       sandbox.id,
       `git clone --depth=1 --branch '${prMeta.headBranch}' '${authCloneUrl}' /home/user/repo`,
+      { rawOutput: true },
     ));
 
     // 8. If plan-file spec, fetch its content from the cloned repo
@@ -107,8 +111,7 @@ export async function runVerifyPipeline(
       if (!SAFE_BRANCH_RE.test(spec.specPath)) {
         throw new Error(`Unsafe spec path: ${spec.specPath}`);
       }
-      const lines = await collect(provider.runCommand(sandbox.id, `cat '/home/user/repo/${spec.specPath}'`));
-      specContent = lines.join('\n');
+      specContent = await provider.readFile(sandbox.id, `/home/user/repo/${spec.specPath}`);
     } else {
       specContent = spec.specContent;
     }
@@ -133,13 +136,26 @@ export async function runVerifyPipeline(
     const criteria = await parseAcceptanceCriteria(specContent);
     log('verify', `Found ${criteria.length} acceptance criteria`);
 
-    // 11. Run browser agent for each AC
+    // 11. Launch browser once, then run agent for each AC
     const baseUrl = `http://localhost:${config.port}`;
     const testEmail = config.test_email ? decrypt(config.test_email) : undefined;
     const testPassword = config.test_password ? decrypt(config.test_password) : undefined;
     const results: AcResult[] = [];
 
+    log('agent', 'Launching persistent browser');
+    await ensureBrowserRunning(provider, sandbox.id, (msg) => log('agent', msg));
+
     for (const ac of criteria) {
+      if (ac.testable === false) {
+        log('agent', `Skipping untestable AC: ${ac.id} — ${ac.description}`);
+        results.push({
+          id: ac.id,
+          description: ac.description,
+          result: 'skipped',
+          reason: 'Not testable via browser — requires manual or backend verification',
+        });
+        continue;
+      }
       log('agent', `Testing AC: ${ac.id} — ${ac.description}`);
       const verdict = await runBrowserAgent(
         provider, sandbox.id,
@@ -159,7 +175,9 @@ export async function runVerifyPipeline(
     const passed = results.filter((r) => r.result === 'pass').length;
     const specPath = spec.type === 'plan-file' ? spec.specPath : '(PR body)';
     const comment = formatVerifyComment({ specPath, port: config.port, results });
-    await postOrUpdateComment(owner, repo, prNumber, comment, VERIFY_MARKER, token);
+    if (!callbacks.skipComment) {
+      await postOrUpdateComment(owner, repo, prNumber, comment, VERIFY_MARKER, token);
+    }
     return { mode: 'verified', comment, passed, total: results.length, results };
 
   } finally {
@@ -171,6 +189,7 @@ export async function runVerifyPipeline(
 interface AcceptanceCriterion {
   id: string;
   description: string;
+  testable?: boolean;
 }
 
 /**
@@ -188,9 +207,19 @@ export async function parseAcceptanceCriteria(specContent: string): Promise<Acce
     messages: [
       {
         role: 'user',
-        content: `Extract all testable acceptance criteria from the following spec. Return a JSON array where each item has "id" (e.g. "AC-1") and "description" (a single sentence describing what to verify in the browser).
+        content: `You are an autonomous QA engineer. Extract the key acceptance criteria from this spec/PR description for browser-based verification.
 
-Only include criteria that can be verified by interacting with a web UI. Skip non-functional requirements, deployment steps, or backend-only criteria.
+IMPORTANT RULES:
+1. **Consolidate related checks into a single AC.** For example, "component renders, has a button, button is clickable" should be ONE AC, not three. Group by user flow or component.
+2. **Maximum 5 testable ACs.** If the spec implies more, merge related ones. Focus on the most important user-visible behaviors.
+3. **Each AC description must include full navigation steps.** A browser agent will execute each AC independently with no prior context. Include EVERY step from the home page: "Navigate to base URL, click 'ComponentName' nav button, then verify X". Never assume the agent is already on the right page.
+4. **Be specific about UI interactions.** Use button labels and visible text, not vague descriptions. Example: "Navigate to base URL, click 'WatcherBug' button, then click 'Increment' button 3 times, verify counter stays at 0" — not "verify counter behavior".
+5. Mark ACs as "testable": false only if they genuinely cannot be checked in a browser (e.g., database state, external API calls).
+
+For each criterion, return a JSON object with:
+- "id": e.g. "AC-1", "AC-2"
+- "description": a concrete test scenario (what to do and what to verify)
+- "testable": true if verifiable via browser interaction, false otherwise
 
 <spec>
 ${sanitized}
@@ -213,23 +242,18 @@ export function parseAcceptanceCriteriaJson(text: string): AcceptanceCriterion[]
   try {
     const parsed = JSON.parse(jsonMatch[0]) as unknown[];
     return parsed
-      .filter((item): item is { id: string; description: string } =>
+      .filter((item): item is { id: string; description: string; testable?: boolean } =>
         typeof item === 'object' && item !== null &&
         'id' in item && typeof (item as Record<string, unknown>).id === 'string' &&
         'description' in item && typeof (item as Record<string, unknown>).description === 'string'
       )
-      .map((item) => ({ id: item.id, description: item.description }));
+      .map((item) => ({
+        id: item.id,
+        description: item.description,
+        testable: typeof item.testable === 'boolean' ? item.testable : true,
+      }));
   } catch {
     return [];
   }
 }
 
-async function drain(stream: AsyncIterable<string>): Promise<void> {
-  for await (const _ of stream) { /* consume */ }
-}
-
-async function collect(stream: AsyncIterable<string>): Promise<string[]> {
-  const lines: string[] = [];
-  for await (const line of stream) { lines.push(line); }
-  return lines;
-}

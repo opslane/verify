@@ -15,8 +15,8 @@ interface VerifyCommentInput {
   results: AcResult[];
 }
 
-const ICON = { pass: '\u2705', fail: '\u274C', skipped: '\u2298' };
-const LABEL = { pass: 'Pass', fail: 'Fail', skipped: 'Skipped' };
+export const ICON = { pass: '\u2705', fail: '\u274C', skipped: '\u2298' } as const;
+export const LABEL = { pass: 'Pass', fail: 'Fail', skipped: 'Skipped' } as const;
 
 export function formatVerifyComment(input: VerifyCommentInput): string {
   const passed = input.results.filter((r) => r.result === 'pass').length;

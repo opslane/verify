@@ -1,11 +1,10 @@
 import { Hono } from 'hono';
 import { timingSafeEqual, createHmac } from 'node:crypto';
 import { tasks } from '@trigger.dev/sdk/v3';
-import type { reviewPrTask } from '../review/runner.js';
 import type { verifyPrTask } from '../verify/runner.js';
+import type { unifiedPrTask, UnifiedPayload } from '../unified/runner.js';
 import { shouldSkipVerification, verifySvixWebhook } from '../webhook/verify.js';
 import { DeduplicationSet } from '../webhook/dedup.js';
-import type { ReviewPayload } from '../review/runner.js';
 import type { VerifyPayload } from '../verify/runner.js';
 import { validateOwnerRepo } from '../github/validation.js';
 import { findUserByLogin, upsertInstallation, findRepoConfig } from '../db.js';
@@ -113,17 +112,10 @@ export function createWebhookApp(): Hono {
         return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
       }
 
-      const reviewPayload: ReviewPayload = { owner, repo, prNumber, deliveryId };
-
       if (process.env.TRIGGER_SECRET_KEY) {
-        await tasks.trigger<typeof reviewPrTask>('review-pr', reviewPayload);
-
-        // Also dispatch verify if repo has a config
-        const repoConfig = await findRepoConfig(owner, repo);
-        if (repoConfig) {
-          const verifyPayload: VerifyPayload = { owner, repo, prNumber, deliveryId };
-          await tasks.trigger<typeof verifyPrTask>('verify-pr', verifyPayload);
-        }
+        // Unified pipeline: code review + AC verification in one task, one comment
+        const unifiedPayload: UnifiedPayload = { owner, repo, prNumber, deliveryId };
+        await tasks.trigger<typeof unifiedPrTask>('unified-pr', unifiedPayload);
       } else {
         console.warn('TRIGGER_SECRET_KEY not set — skipping task dispatch');
       }
