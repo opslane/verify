@@ -1,12 +1,17 @@
 import { Hono } from 'hono';
 import { timingSafeEqual, createHmac } from 'node:crypto';
 import { tasks } from '@trigger.dev/sdk/v3';
-import type { reviewPrTask } from '../review/runner.js';
+import type { reviewPrTask, mentionPrTask } from '../review/runner.js';
 import { shouldSkipVerification, verifySvixWebhook } from '../webhook/verify.js';
 import { DeduplicationSet } from '../webhook/dedup.js';
-import type { ReviewPayload } from '../review/runner.js';
+import type { ReviewPayload, MentionPayload } from '../review/runner.js';
+import { runMentionPipeline } from '../review/mention-pipeline.js';
 import { validateOwnerRepo } from '../github/validation.js';
 import { findUserByLogin, upsertInstallation } from '../db.js';
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function env(key: string): string {
   const val = process.env[key];
@@ -121,6 +126,133 @@ export function createWebhookApp(): Hono {
       dedup.markSeen(deliveryId);
 
       return c.json({ accepted: true, prNumber, owner, repo }, 202);
+    }
+
+    // --- issue_comment: @mention-triggered reviews ---
+    if (event === 'issue_comment') {
+      const deliveryId = c.req.header('svix-id') ?? crypto.randomUUID();
+
+      const skipVerification = shouldSkipVerification(
+        process.env.NODE_ENV,
+        process.env.SVIX_SKIP_VERIFICATION
+      );
+
+      if (!skipVerification) {
+        const secret = process.env.SVIX_WEBHOOK_SECRET;
+        if (!secret) {
+          return c.json({ error: 'Webhook secret not configured' }, 503);
+        }
+        try {
+          verifySvixWebhook(rawBody, Object.fromEntries(c.req.raw.headers.entries()), secret);
+        } catch {
+          return c.json({ error: 'Invalid signature' }, 401);
+        }
+      }
+
+      let payload: {
+        action?: string;
+        comment?: {
+          body?: string;
+          user?: { login?: string };
+          author_association?: string;
+        };
+        issue?: {
+          number?: number;
+          pull_request?: unknown;
+        };
+        repository?: {
+          owner?: { login?: string };
+          name?: string;
+        };
+      };
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        return c.json({ error: 'Invalid JSON' }, 400);
+      }
+
+      // Only handle new comments
+      if (payload.action !== 'created') {
+        return c.json({ accepted: false, reason: 'action ignored' });
+      }
+
+      // Only handle PR comments (not issue comments)
+      if (!payload.issue?.pull_request) {
+        return c.json({ accepted: false, reason: 'not a PR comment' });
+      }
+
+      const appSlug = process.env.GITHUB_APP_SLUG;
+      if (!appSlug) {
+        console.error('[webhook] GITHUB_APP_SLUG not configured — cannot detect @mentions');
+        return c.json({ accepted: false, reason: 'app slug not configured' });
+      }
+
+      // Self-trigger guard: ignore comments from the bot itself
+      const commentAuthor = payload.comment?.user?.login ?? '';
+      if (commentAuthor === `${appSlug}[bot]`) {
+        return c.json({ accepted: false, reason: 'bot comment ignored' });
+      }
+
+      // Check for @mention (escape slug for safe regex interpolation)
+      const commentBody = payload.comment?.body ?? '';
+      const mentionPattern = new RegExp(`@${escapeRegExp(appSlug)}\\b`, 'gi');
+      if (!mentionPattern.test(commentBody)) {
+        return c.json({ accepted: false, reason: 'no mention detected' });
+      }
+
+      // Authorize: only collaborators can trigger
+      const authorAssociation = payload.comment?.author_association ?? '';
+      const allowedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+      if (!allowedAssociations.includes(authorAssociation)) {
+        return c.json({ accepted: false, reason: 'unauthorized author' });
+      }
+
+      const owner = payload.repository?.owner?.login;
+      const repo = payload.repository?.name;
+      const prNumber = payload.issue?.number;
+
+      if (!owner || !repo || !prNumber) {
+        return c.json({ error: 'Missing owner, repo, or PR number' }, 400);
+      }
+
+      try {
+        validateOwnerRepo(owner, repo);
+      } catch {
+        return c.json({ error: 'Invalid owner or repo' }, 400);
+      }
+
+      if (dedup.isDuplicate(deliveryId)) {
+        return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
+      }
+
+      dedup.markSeen(deliveryId);
+
+      // Strip all @mentions from the comment to get the user's actual message
+      const mentionComment = commentBody.replace(
+        new RegExp(`@${escapeRegExp(appSlug)}\\b`, 'gi'),
+        ''
+      ).trim();
+
+      if (process.env.TRIGGER_SECRET_KEY) {
+        const mentionPayload: MentionPayload = { owner, repo, prNumber, deliveryId, mentionComment };
+        await tasks.trigger<typeof mentionPrTask>('mention-pr', mentionPayload);
+      } else {
+        const log = (step: string, message: string, data?: unknown) => {
+          console.log(`[mention][${owner}/${repo}#${prNumber}][${step}] ${message}`, data ?? '');
+        };
+
+        runMentionPipeline({ owner, repo, prNumber, mentionComment }, { log }).then((result) => {
+          if (result.commentUrl) {
+            console.log(`[mention] Posted response: ${result.commentUrl}`);
+          } else {
+            console.warn(`[mention] No output for ${owner}/${repo}#${prNumber}`);
+          }
+        }).catch((err) => {
+          console.error(`[mention] Pipeline failed for ${owner}/${repo}#${prNumber}:`, err);
+        });
+      }
+
+      return c.json({ accepted: true, prNumber, owner, repo, trigger: 'mention' }, 202);
     }
 
     // --- all other events ---
