@@ -119,8 +119,16 @@ COMPLETE — all 6 tasks done
   - Files: server/src/github/pr.ts, server/src/github/pr-comments.test.ts
   - 6 tests pass (fetch with filtering, 404 handling, post + error)
 
+- [x] Task 2: Add buildMentionPrompt (commit: 9c2b909)
+  - Files: server/src/review/prompt.ts, server/src/review/prompt.test.ts
+  - 14 tests pass (6 new for mention prompt)
+
+- [x] Task 3: Create mention pipeline (commit: ea6c49c)
+  - Files: server/src/review/mention-pipeline.ts, server/src/review/mention-pipeline.test.ts
+  - 1 export test passes, typecheck clean
+
 ### Current
-Task 2: Add buildMentionPrompt to review/prompt.ts
+Code review gate (tasks 1-3)
 
 ### Remaining
 Task 2: Add buildMentionPrompt to review/prompt.ts
