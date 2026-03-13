@@ -174,8 +174,14 @@ COMPLETE — all 6 tasks done
   - 4 new webhook tests (issue_comment /verify, HMAC, ignore non-verify, no config)
   - Also dispatches verify alongside review on PR open/sync
 
+- [x] Code Review Gate (tasks 7-9) + fixes (commit: 12922b2)
+  - Fixed: shell escaping (POSIX idiom), done tool validation
+  - Fixed: path traversal in spec pattern, ANTHROPIC_API_KEY removed from sandbox
+  - Fixed: author_association auth check, dedup ordering
+  - Added test for unauthorized commenter
+
 ### Current
-Code Review Gate (tasks 7-9)
+Task 10: GitHub PR Helper — Fetch Changed Files + Post Issue Comment
 
 ### Remaining
 Task 7: Verify Pipeline Orchestrator
