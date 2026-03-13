@@ -66,7 +66,7 @@ export function formatStartupFailureComment(input: {
   return `${VERIFY_MARKER}
 ## Verify Report
 
-**Status:** App failed to start
+**Status:** App failed to start on port ${input.port}
 
 ${input.error}
 

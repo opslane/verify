@@ -32,4 +32,13 @@ describe('infra-services', () => {
     const probe = buildReadinessProbe('mailhog');
     expect(probe.port).toBe(8025);
   });
+
+  it('throws on unknown service in readiness probe', () => {
+    expect(() => buildReadinessProbe('unknown')).toThrow('Unknown service');
+  });
+
+  it('skips unknown services in install commands', () => {
+    const cmds = buildInstallCommands(['unknown']);
+    expect(cmds).toEqual([]);
+  });
 });

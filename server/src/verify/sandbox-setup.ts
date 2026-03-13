@@ -1,11 +1,11 @@
 import type { SandboxProvider } from '../sandbox/types.js';
 import type { RepoConfig } from '../db.js';
 import { decrypt } from '../crypto.js';
-import { buildInstallCommands, buildReadinessProbe, getServiceDefs } from './infra-services.js';
+import { buildInstallCommands, buildReadinessProbe, hasServiceDef } from './infra-services.js';
 
 /** Escape a value for double-quoted .env format */
 function escapeEnvValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$');
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/\n/g, '\\n');
 }
 
 export function buildEnvFileContent(vars: Record<string, string>): string {
@@ -14,8 +14,13 @@ export function buildEnvFileContent(vars: Record<string, string>): string {
     .join('\n') + '\n';
 }
 
+const VALID_PATH = /^\/[a-zA-Z0-9\/_.-]*$/;
+
 export function buildHealthCheckCommand(port: number, healthPath = '/'): string {
   const path = healthPath.startsWith('/') ? healthPath : `/${healthPath}`;
+  if (!VALID_PATH.test(path)) {
+    throw new Error(`Invalid health path: ${path}`);
+  }
   return `curl -sf -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:${port}${path}`;
 }
 
@@ -68,22 +73,23 @@ export async function setupSandbox(
     }
 
     // Wait for readiness
-    const serviceDefs = getServiceDefs();
     for (const svc of infraServices) {
-      if (!serviceDefs[svc]) continue;
+      if (!hasServiceDef(svc)) continue;
       const probe = buildReadinessProbe(svc);
       log('infra', `Waiting for ${svc} on port ${probe.port}`);
+      let ready = false;
       for (let attempt = 0; attempt < probe.maxRetries; attempt++) {
         try {
           await drain(provider.runCommand(sandboxId, `${probe.command} && echo READY`));
           log('infra', `${svc} is ready`);
+          ready = true;
           break;
         } catch {
-          if (attempt === probe.maxRetries - 1) {
-            log('infra', `${svc} failed readiness check after ${probe.maxRetries} attempts`);
-          }
           await new Promise((r) => setTimeout(r, probe.intervalMs));
         }
+      }
+      if (!ready) {
+        return { success: false, error: `${svc} failed readiness check after ${probe.maxRetries} attempts` };
       }
     }
   }

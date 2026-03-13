@@ -52,6 +52,6 @@ export function buildReadinessProbe(service: string): { command: string; port: n
   return def.probe;
 }
 
-export function getServiceDefs(): Record<string, ServiceDef> {
-  return SERVICE_DEFS;
+export function hasServiceDef(service: string): boolean {
+  return service in SERVICE_DEFS;
 }
