@@ -175,8 +175,12 @@ interface AcceptanceCriterion {
 
 /**
  * Use Claude to parse a spec document into individual, testable acceptance criteria.
+ * Exported for testing.
  */
-async function parseAcceptanceCriteria(specContent: string): Promise<AcceptanceCriterion[]> {
+export async function parseAcceptanceCriteria(specContent: string): Promise<AcceptanceCriterion[]> {
+  // Mitigate prompt injection: strip XML-like tags that could break out of our delimiter
+  const sanitized = specContent.replace(/<\/?spec>/gi, '[spec-tag-removed]');
+
   const client = new Anthropic();
   const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
@@ -189,7 +193,7 @@ async function parseAcceptanceCriteria(specContent: string): Promise<AcceptanceC
 Only include criteria that can be verified by interacting with a web UI. Skip non-functional requirements, deployment steps, or backend-only criteria.
 
 <spec>
-${specContent}
+${sanitized}
 </spec>
 
 Respond with ONLY the JSON array, no other text.`,
@@ -198,7 +202,11 @@ Respond with ONLY the JSON array, no other text.`,
   });
 
   const text = response.content.find((c) => c.type === 'text')?.text ?? '[]';
-  // Extract JSON array from response (handle markdown code fences)
+  return parseAcceptanceCriteriaJson(text);
+}
+
+/** Parse Claude's response into validated AcceptanceCriterion array. Exported for testing. */
+export function parseAcceptanceCriteriaJson(text: string): AcceptanceCriterion[] {
   const jsonMatch = text.match(/\[[\s\S]*\]/);
   if (!jsonMatch) return [];
 

@@ -28,6 +28,39 @@ vi.mock('../github/pr.js', () => ({
 }));
 
 import { findRepoConfig } from '../db.js';
+import { parseAcceptanceCriteriaJson } from './pipeline.js';
+
+describe('parseAcceptanceCriteriaJson', () => {
+  it('parses valid JSON array', () => {
+    const input = '[{"id":"AC-1","description":"Login page loads"},{"id":"AC-2","description":"User can submit form"}]';
+    const result = parseAcceptanceCriteriaJson(input);
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('AC-1');
+    expect(result[1].description).toBe('User can submit form');
+  });
+
+  it('extracts JSON from markdown code fences', () => {
+    const input = '```json\n[{"id":"AC-1","description":"Page renders"}]\n```';
+    const result = parseAcceptanceCriteriaJson(input);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('AC-1');
+  });
+
+  it('returns empty array for non-JSON response', () => {
+    expect(parseAcceptanceCriteriaJson('No criteria found.')).toEqual([]);
+  });
+
+  it('filters out items with missing fields', () => {
+    const input = '[{"id":"AC-1","description":"Valid"},{"id":"AC-2"},{"description":"No ID"}]';
+    const result = parseAcceptanceCriteriaJson(input);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('AC-1');
+  });
+
+  it('returns empty array for malformed JSON', () => {
+    expect(parseAcceptanceCriteriaJson('[{broken')).toEqual([]);
+  });
+});
 
 describe('verify pipeline', () => {
   beforeEach(() => {
