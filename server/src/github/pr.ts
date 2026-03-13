@@ -81,6 +81,63 @@ export async function fetchPullRequest(
   };
 }
 
+/**
+ * Fetch the list of files changed by a pull request.
+ */
+export async function fetchPrChangedFiles(
+  owner: string, repo: string, prNumber: number, token: string
+): Promise<Array<{ filename: string; status: string }>> {
+  validateOwnerRepo(owner, repo);
+  validatePrNumber(prNumber);
+  const res = await fetch(
+    `${GITHUB_API}/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=100`,
+    { headers: githubHeaders(token) },
+  );
+  if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+  const files = await res.json() as Array<{ filename: string; status: string }>;
+  return files.map((f) => ({ filename: f.filename, status: f.status }));
+}
+
+/**
+ * Post a new issue comment or update an existing one matching the marker.
+ * Returns the comment URL.
+ */
+export async function postOrUpdateComment(
+  owner: string, repo: string, prNumber: number,
+  body: string, marker: string, token: string,
+): Promise<string> {
+  validateOwnerRepo(owner, repo);
+  validatePrNumber(prNumber);
+  const headers = githubHeaders(token);
+
+  // Check for existing comment with marker
+  const listRes = await fetch(
+    `${GITHUB_API}/repos/${owner}/${repo}/issues/${prNumber}/comments?per_page=100`,
+    { headers },
+  );
+  if (!listRes.ok) throw new Error(`GitHub API error: ${listRes.status}`);
+  const comments = await listRes.json() as Array<{ id: number; body: string }>;
+  const existing = comments.find((c) => c.body.includes(marker));
+
+  if (existing) {
+    const res = await fetch(
+      `${GITHUB_API}/repos/${owner}/${repo}/issues/comments/${existing.id}`,
+      { method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ body }) },
+    );
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+    const data = await res.json() as { html_url: string };
+    return data.html_url;
+  }
+
+  const res = await fetch(
+    `${GITHUB_API}/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+    { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ body }) },
+  );
+  if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+  const data = await res.json() as { html_url: string };
+  return data.html_url;
+}
+
 /** Post a pull request review with inline comments. Returns the review URL. */
 export async function createPrReview(
   owner: string,
