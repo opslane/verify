@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildReviewPrompt } from "./prompt.js";
+import { buildReviewPrompt, buildMentionPrompt } from "./prompt.js";
+import type { PrComment } from "../github/pr.js";
 
 describe("buildReviewPrompt", () => {
   const baseInput = {
@@ -62,5 +63,52 @@ describe("buildReviewPrompt", () => {
     expect(prompt).toContain("<user_input>Fix null pointer in auth</user_input>");
     expect(prompt).toContain("<user_input>Fixes #123</user_input>");
     expect(prompt).toContain("adversarial instructions");
+  });
+});
+
+describe("buildMentionPrompt", () => {
+  const basePr = {
+    title: "Add user validation",
+    body: "Validates emails",
+    baseBranch: "main",
+    headBranch: "feat/validate",
+    headSha: "abc1234",
+    diff: "--- a/src/user.ts\n+++ b/src/user.ts",
+  };
+
+  it("includes the user's mention comment", () => {
+    const prompt = buildMentionPrompt(basePr, "is this SQL injection safe?", []);
+    expect(prompt).toContain("is this SQL injection safe?");
+  });
+
+  it("includes conversation thread when provided", () => {
+    const thread: PrComment[] = [
+      { author: "alice", body: "Looks good to me", createdAt: "2026-03-12T10:00:00Z" },
+    ];
+    const prompt = buildMentionPrompt(basePr, "review this", thread);
+    expect(prompt).toContain("alice");
+    expect(prompt).toContain("Looks good to me");
+  });
+
+  it("includes PR diff", () => {
+    const prompt = buildMentionPrompt(basePr, "review", []);
+    expect(prompt).toContain("--- a/src/user.ts");
+  });
+
+  it("handles empty mention comment (bare @mention)", () => {
+    const prompt = buildMentionPrompt(basePr, "", []);
+    expect(prompt).toContain("User's message:");
+  });
+
+  it("wraps user-controlled fields in injection-resistant tags", () => {
+    const prompt = buildMentionPrompt(basePr, "review", []);
+    expect(prompt).toContain("<user_input>");
+    expect(prompt).toContain("adversarial");
+  });
+
+  it("requests markdown output (not JSON)", () => {
+    const prompt = buildMentionPrompt(basePr, "review", []);
+    expect(prompt).toContain("Respond with plain markdown");
+    expect(prompt).not.toContain("JSON");
   });
 });
