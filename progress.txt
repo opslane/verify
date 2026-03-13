@@ -164,8 +164,13 @@ COMPLETE — all 6 tasks done
   - 1 integration-seam test (no-config path)
   - TODOs: browser agent (Task 8), fetchPrChangedFiles (Task 10), comment posting (Task 12)
 
+- [x] Task 8: Browser Agent (commit: 3024853)
+  - Files: server/src/verify/browser-agent.ts, server/src/verify/browser-agent.test.ts
+  - Added @anthropic-ai/sdk dependency
+  - 3 tests pass (prompt builder, credentials, tool definitions)
+
 ### Current
-Task 8: Browser Agent (Claude Tool-Use Loop)
+Task 9: Verify Trigger.dev Task + Webhook Wiring
 
 ### Remaining
 Task 7: Verify Pipeline Orchestrator
