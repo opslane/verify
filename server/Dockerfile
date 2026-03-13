@@ -1,5 +1,6 @@
 # --- Build stage ---
 FROM node:22-alpine AS builder
+ARG CACHE_BUST=1
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
