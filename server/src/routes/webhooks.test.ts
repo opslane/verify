@@ -199,7 +199,7 @@ describe('POST /github — issue_comment (/verify)', () => {
   function makeIssueCommentPayload(overrides: Record<string, unknown> = {}) {
     return {
       action: 'created',
-      comment: { body: '/verify', user: { login: 'jsmith' } },
+      comment: { body: '/verify', user: { login: 'jsmith' }, author_association: 'COLLABORATOR' },
       issue: { number: 42, pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/42' } },
       repository: { owner: { login: 'org' }, name: 'repo' },
       ...overrides,
@@ -265,6 +265,26 @@ describe('POST /github — issue_comment (/verify)', () => {
     expect(res.status).toBe(200);
     const json = await res.json() as { reason: string };
     expect(json.reason).toBe('not a verify command');
+  });
+
+  it('rejects when commenter is not a collaborator', async () => {
+    const app = createWebhookApp();
+    const payload = makeIssueCommentPayload({
+      comment: { body: '/verify', user: { login: 'outsider' }, author_association: 'NONE' },
+    });
+    const body = JSON.stringify(payload);
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'issue_comment',
+        'X-Hub-Signature-256': sign(body),
+      },
+      body,
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json() as { reason: string };
+    expect(json.reason).toBe('unauthorized');
   });
 
   it('rejects when no repo config exists', async () => {

@@ -139,9 +139,11 @@ export function createWebhookApp(): Hono {
         return c.text('Invalid signature', 401);
       }
 
+      const ALLOWED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
       let payload: {
         action?: string;
-        comment?: { body?: string; user?: { login?: string } };
+        comment?: { body?: string; user?: { login?: string }; author_association?: string };
         issue?: { number?: number; pull_request?: { url?: string } };
         repository?: { owner?: { login?: string }; name?: string };
       };
@@ -176,21 +178,28 @@ export function createWebhookApp(): Hono {
         return c.json({ error: 'Missing required fields' }, 400);
       }
 
+      // Only allow repo collaborators/members/owners to trigger verify
+      const association = payload.comment?.author_association ?? '';
+      if (!ALLOWED_ASSOCIATIONS.has(association)) {
+        return c.json({ accepted: false, reason: 'unauthorized' });
+      }
+
       try {
         validateOwnerRepo(owner, repo);
       } catch {
         return c.json({ error: 'Invalid owner or repo' }, 400);
       }
 
+      // Dedup before DB query
+      const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID();
+      if (dedup.isDuplicate(deliveryId)) {
+        return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
+      }
+
       // Check repo config exists
       const repoConfig = await findRepoConfig(owner, repo);
       if (!repoConfig) {
         return c.json({ accepted: false, reason: 'no repo config' });
-      }
-
-      const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID();
-      if (dedup.isDuplicate(deliveryId)) {
-        return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
       }
 
       if (process.env.TRIGGER_SECRET_KEY) {

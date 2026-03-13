@@ -173,8 +173,11 @@ export async function runBrowserAgent(
 
       // Handle done tool
       if (toolUse.name === 'done') {
+        if (toolInput.result !== 'pass' && toolInput.result !== 'fail') {
+          return { result: 'error', error: `Invalid done result: ${toolInput.result}` };
+        }
         return {
-          result: toolInput.result as 'pass' | 'fail',
+          result: toolInput.result,
           expected: toolInput.expected,
           observed: toolInput.observed,
         };
@@ -213,7 +216,7 @@ async function dispatchBrowserTool(
         log(`Navigate: ${input.url}`);
         const output = await collectOutput(provider.runCommand(
           sandboxId,
-          `cd ${workDir} && npx playwright evaluate "await page.goto('${escapeSingleQuote(input.url)}', { waitUntil: 'networkidle' }); 'navigated'"`,
+          `cd ${workDir} && npx playwright evaluate "await page.goto('${shellEscape(input.url)}', { waitUntil: 'networkidle' }); 'navigated'"`,
         ));
         return output || 'Navigated successfully';
       }
@@ -221,15 +224,15 @@ async function dispatchBrowserTool(
         log(`Click: ${input.selector}`);
         const output = await collectOutput(provider.runCommand(
           sandboxId,
-          `cd ${workDir} && npx playwright evaluate "await page.click('${escapeSingleQuote(input.selector)}'); 'clicked'"`,
+          `cd ${workDir} && npx playwright evaluate "await page.click('${shellEscape(input.selector)}'); 'clicked'"`,
         ));
         return output || 'Clicked successfully';
       }
       case 'fill': {
-        log(`Fill: ${input.selector} = ${input.value?.slice(0, 20)}...`);
+        log(`Fill: ${input.selector}`);
         const output = await collectOutput(provider.runCommand(
           sandboxId,
-          `cd ${workDir} && npx playwright evaluate "await page.fill('${escapeSingleQuote(input.selector)}', '${escapeSingleQuote(input.value)}'); 'filled'"`,
+          `cd ${workDir} && npx playwright evaluate "await page.fill('${shellEscape(input.selector)}', '${shellEscape(input.value)}'); 'filled'"`,
         ));
         return output || 'Filled successfully';
       }
@@ -259,8 +262,9 @@ async function dispatchBrowserTool(
   }
 }
 
-function escapeSingleQuote(s: string): string {
-  return s.replace(/'/g, "\\'");
+/** Escape a string for use inside single quotes in shell (POSIX idiom: replace ' with '\'') */
+function shellEscape(s: string): string {
+  return s.replace(/'/g, "'\\''");
 }
 
 async function collectOutput(stream: AsyncIterable<string>): Promise<string> {

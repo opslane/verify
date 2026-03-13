@@ -13,7 +13,8 @@ export type SpecResult =
   | { type: 'pr-body'; specContent: string }
   | { type: 'no-spec' };
 
-const PLAN_FILE_PATTERN = /^docs\/plans\/.*\.md$/;
+// Matches docs/plans/*.md but rejects path traversal (no ..)
+const PLAN_FILE_PATTERN = /^docs\/plans\/(?!.*\.\.)[\w.-]+\.md$/;
 
 /** Heuristic: does the PR body contain anything that looks like acceptance criteria? */
 function hasAcceptanceCriteria(body: string): boolean {

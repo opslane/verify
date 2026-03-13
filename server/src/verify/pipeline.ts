@@ -77,7 +77,6 @@ export async function runVerifyPipeline(
     template: VERIFY_TEMPLATE,
     timeoutMs: VERIFY_TIMEOUT_MS,
     envVars: {
-      ANTHROPIC_API_KEY: requireEnv('ANTHROPIC_API_KEY'),
       GIT_TERMINAL_PROMPT: '0',
       PLAYWRIGHT_BROWSERS_PATH: '/ms-playwright',
     },
