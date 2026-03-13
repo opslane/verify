@@ -12,6 +12,7 @@ describe('db helpers (integration)', () => {
     await runMigrations(TEST_DB);
     sql = postgres(TEST_DB);
     // Clean slate for this test run
+    await sql`DELETE FROM repo_configs`;
     await sql`DELETE FROM github_installations`;
     await sql`DELETE FROM users`;
     await sql`DELETE FROM orgs`;
@@ -140,6 +141,60 @@ describe('db helpers (integration)', () => {
       expect(rows[0].org_id).toBe(org.id);
       const count = await sql`SELECT COUNT(*) FROM github_installations WHERE installation_id = 55003`;
       expect(Number(count[0].count)).toBe(1);
+    });
+  });
+
+  describe('repo configs', () => {
+    it('upserts and finds repo config', async () => {
+      const { upsertRepoConfig, findRepoConfig } = await import('./db.js');
+
+      await upsertRepoConfig({
+        installationId: 55001,
+        owner: 'testorg',
+        repo: 'testrepo',
+        startupCommand: 'npm run dev',
+        port: 3000,
+      });
+
+      const config = await findRepoConfig('testorg', 'testrepo');
+      expect(config).not.toBeNull();
+      expect(config!.startup_command).toBe('npm run dev');
+      expect(config!.port).toBe(3000);
+      expect(config!.health_path).toBe('/');
+    });
+
+    it('returns null for missing repo config', async () => {
+      const { findRepoConfig } = await import('./db.js');
+      const config = await findRepoConfig('nonexistent', 'nope');
+      expect(config).toBeNull();
+    });
+
+    it('updates repo config on conflict', async () => {
+      const { upsertRepoConfig, findRepoConfig } = await import('./db.js');
+
+      await upsertRepoConfig({
+        installationId: 55001,
+        owner: 'testorg',
+        repo: 'testrepo',
+        startupCommand: 'npm run dev',
+        port: 3000,
+      });
+
+      await upsertRepoConfig({
+        installationId: 55001,
+        owner: 'testorg',
+        repo: 'testrepo',
+        startupCommand: 'pnpm dev',
+        port: 3001,
+        healthPath: '/api/health',
+        detectedInfra: ['postgres', 'minio'],
+      });
+
+      const config = await findRepoConfig('testorg', 'testrepo');
+      expect(config!.startup_command).toBe('pnpm dev');
+      expect(config!.port).toBe(3001);
+      expect(config!.health_path).toBe('/api/health');
+      expect(config!.detected_infra).toEqual(['postgres', 'minio']);
     });
   });
 

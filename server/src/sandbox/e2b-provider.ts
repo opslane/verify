@@ -77,6 +77,7 @@ export class E2BSandboxProvider implements SandboxProvider {
    * PR titles, branch names, etc.). Validate all inputs before interpolating into command.
    */
   async *runCommand(sandboxId: string, command: string, opts?: RunOptions): AsyncIterable<string> {
+    const rawOutput = opts?.rawOutput ?? false;
     const sandbox = this.sandboxes.get(sandboxId);
     if (!sandbox) throw new Error(`Sandbox ${sandboxId} not found`);
 
@@ -130,6 +131,22 @@ export class E2BSandboxProvider implements SandboxProvider {
             }
           }
 
+          // In raw mode, yield all output lines (not just JSON)
+          if (rawOutput) {
+            // Filter shell noise: prompt echoes, login banners, exit markers
+            const isPromptEcho = /^(.*@.*[:~].*\$|.*\$)\s/.test(cleaned) && cleaned.includes('; exit');
+            const isLoginNoise = cleaned.startsWith('To run a command as administrator') ||
+              cleaned.startsWith('See "man sudo_root"') ||
+              cleaned === 'logout';
+            if (!isPromptEcho && !isLoginNoise) {
+              lineQueue.push(cleaned);
+              if (resolve) {
+                resolve();
+                resolve = null;
+              }
+            }
+          }
+
           // Capture non-JSON output for diagnostics on failure
           recentNonJsonLines.push(cleaned);
           if (recentNonJsonLines.length > MAX_DIAGNOSTIC_LINES) {
@@ -141,7 +158,7 @@ export class E2BSandboxProvider implements SandboxProvider {
     });
 
     // Send command to PTY shell
-    const cwd = opts?.cwd ?? "/workspace";
+    const cwd = opts?.cwd ?? "/home/user";
     if (!cwd.startsWith("/")) {
       throw new Error(`cwd must be an absolute path, got: ${cwd}`);
     }
@@ -164,6 +181,9 @@ export class E2BSandboxProvider implements SandboxProvider {
             JSON.parse(candidate);
             lineQueue.push(candidate);
           } catch {
+            if (rawOutput) {
+              lineQueue.push(cleaned);
+            }
             recentNonJsonLines.push(cleaned);
             if (recentNonJsonLines.length > MAX_DIAGNOSTIC_LINES) {
               recentNonJsonLines.shift();
@@ -201,6 +221,15 @@ export class E2BSandboxProvider implements SandboxProvider {
       }
       throw ptyError;
     }
+  }
+
+  async readFile(sandboxId: string, path: string): Promise<string> {
+    if (!path.startsWith('/') || path.includes('..')) {
+      throw new Error(`readFile path must be absolute without traversal: ${path}`);
+    }
+    const sandbox = this.sandboxes.get(sandboxId);
+    if (!sandbox) throw new Error(`Sandbox ${sandboxId} not found`);
+    return sandbox.files.read(path);
   }
 
   async uploadFiles(sandboxId: string, files: FileUpload[]): Promise<void> {

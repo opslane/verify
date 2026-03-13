@@ -20,11 +20,17 @@ export interface ReviewPipelineCallbacks {
   log: (step: string, message: string, data?: unknown) => void;
   /** Called for each line of output during long-running commands. Useful for progress dots. */
   onOutputLine?: (line: string) => void;
+  /** If true, skip posting the PR review — caller will handle it */
+  skipPost?: boolean;
 }
 
 export interface ReviewPipelineResult {
   reviewText: string;
   reviewUrl: string | null;
+  /** Parsed review summary (for combining with verify) */
+  summary?: string;
+  /** Number of inline comments posted */
+  inlineCommentCount?: number;
 }
 
 /**
@@ -37,7 +43,7 @@ export async function runReviewPipeline(
   callbacks: ReviewPipelineCallbacks
 ): Promise<ReviewPipelineResult> {
   const { owner, repo, prNumber } = input;
-  const { log, onOutputLine } = callbacks;
+  const { log, onOutputLine, skipPost } = callbacks;
 
   // 1. Get GitHub installation token
   log("github", "Fetching installation token...");
@@ -167,31 +173,32 @@ export async function runReviewPipeline(
   // 12. Parse + validate Claude's output against diff metadata
   const review = parseReviewOutput(reviewText, diffFiles);
 
-  let reviewUrl: string;
+  const summaryText = review.fallback
+    ? (review.rawText ?? reviewText)
+    : review.summary;
+  const inlineComments = review.fallback ? [] : review.comments;
 
-  if (review.fallback) {
-    // Fallback: structured parsing failed — post raw text as summary, no inline comments
-    log("github", "Structured parsing failed — falling back to summary-only review");
+  let reviewUrl: string | null = null;
+
+  if (!skipPost) {
+    if (review.fallback) {
+      log("github", "Structured parsing failed — falling back to summary-only review");
+    } else {
+      log("github", "Posting inline review", {
+        inlineComments: inlineComments.length,
+        orphanedToSummary: review.summary.includes("Additional findings"),
+      });
+    }
     reviewUrl = await createPrReview(
       owner, repo, prNumber, pr.headSha,
-      review.rawText ?? reviewText,
-      [],
+      summaryText,
+      inlineComments,
       token
     );
   } else {
-    // Normal: post review with validated inline comments
-    log("github", "Posting inline review", {
-      inlineComments: review.comments.length,
-      orphanedToSummary: review.summary.includes("Additional findings"),
-    });
-    reviewUrl = await createPrReview(
-      owner, repo, prNumber, pr.headSha,
-      review.summary,
-      review.comments,
-      token
-    );
+    log("github", "Skipping post — caller will handle combined comment");
   }
 
-  log("github", "Review posted", { reviewUrl });
-  return { reviewText, reviewUrl };
+  log("github", reviewUrl ? "Review posted" : "Review ready (not posted)", { reviewUrl });
+  return { reviewText, reviewUrl, summary: summaryText, inlineCommentCount: inlineComments.length };
 }

@@ -1,17 +1,13 @@
 import { Hono } from 'hono';
 import { timingSafeEqual, createHmac } from 'node:crypto';
 import { tasks } from '@trigger.dev/sdk/v3';
-import type { reviewPrTask, mentionPrTask } from '../review/runner.js';
+import type { verifyPrTask } from '../verify/runner.js';
+import type { unifiedPrTask, UnifiedPayload } from '../unified/runner.js';
 import { shouldSkipVerification, verifySvixWebhook } from '../webhook/verify.js';
 import { DeduplicationSet } from '../webhook/dedup.js';
-import type { ReviewPayload, MentionPayload } from '../review/runner.js';
-import { runMentionPipeline } from '../review/mention-pipeline.js';
+import type { VerifyPayload } from '../verify/runner.js';
 import { validateOwnerRepo } from '../github/validation.js';
-import { findUserByLogin, upsertInstallation } from '../db.js';
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { findUserByLogin, upsertInstallation, findRepoConfig } from '../db.js';
 
 function env(key: string): string {
   const val = process.env[key];
@@ -116,10 +112,10 @@ export function createWebhookApp(): Hono {
         return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
       }
 
-      const reviewPayload: ReviewPayload = { owner, repo, prNumber, deliveryId };
-
       if (process.env.TRIGGER_SECRET_KEY) {
-        await tasks.trigger<typeof reviewPrTask>('review-pr', reviewPayload);
+        // Unified pipeline: code review + AC verification in one task, one comment
+        const unifiedPayload: UnifiedPayload = { owner, repo, prNumber, deliveryId };
+        await tasks.trigger<typeof unifiedPrTask>('unified-pr', unifiedPayload);
       } else {
         console.warn('TRIGGER_SECRET_KEY not set — skipping task dispatch');
       }
@@ -128,42 +124,20 @@ export function createWebhookApp(): Hono {
       return c.json({ accepted: true, prNumber, owner, repo }, 202);
     }
 
-    // --- issue_comment: @mention-triggered reviews ---
+    // --- issue_comment: /verify command triggers verify pipeline ---
     if (event === 'issue_comment') {
-      const deliveryId = c.req.header('svix-id') ?? crypto.randomUUID();
-
-      const skipVerification = shouldSkipVerification(
-        process.env.NODE_ENV,
-        process.env.SVIX_SKIP_VERIFICATION
-      );
-
-      if (!skipVerification) {
-        const secret = process.env.SVIX_WEBHOOK_SECRET;
-        if (!secret) {
-          return c.json({ error: 'Webhook secret not configured' }, 503);
-        }
-        try {
-          verifySvixWebhook(rawBody, Object.fromEntries(c.req.raw.headers.entries()), secret);
-        } catch {
-          return c.json({ error: 'Invalid signature' }, 401);
-        }
+      const signature = c.req.header('X-Hub-Signature-256');
+      if (!(await verifyGitHubSignature(rawBody, signature))) {
+        return c.text('Invalid signature', 401);
       }
+
+      const ALLOWED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 
       let payload: {
         action?: string;
-        comment?: {
-          body?: string;
-          user?: { login?: string };
-          author_association?: string;
-        };
-        issue?: {
-          number?: number;
-          pull_request?: unknown;
-        };
-        repository?: {
-          owner?: { login?: string };
-          name?: string;
-        };
+        comment?: { body?: string; user?: { login?: string }; author_association?: string };
+        issue?: { number?: number; pull_request?: { url?: string } };
+        repository?: { owner?: { login?: string }; name?: string };
       };
       try {
         payload = JSON.parse(rawBody);
@@ -171,50 +145,35 @@ export function createWebhookApp(): Hono {
         return c.json({ error: 'Invalid JSON' }, 400);
       }
 
-      // Only handle new comments
+      // Only process newly created comments
       if (payload.action !== 'created') {
         return c.json({ accepted: false, reason: 'action ignored' });
       }
 
-      // Only handle PR comments (not issue comments)
-      if (!payload.issue?.pull_request) {
-        return c.json({ accepted: false, reason: 'not a PR comment' });
+      // Only respond to /verify command
+      const commentBody = payload.comment?.body?.trim() ?? '';
+      if (commentBody !== '/verify') {
+        return c.json({ accepted: false, reason: 'not a verify command' });
       }
 
-      const appSlug = process.env.GITHUB_APP_SLUG;
-      if (!appSlug) {
-        console.error('[webhook] GITHUB_APP_SLUG not configured — cannot detect @mentions');
-        return c.json({ accepted: false, reason: 'app slug not configured' });
-      }
-
-      // Self-trigger guard: ignore comments from the bot itself
-      const commentAuthor = payload.comment?.user?.login ?? '';
-      if (commentAuthor === `${appSlug}[bot]`) {
-        return c.json({ accepted: false, reason: 'bot comment ignored' });
-      }
-
-      // Authorize: only collaborators can trigger (checked before mention detection
-      // so unauthorized users can't probe whether the bot slug is active)
-      const authorAssociation = payload.comment?.author_association ?? '';
-      const allowedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
-      if (!allowedAssociations.includes(authorAssociation)) {
-        return c.json({ accepted: false, reason: 'unauthorized author' });
-      }
-
-      // Check for @mention (escape slug for safe regex interpolation)
-      const commentBody = payload.comment?.body ?? '';
-      const escapedSlug = escapeRegExp(appSlug);
-      const mentionPattern = new RegExp(`@${escapedSlug}\\b`, 'gi');
-      if (!mentionPattern.test(commentBody)) {
-        return c.json({ accepted: false, reason: 'no mention detected' });
+      // Only PR comments (not plain issue comments)
+      if (!payload.issue?.pull_request?.url) {
+        return c.json({ accepted: false, reason: 'not a pull request' });
       }
 
       const owner = payload.repository?.owner?.login;
       const repo = payload.repository?.name;
       const prNumber = payload.issue?.number;
+      const commenter = payload.comment?.user?.login;
 
-      if (!owner || !repo || !prNumber) {
-        return c.json({ error: 'Missing owner, repo, or PR number' }, 400);
+      if (!owner || !repo || !prNumber || !commenter) {
+        return c.json({ error: 'Missing required fields' }, 400);
+      }
+
+      // Only allow repo collaborators/members/owners to trigger verify
+      const association = payload.comment?.author_association ?? '';
+      if (!ALLOWED_ASSOCIATIONS.has(association)) {
+        return c.json({ accepted: false, reason: 'unauthorized' });
       }
 
       try {
@@ -223,40 +182,27 @@ export function createWebhookApp(): Hono {
         return c.json({ error: 'Invalid owner or repo' }, 400);
       }
 
+      // Dedup before DB query
+      const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID();
       if (dedup.isDuplicate(deliveryId)) {
         return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
       }
 
-      // Strip all @mentions — new regex to avoid lastIndex state from .test() above
-      const mentionComment = commentBody.replace(
-        new RegExp(`@${escapedSlug}\\b`, 'gi'),
-        ''
-      ).trim();
-
-      console.log(`[mention] Dispatching for ${owner}/${repo}#${prNumber}`, { commentPreview: mentionComment.slice(0, 80) });
-
-      if (process.env.TRIGGER_SECRET_KEY) {
-        const mentionPayload: MentionPayload = { owner, repo, prNumber, deliveryId, mentionComment };
-        await tasks.trigger<typeof mentionPrTask>('mention-pr', mentionPayload);
-      } else {
-        const log = (step: string, message: string, data?: unknown) => {
-          console.log(`[mention][${owner}/${repo}#${prNumber}][${step}] ${message}`, data ?? '');
-        };
-
-        runMentionPipeline({ owner, repo, prNumber, mentionComment }, { log }).then((result) => {
-          if (result.commentUrl) {
-            console.log(`[mention] Posted response: ${result.commentUrl}`);
-          } else {
-            console.warn(`[mention] No output for ${owner}/${repo}#${prNumber}`);
-          }
-        }).catch((err) => {
-          console.error(`[mention] Pipeline failed for ${owner}/${repo}#${prNumber}:`, err);
-        });
+      // Check repo config exists
+      const repoConfig = await findRepoConfig(owner, repo);
+      if (!repoConfig) {
+        return c.json({ accepted: false, reason: 'no repo config' });
       }
 
+      if (process.env.TRIGGER_SECRET_KEY) {
+        const verifyPayload: VerifyPayload = { owner, repo, prNumber, deliveryId };
+        await tasks.trigger<typeof verifyPrTask>('verify-pr', verifyPayload);
+      } else {
+        console.warn('TRIGGER_SECRET_KEY not set — skipping verify dispatch');
+      }
       dedup.markSeen(deliveryId);
 
-      return c.json({ accepted: true, prNumber, owner, repo, trigger: 'mention' }, 202);
+      return c.json({ accepted: true, event: 'issue_comment.verify', prNumber, owner, repo }, 202);
     }
 
     // --- all other events ---

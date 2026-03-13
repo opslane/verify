@@ -155,3 +155,104 @@ Task 7: Enable issue_comment event in GitHub App settings (manual)
 - Fixed markSeen ordering (after dispatch, not before)
 - Applied simplifier: extracted pipeline.ts, fixed route double-prefix, removed dead sandbox methods, inlined buildPrApiUrl, extracted env.ts
 - Final: all 10 tasks done, 17 tests passing, live E2E verified
+
+## remote-verify-pipeline (plan: docs/plans/2026-03-12-remote-verify-implementation.md)
+
+### Completed
+- [x] Task 1: Encryption Module (commit: 5cc2cc7)
+  - Files: server/src/crypto.ts, server/src/crypto.test.ts
+  - 4 tests pass (roundtrip, unique IVs, tamper detection, missing key)
+
+- [x] Task 2: Database Migration for repo_configs (commit: 432cdcd)
+  - Files: server/db/migrations/002_repo_configs.sql, server/src/db.ts, server/src/db.test.ts
+  - 3 integration tests (upsert, find, conflict update) — require TEST_DATABASE_URL
+
+- [x] Task 3: Spec Discovery Module (commit: 774a456)
+  - Files: server/src/verify/spec-discovery.ts, server/src/verify/spec-discovery.test.ts
+  - 4 tests pass (plan file, prefer added, PR body fallback, no-spec)
+
+- [x] Code Review Gate (tasks 1-3) + fixes (commit: 5927111)
+  - Fixed: Buffer coercion in decrypt, ciphertext format validation
+  - Fixed: redundant index, installation_id integer→bigint
+  - Fixed: spec-discovery sync, exported types, removed dead mock
+  - Fixed: db.test repo_configs cleanup
+  - Review score: 3.55/5 APPROVE WITH CHANGES
+
+- [x] Task 4: Infra Service Manager (commit: 3016df0)
+  - Files: server/src/verify/infra-services.ts, server/src/verify/infra-services.test.ts
+  - 6 tests pass (install cmds, readiness probes, baked-in filtering)
+
+- [x] Task 5: Sandbox Setup Module (commit: 3684a2f)
+  - Files: server/src/verify/sandbox-setup.ts, server/src/verify/sandbox-setup.test.ts
+  - 3 tests pass (env file generation, health check cmd, default path)
+  - Decision: mock crypto.js to avoid ENCRYPTION_KEY at test load time
+
+- [x] Task 6: PR Comment Formatter (commit: 8622cf7)
+  - Files: server/src/verify/comment.ts, server/src/verify/comment.test.ts
+  - 4 tests pass (full report, startup failure, no-spec, marker detection)
+
+- [x] Code Review Gate (tasks 4-6) + fixes (commit: 5606899)
+  - Fixed: healthPath validation (command injection), newline escaping in env
+  - Fixed: readiness probe failures now surface in SetupResult
+  - Fixed: replaced getServiceDefs→hasServiceDef, added edge case tests
+  - Fixed: port now rendered in startup failure comment
+
+- [x] Task 7: Verify Pipeline Orchestrator (commit: 8f21435)
+  - Files: server/src/verify/pipeline.ts, server/src/verify/pipeline.test.ts
+  - 1 integration-seam test (no-config path)
+  - TODOs: browser agent (Task 8), fetchPrChangedFiles (Task 10), comment posting (Task 12)
+
+- [x] Task 8: Browser Agent (commit: 3024853)
+  - Files: server/src/verify/browser-agent.ts, server/src/verify/browser-agent.test.ts
+  - Added @anthropic-ai/sdk dependency
+  - 3 tests pass (prompt builder, credentials, tool definitions)
+
+- [x] Task 9: Verify Trigger.dev Task + Webhook Wiring (commit: 012ff19)
+  - Files: server/src/verify/runner.ts, server/src/routes/webhooks.ts, server/src/routes/webhooks.test.ts
+  - 4 new webhook tests (issue_comment /verify, HMAC, ignore non-verify, no config)
+  - Also dispatches verify alongside review on PR open/sync
+
+- [x] Code Review Gate (tasks 7-9) + fixes (commit: 12922b2)
+  - Fixed: shell escaping (POSIX idiom), done tool validation
+  - Fixed: path traversal in spec pattern, ANTHROPIC_API_KEY removed from sandbox
+  - Fixed: author_association auth check, dedup ordering
+  - Added test for unauthorized commenter
+
+- [x] Task 10: GitHub PR Helper (commit: 9c23d6b)
+  - Files: server/src/github/pr.ts, server/src/github/pr.test.ts
+  - Added fetchPrChangedFiles and postOrUpdateComment
+  - 3 new tests (fetchChangedFiles, create comment, update comment)
+
+- [x] Task 11: E2B Template for Verify (commit: 21bb342)
+  - Files: server/e2b-templates/verify/Dockerfile, entrypoint.sh, e2b.toml
+  - Postgres 16, Redis, Node 22, pnpm/yarn/bun, Playwright + Chromium
+  - 4GB RAM, 2 CPUs
+
+- [x] Task 12: Wire PR Comments into Pipeline (commit: 91cecbf)
+  - Files: server/src/verify/pipeline.ts
+  - Wired postOrUpdateComment + VERIFY_MARKER into all 3 exit paths (no-spec, startup-failed, verified)
+  - Replaced empty changedFiles with fetchPrChangedFiles call
+
+- [x] Code Review Gate (tasks 10-12) + fixes (commit: 74ff2db)
+  - Fixed: specPath validation near shell interpolation (defense in depth)
+  - Fixed: redundant .map() in pipeline.ts
+  - Fixed: pg_isready wait in entrypoint, template name mismatch, pinned pnpm/yarn
+  - Review score: 3.85/5 APPROVE WITH CHANGES
+
+- [x] Browser agent wiring fix (commit: 7d5ae89)
+  - Replaced pipeline placeholder with actual browser agent orchestration
+  - Added parseAcceptanceCriteria (Claude planner step) to extract testable ACs from spec
+  - Wired runBrowserAgent for each AC with credentials from config
+  - No more TODOs in critical path
+
+- [x] Post-wiring fixes (commit: 529ed22)
+  - Added prompt injection mitigation (strip </spec> tags from spec content)
+  - Extracted parseAcceptanceCriteriaJson as testable pure function
+  - 5 new tests for AC parser (valid JSON, code fences, non-JSON, missing fields, malformed)
+  - 97 tests passing (up from 92)
+
+### Current
+COMPLETE — all 12 tasks done, browser agent wired, 97 tests passing
+
+### Remaining
+(none)

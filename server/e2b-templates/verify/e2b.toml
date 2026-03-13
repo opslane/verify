@@ -1,0 +1,4 @@
+memory_mb = 4_096
+cpu_count = 2
+dockerfile = "Dockerfile"
+template_name = "opslane-verify-v2"

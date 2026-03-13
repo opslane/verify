@@ -7,10 +7,11 @@ vi.mock('../db.js', () => ({
   upsertInstallation: vi.fn(),
   upsertOrg: vi.fn(),
   upsertUser: vi.fn(),
+  findRepoConfig: vi.fn(),
   sql: {},
 }));
 
-import { findUserByLogin, upsertInstallation } from '../db.js';
+import { findUserByLogin, upsertInstallation, findRepoConfig } from '../db.js';
 import { createWebhookApp } from './webhooks.js';
 
 const WEBHOOK_SECRET = 'test-webhook-secret';
@@ -24,7 +25,6 @@ afterEach(() => {
   delete process.env.SVIX_SKIP_VERIFICATION;
   delete process.env.NODE_ENV;
   delete process.env.GITHUB_WEBHOOK_SECRET;
-  delete process.env.GITHUB_APP_SLUG;
 });
 
 // --- Installation handler tests (HMAC verification) ---
@@ -188,157 +188,122 @@ describe('POST /github — Svix + PR dispatch', () => {
   });
 });
 
-// --- issue_comment: @mention-triggered reviews ---
+// --- issue_comment: /verify command ---
 
-describe('POST /github — issue_comment @mention', () => {
+describe('POST /github — issue_comment (/verify)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.SVIX_SKIP_VERIFICATION = 'true';
-    process.env.NODE_ENV = 'test';
-    process.env.GITHUB_APP_SLUG = 'opslane-verify';
+    process.env.GITHUB_WEBHOOK_SECRET = WEBHOOK_SECRET;
   });
 
-  function makePayload(overrides: Record<string, unknown> = {}) {
+  function makeIssueCommentPayload(overrides: Record<string, unknown> = {}) {
     return {
       action: 'created',
-      comment: {
-        body: '@opslane-verify review this PR',
-        user: { login: 'alice' },
-        author_association: 'COLLABORATOR',
-      },
-      issue: {
-        number: 42,
-        pull_request: { url: 'https://api.github.com/repos/acme/app/pulls/42' },
-      },
-      repository: {
-        owner: { login: 'acme' },
-        name: 'app',
-      },
+      comment: { body: '/verify', user: { login: 'jsmith' }, author_association: 'COLLABORATOR' },
+      issue: { number: 42, pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/42' } },
+      repository: { owner: { login: 'org' }, name: 'repo' },
       ...overrides,
     };
   }
 
-  it('accepts a valid @mention from a collaborator', async () => {
+  it('returns 401 with missing signature', async () => {
     const app = createWebhookApp();
-    const body = JSON.stringify(makePayload());
+    const body = JSON.stringify(makeIssueCommentPayload());
     const res = await app.request('/github', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-github-event': 'issue_comment',
+        'X-GitHub-Event': 'issue_comment',
+      },
+      body,
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('accepts /verify comment when repo config exists', async () => {
+    vi.mocked(findRepoConfig).mockResolvedValue({
+      id: 'cfg-uuid', installation_id: 1, owner: 'org', repo: 'repo',
+      startup_command: 'npm start', port: 3000, install_command: null,
+      pre_start_script: null, health_path: '/', test_email: null,
+      test_password: null, env_vars: null, detected_infra: [],
+      created_at: new Date(), updated_at: new Date(),
+    });
+
+    const app = createWebhookApp();
+    const payload = makeIssueCommentPayload();
+    const body = JSON.stringify(payload);
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'issue_comment',
+        'X-Hub-Signature-256': sign(body),
       },
       body,
     });
     expect(res.status).toBe(202);
-    const json = await res.json() as { accepted: boolean; trigger: string };
+    const json = await res.json() as { accepted: boolean; event: string };
     expect(json.accepted).toBe(true);
-    expect(json.trigger).toBe('mention');
+    expect(json.event).toBe('issue_comment.verify');
   });
 
-  it('ignores comments without @mention', async () => {
+  it('ignores non-/verify comments', async () => {
     const app = createWebhookApp();
-    const payload = makePayload({
-      comment: { body: 'just a regular comment', user: { login: 'alice' }, author_association: 'COLLABORATOR' },
+    const payload = makeIssueCommentPayload({
+      comment: { body: 'looks good to me', user: { login: 'jsmith' } },
     });
+    const body = JSON.stringify(payload);
     const res = await app.request('/github', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json() as { accepted: boolean; reason: string };
-    expect(json.accepted).toBe(false);
-    expect(json.reason).toBe('no mention detected');
-  });
-
-  it('rejects unauthorized author_association', async () => {
-    const app = createWebhookApp();
-    const payload = makePayload({
-      comment: { body: '@opslane-verify review', user: { login: 'stranger' }, author_association: 'NONE' },
-    });
-    const res = await app.request('/github', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json() as { accepted: boolean; reason: string };
-    expect(json.accepted).toBe(false);
-    expect(json.reason).toBe('unauthorized author');
-  });
-
-  it('ignores issue comments (not PR comments)', async () => {
-    const app = createWebhookApp();
-    const payload = makePayload({ issue: { number: 10 } }); // no pull_request field
-    const res = await app.request('/github', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json() as { accepted: boolean; reason: string };
-    expect(json.accepted).toBe(false);
-    expect(json.reason).toBe('not a PR comment');
-  });
-
-  it('ignores non-created actions (edited, deleted)', async () => {
-    const app = createWebhookApp();
-    const payload = makePayload({ action: 'edited' });
-    const res = await app.request('/github', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json() as { accepted: boolean; reason: string };
-    expect(json.accepted).toBe(false);
-    expect(json.reason).toBe('action ignored');
-  });
-
-  it('ignores comments from the bot itself (self-trigger guard)', async () => {
-    const app = createWebhookApp();
-    const payload = makePayload({
-      comment: {
-        body: '@opslane-verify here is my review...',
-        user: { login: 'opslane-verify[bot]' },
-        author_association: 'COLLABORATOR',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'issue_comment',
+        'X-Hub-Signature-256': sign(body),
       },
-    });
-    const res = await app.request('/github', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json() as { accepted: boolean; reason: string };
-    expect(json.accepted).toBe(false);
-    expect(json.reason).toBe('bot comment ignored');
-  });
-
-  it('deduplicates deliveries', async () => {
-    const app = createWebhookApp();
-    const body = JSON.stringify(makePayload());
-    const headers = {
-      'Content-Type': 'application/json',
-      'x-github-event': 'issue_comment',
-      'svix-id': 'dedup-mention-123',
-    };
-
-    const res1 = await app.request('/github', { method: 'POST', headers, body });
-    expect(res1.status).toBe(202);
-
-    const res2 = await app.request('/github', { method: 'POST', headers, body });
-    const json2 = await res2.json() as { accepted: boolean; reason: string };
-    expect(json2.accepted).toBe(false);
-    expect(json2.reason).toBe('Duplicate delivery');
-  });
-
-  it('returns accepted:false when GITHUB_APP_SLUG is not set', async () => {
-    delete process.env.GITHUB_APP_SLUG;
-    const app = createWebhookApp();
-    const body = JSON.stringify(makePayload());
-    const res = await app.request('/github', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
       body,
     });
-    const json = await res.json() as { accepted: boolean; reason: string };
-    expect(json.accepted).toBe(false);
-    expect(json.reason).toBe('app slug not configured');
+    expect(res.status).toBe(200);
+    const json = await res.json() as { reason: string };
+    expect(json.reason).toBe('not a verify command');
+  });
+
+  it('rejects when commenter is not a collaborator', async () => {
+    const app = createWebhookApp();
+    const payload = makeIssueCommentPayload({
+      comment: { body: '/verify', user: { login: 'outsider' }, author_association: 'NONE' },
+    });
+    const body = JSON.stringify(payload);
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'issue_comment',
+        'X-Hub-Signature-256': sign(body),
+      },
+      body,
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json() as { reason: string };
+    expect(json.reason).toBe('unauthorized');
+  });
+
+  it('rejects when no repo config exists', async () => {
+    vi.mocked(findRepoConfig).mockResolvedValue(null);
+
+    const app = createWebhookApp();
+    const payload = makeIssueCommentPayload();
+    const body = JSON.stringify(payload);
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-GitHub-Event': 'issue_comment',
+        'X-Hub-Signature-256': sign(body),
+      },
+      body,
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json() as { reason: string };
+    expect(json.reason).toBe('no repo config');
   });
 });
