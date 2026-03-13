@@ -1,11 +1,13 @@
 /**
- * Live integration test — bypasses Trigger.dev and runs the review pipeline directly.
+ * Live integration test — bypasses Trigger.dev and runs pipelines directly.
  *
  * Usage:
  *   npx tsx scripts/test-live.ts <owner> <repo> <prNumber>
+ *   npx tsx scripts/test-live.ts --mention <owner> <repo> <prNumber> [message]
  *
- * Example:
+ * Examples:
  *   npx tsx scripts/test-live.ts abhishekray opslane-review-test 1
+ *   npx tsx scripts/test-live.ts --mention abhishekray opslane-review-test 1 "is this safe?"
  *
  * Requires server/.env to be populated.
  */
@@ -33,6 +35,7 @@ for (const line of readFileSync(envPath, "utf-8").split("\n")) {
 }
 
 import { runReviewPipeline } from "../src/review/pipeline.js";
+import { runMentionPipeline } from "../src/review/mention-pipeline.js";
 
 function log(step: string, msg: string, data?: unknown) {
   const ts = new Date().toISOString().slice(11, 23);
@@ -40,14 +43,7 @@ function log(step: string, msg: string, data?: unknown) {
   console.log(`[${ts}] [${step}]${extra} ${msg}`);
 }
 
-async function run() {
-  const [owner, repo, prNumberStr] = process.argv.slice(2);
-  if (!owner || !repo || !prNumberStr) {
-    console.error("Usage: npx tsx scripts/test-live.ts <owner> <repo> <prNumber>");
-    process.exit(1);
-  }
-  const prNumber = Number(prNumberStr);
-
+async function runReview(owner: string, repo: string, prNumber: number) {
   console.log(`\n🔍 Testing review pipeline for ${owner}/${repo}#${prNumber}\n`);
 
   const result = await runReviewPipeline(
@@ -68,6 +64,52 @@ async function run() {
   console.log("---\n");
 
   console.log(`\n✅ Done! Review posted: ${result.reviewUrl}\n`);
+}
+
+async function runMention(owner: string, repo: string, prNumber: number, message: string) {
+  console.log(`\n💬 Testing mention pipeline for ${owner}/${repo}#${prNumber}`);
+  console.log(`   Message: "${message || "(empty — full review)"}"\n`);
+
+  const result = await runMentionPipeline(
+    { owner, repo, prNumber, mentionComment: message },
+    {
+      log,
+      onOutputLine: () => process.stdout.write("."),
+    }
+  );
+
+  if (!result.responseText) {
+    console.error("\n❌ No response text extracted from claude output");
+    process.exit(1);
+  }
+
+  console.log("\n--- MENTION RESPONSE PREVIEW (first 500 chars) ---");
+  console.log(result.responseText.slice(0, 500));
+  console.log("---\n");
+
+  console.log(`\n✅ Done! Comment posted: ${result.commentUrl}\n`);
+}
+
+async function run() {
+  const args = process.argv.slice(2);
+  const isMention = args[0] === "--mention";
+
+  if (isMention) {
+    const [, owner, repo, prNumberStr, ...messageParts] = args;
+    if (!owner || !repo || !prNumberStr) {
+      console.error("Usage: npx tsx scripts/test-live.ts --mention <owner> <repo> <prNumber> [message]");
+      process.exit(1);
+    }
+    const message = messageParts.join(" ") || "";
+    await runMention(owner, repo, Number(prNumberStr), message);
+  } else {
+    const [owner, repo, prNumberStr] = args;
+    if (!owner || !repo || !prNumberStr) {
+      console.error("Usage: npx tsx scripts/test-live.ts <owner> <repo> <prNumber>");
+      process.exit(1);
+    }
+    await runReview(owner, repo, Number(prNumberStr));
+  }
 }
 
 run().catch((err) => {

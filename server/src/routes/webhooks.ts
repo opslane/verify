@@ -193,18 +193,20 @@ export function createWebhookApp(): Hono {
         return c.json({ accepted: false, reason: 'bot comment ignored' });
       }
 
-      // Check for @mention (escape slug for safe regex interpolation)
-      const commentBody = payload.comment?.body ?? '';
-      const mentionPattern = new RegExp(`@${escapeRegExp(appSlug)}\\b`, 'gi');
-      if (!mentionPattern.test(commentBody)) {
-        return c.json({ accepted: false, reason: 'no mention detected' });
-      }
-
-      // Authorize: only collaborators can trigger
+      // Authorize: only collaborators can trigger (checked before mention detection
+      // so unauthorized users can't probe whether the bot slug is active)
       const authorAssociation = payload.comment?.author_association ?? '';
       const allowedAssociations = ['OWNER', 'MEMBER', 'COLLABORATOR'];
       if (!allowedAssociations.includes(authorAssociation)) {
         return c.json({ accepted: false, reason: 'unauthorized author' });
+      }
+
+      // Check for @mention (escape slug for safe regex interpolation)
+      const commentBody = payload.comment?.body ?? '';
+      const escapedSlug = escapeRegExp(appSlug);
+      const mentionPattern = new RegExp(`@${escapedSlug}\\b`, 'gi');
+      if (!mentionPattern.test(commentBody)) {
+        return c.json({ accepted: false, reason: 'no mention detected' });
       }
 
       const owner = payload.repository?.owner?.login;
@@ -225,11 +227,13 @@ export function createWebhookApp(): Hono {
         return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
       }
 
-      // Strip all @mentions from the comment to get the user's actual message
+      // Strip all @mentions — new regex to avoid lastIndex state from .test() above
       const mentionComment = commentBody.replace(
-        new RegExp(`@${escapeRegExp(appSlug)}\\b`, 'gi'),
+        new RegExp(`@${escapedSlug}\\b`, 'gi'),
         ''
       ).trim();
+
+      console.log(`[mention] Dispatching for ${owner}/${repo}#${prNumber}`, { commentPreview: mentionComment.slice(0, 80) });
 
       if (process.env.TRIGGER_SECRET_KEY) {
         const mentionPayload: MentionPayload = { owner, repo, prNumber, deliveryId, mentionComment };
