@@ -201,8 +201,14 @@ COMPLETE — all 6 tasks done
   - Fixed: pg_isready wait in entrypoint, template name mismatch, pinned pnpm/yarn
   - Review score: 3.85/5 APPROVE WITH CHANGES
 
+- [x] Browser agent wiring fix (commit: 7d5ae89)
+  - Replaced pipeline placeholder with actual browser agent orchestration
+  - Added parseAcceptanceCriteria (Claude planner step) to extract testable ACs from spec
+  - Wired runBrowserAgent for each AC with credentials from config
+  - No more TODOs in critical path
+
 ### Current
-COMPLETE — all 12 tasks done, final review passed
+COMPLETE — all 12 tasks done, browser agent wired, final review passed
 
 ### Remaining
 (none)
