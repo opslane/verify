@@ -24,6 +24,7 @@ afterEach(() => {
   delete process.env.SVIX_SKIP_VERIFICATION;
   delete process.env.NODE_ENV;
   delete process.env.GITHUB_WEBHOOK_SECRET;
+  delete process.env.GITHUB_APP_SLUG;
 });
 
 // --- Installation handler tests (HMAC verification) ---
@@ -184,5 +185,160 @@ describe('POST /github — Svix + PR dispatch', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { accepted: boolean };
     expect(body.accepted).toBe(false);
+  });
+});
+
+// --- issue_comment: @mention-triggered reviews ---
+
+describe('POST /github — issue_comment @mention', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SVIX_SKIP_VERIFICATION = 'true';
+    process.env.NODE_ENV = 'test';
+    process.env.GITHUB_APP_SLUG = 'opslane-verify';
+  });
+
+  function makePayload(overrides: Record<string, unknown> = {}) {
+    return {
+      action: 'created',
+      comment: {
+        body: '@opslane-verify review this PR',
+        user: { login: 'alice' },
+        author_association: 'COLLABORATOR',
+      },
+      issue: {
+        number: 42,
+        pull_request: { url: 'https://api.github.com/repos/acme/app/pulls/42' },
+      },
+      repository: {
+        owner: { login: 'acme' },
+        name: 'app',
+      },
+      ...overrides,
+    };
+  }
+
+  it('accepts a valid @mention from a collaborator', async () => {
+    const app = createWebhookApp();
+    const body = JSON.stringify(makePayload());
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-github-event': 'issue_comment',
+      },
+      body,
+    });
+    expect(res.status).toBe(202);
+    const json = await res.json() as { accepted: boolean; trigger: string };
+    expect(json.accepted).toBe(true);
+    expect(json.trigger).toBe('mention');
+  });
+
+  it('ignores comments without @mention', async () => {
+    const app = createWebhookApp();
+    const payload = makePayload({
+      comment: { body: 'just a regular comment', user: { login: 'alice' }, author_association: 'COLLABORATOR' },
+    });
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json() as { accepted: boolean; reason: string };
+    expect(json.accepted).toBe(false);
+    expect(json.reason).toBe('no mention detected');
+  });
+
+  it('rejects unauthorized author_association', async () => {
+    const app = createWebhookApp();
+    const payload = makePayload({
+      comment: { body: '@opslane-verify review', user: { login: 'stranger' }, author_association: 'NONE' },
+    });
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json() as { accepted: boolean; reason: string };
+    expect(json.accepted).toBe(false);
+    expect(json.reason).toBe('unauthorized author');
+  });
+
+  it('ignores issue comments (not PR comments)', async () => {
+    const app = createWebhookApp();
+    const payload = makePayload({ issue: { number: 10 } }); // no pull_request field
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json() as { accepted: boolean; reason: string };
+    expect(json.accepted).toBe(false);
+    expect(json.reason).toBe('not a PR comment');
+  });
+
+  it('ignores non-created actions (edited, deleted)', async () => {
+    const app = createWebhookApp();
+    const payload = makePayload({ action: 'edited' });
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json() as { accepted: boolean; reason: string };
+    expect(json.accepted).toBe(false);
+    expect(json.reason).toBe('action ignored');
+  });
+
+  it('ignores comments from the bot itself (self-trigger guard)', async () => {
+    const app = createWebhookApp();
+    const payload = makePayload({
+      comment: {
+        body: '@opslane-verify here is my review...',
+        user: { login: 'opslane-verify[bot]' },
+        author_association: 'COLLABORATOR',
+      },
+    });
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json() as { accepted: boolean; reason: string };
+    expect(json.accepted).toBe(false);
+    expect(json.reason).toBe('bot comment ignored');
+  });
+
+  it('deduplicates deliveries', async () => {
+    const app = createWebhookApp();
+    const body = JSON.stringify(makePayload());
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-github-event': 'issue_comment',
+      'svix-id': 'dedup-mention-123',
+    };
+
+    const res1 = await app.request('/github', { method: 'POST', headers, body });
+    expect(res1.status).toBe(202);
+
+    const res2 = await app.request('/github', { method: 'POST', headers, body });
+    const json2 = await res2.json() as { accepted: boolean; reason: string };
+    expect(json2.accepted).toBe(false);
+    expect(json2.reason).toBe('Duplicate delivery');
+  });
+
+  it('returns accepted:false when GITHUB_APP_SLUG is not set', async () => {
+    delete process.env.GITHUB_APP_SLUG;
+    const app = createWebhookApp();
+    const body = JSON.stringify(makePayload());
+    const res = await app.request('/github', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-github-event': 'issue_comment' },
+      body,
+    });
+    const json = await res.json() as { accepted: boolean; reason: string };
+    expect(json.accepted).toBe(false);
+    expect(json.reason).toBe('app slug not configured');
   });
 });
