@@ -144,8 +144,13 @@ COMPLETE — all 6 tasks done
   - Files: server/src/verify/infra-services.ts, server/src/verify/infra-services.test.ts
   - 6 tests pass (install cmds, readiness probes, baked-in filtering)
 
+- [x] Task 5: Sandbox Setup Module (commit: 3684a2f)
+  - Files: server/src/verify/sandbox-setup.ts, server/src/verify/sandbox-setup.test.ts
+  - 3 tests pass (env file generation, health check cmd, default path)
+  - Decision: mock crypto.js to avoid ENCRYPTION_KEY at test load time
+
 ### Current
-Task 5: Sandbox Setup Module
+Task 6: PR Comment Formatter
 
 ### Remaining
 Task 5: Sandbox Setup Module
