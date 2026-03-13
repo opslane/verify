@@ -117,3 +117,24 @@ COMPLETE — all 6 tasks done
 - Fixed markSeen ordering (after dispatch, not before)
 - Applied simplifier: extracted pipeline.ts, fixed route double-prefix, removed dead sandbox methods, inlined buildPrApiUrl, extracted env.ts
 - Final: all 10 tasks done, 17 tests passing, live E2E verified
+
+## remote-verify-pipeline (plan: docs/plans/2026-03-12-remote-verify-implementation.md)
+
+### Completed
+(none yet)
+
+### Current
+Task 1: Encryption Module (server/src/crypto.ts)
+
+### Remaining
+Task 2: Database Migration for repo_configs
+Task 3: Spec Discovery Module
+Task 4: Infra Service Manager
+Task 5: Sandbox Setup Module
+Task 6: PR Comment Formatter
+Task 7: Verify Pipeline Orchestrator
+Task 8: Browser Agent (Claude Tool-Use Loop)
+Task 9: Verify Trigger.dev Task + Webhook Wiring
+Task 10: GitHub PR Helper — Fetch Changed Files + Post Issue Comment
+Task 11: E2B Template for Verify
+Task 12: Wire PR Comments into Pipeline
