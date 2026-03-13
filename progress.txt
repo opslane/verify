@@ -112,6 +112,22 @@ COMPLETE — all 6 tasks done
 ### Remaining
 (none)
 
+## mention-reviews (plan: docs/plans/2026-03-12-mention-triggered-reviews.md)
+
+### Completed
+(none yet)
+
+### Current
+Task 1: Add fetchPrComments and postPrComment to github/pr.ts
+
+### Remaining
+Task 2: Add buildMentionPrompt to review/prompt.ts
+Task 3: Create the mention pipeline
+Task 4: Add Trigger.dev task for mention pipeline
+Task 5: Add issue_comment webhook handler
+Task 6: Write tests for the issue_comment handler
+Task 7: Enable issue_comment event in GitHub App settings (manual)
+
 ## Post-completion fixes (code review gate — final review 3.65/5)
 - Fixed skip guard fail-secure (undefined NODE_ENV → treat as production)
 - Fixed markSeen ordering (after dispatch, not before)
