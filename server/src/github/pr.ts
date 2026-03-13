@@ -116,3 +116,73 @@ export async function createPrReview(
   const data = await res.json() as { html_url: string };
   return data.html_url;
 }
+
+export interface PrComment {
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+/** Fetch all comments on a PR (issue comments API). Filters out ghost/deleted users. Returns empty array on 404. */
+export async function fetchPrComments(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  token: string
+): Promise<PrComment[]> {
+  validateOwnerRepo(owner, repo);
+  validatePrNumber(prNumber);
+
+  const res = await fetch(
+    `${GITHUB_API}/repos/${owner}/${repo}/issues/${prNumber}/comments?per_page=100`,
+    { headers: githubHeaders(token) }
+  );
+
+  if (res.status === 404) return [];
+  if (!res.ok) {
+    throw new Error(`Failed to fetch PR comments: ${res.status}`);
+  }
+
+  const comments = await res.json() as Array<{
+    user: { login: string } | null;
+    body: string;
+    created_at: string;
+  }>;
+
+  return comments
+    .filter((c) => c.user !== null)
+    .map((c) => ({
+      author: c.user!.login,
+      body: c.body,
+      createdAt: c.created_at,
+    }));
+}
+
+/** Post a comment to a PR via the issues API. Returns the comment URL. */
+export async function postPrComment(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  body: string,
+  token: string
+): Promise<string> {
+  validateOwnerRepo(owner, repo);
+  validatePrNumber(prNumber);
+
+  const res = await fetch(
+    `${GITHUB_API}/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+    {
+      method: "POST",
+      headers: {
+        ...githubHeaders(token),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ body }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`Failed to post PR comment: ${res.status} ${await res.text()}`);
+  }
+  const data = await res.json() as { html_url: string };
+  return data.html_url;
+}
