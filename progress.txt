@@ -180,8 +180,13 @@ COMPLETE — all 6 tasks done
   - Fixed: author_association auth check, dedup ordering
   - Added test for unauthorized commenter
 
+- [x] Task 10: GitHub PR Helper (commit: 9c23d6b)
+  - Files: server/src/github/pr.ts, server/src/github/pr.test.ts
+  - Added fetchPrChangedFiles and postOrUpdateComment
+  - 3 new tests (fetchChangedFiles, create comment, update comment)
+
 ### Current
-Task 10: GitHub PR Helper — Fetch Changed Files + Post Issue Comment
+Task 11: E2B Template for Verify
 
 ### Remaining
 Task 7: Verify Pipeline Orchestrator
