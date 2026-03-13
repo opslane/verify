@@ -207,8 +207,14 @@ COMPLETE — all 6 tasks done
   - Wired runBrowserAgent for each AC with credentials from config
   - No more TODOs in critical path
 
+- [x] Post-wiring fixes (commit: 529ed22)
+  - Added prompt injection mitigation (strip </spec> tags from spec content)
+  - Extracted parseAcceptanceCriteriaJson as testable pure function
+  - 5 new tests for AC parser (valid JSON, code fences, non-JSON, missing fields, malformed)
+  - 97 tests passing (up from 92)
+
 ### Current
-COMPLETE — all 12 tasks done, browser agent wired, final review passed
+COMPLETE — all 12 tasks done, browser agent wired, 97 tests passing
 
 ### Remaining
 (none)
