@@ -1,11 +1,11 @@
 import { GitHubAppService } from '../github/app-service.js';
-import { fetchPullRequest } from '../github/pr.js';
+import { fetchPullRequest, fetchPrChangedFiles, postOrUpdateComment } from '../github/pr.js';
 import { findRepoConfig } from '../db.js';
 import { E2BSandboxProvider } from '../sandbox/e2b-provider.js';
 import { requireEnv } from '../env.js';
 import { discoverSpec } from './spec-discovery.js';
 import { setupSandbox } from './sandbox-setup.js';
-import { formatStartupFailureComment, formatNoSpecComment } from './comment.js';
+import { VERIFY_MARKER, formatVerifyComment, formatStartupFailureComment, formatNoSpecComment } from './comment.js';
 import type { AcResult } from './comment.js';
 
 const VERIFY_TEMPLATE = process.env.E2B_VERIFY_TEMPLATE ?? 'opslane-verify-v2';
@@ -52,17 +52,18 @@ export async function runVerifyPipeline(
   // 3. Fetch PR metadata
   const prMeta = await fetchPullRequest(owner, repo, prNumber, token);
 
-  // 4. Spec discovery
-  // TODO: Task 10 adds fetchPrChangedFiles — for now, spec discovery
-  // uses only PR body since we don't have changed files yet
+  // 4. Fetch changed files + spec discovery
+  const changedFiles = await fetchPrChangedFiles(owner, repo, prNumber, token);
   const spec = discoverSpec({
-    changedFiles: [], // Will be populated when fetchPrChangedFiles is added (Task 10)
+    changedFiles: changedFiles.map((f) => ({ filename: f.filename, status: f.status })),
     prBody: prMeta.body ?? '',
   });
 
   if (spec.type === 'no-spec') {
     log('spec', 'No spec found — posting no-spec comment');
-    return { mode: 'no-spec', comment: formatNoSpecComment() };
+    const comment = formatNoSpecComment();
+    await postOrUpdateComment(owner, repo, prNumber, comment, VERIFY_MARKER, token);
+    return { mode: 'no-spec', comment };
   }
 
   // 5. Validate branch name
@@ -115,15 +116,21 @@ export async function runVerifyPipeline(
         error: setupResult.error ?? 'Unknown error',
         serverLog: setupResult.serverLog ?? 'No log available',
       });
+      await postOrUpdateComment(owner, repo, prNumber, comment, VERIFY_MARKER, token);
       return { mode: 'startup-failed', comment };
     }
 
     // 10. Run verify pipeline stages (planner → agents → judge)
-    // TODO: Implement in Task 8 — browser agent orchestration
+    // TODO: Implement browser agent orchestration (runBrowserAgent from browser-agent.ts)
     log('verify', `Running verify against spec (${specContent.length} chars)`);
 
-    // Placeholder — will be implemented in Task 8
-    return { mode: 'verified', passed: 0, total: 0, results: [] };
+    // Placeholder — browser agent integration pending
+    const results: AcResult[] = [];
+    const passed = results.filter((r) => r.result === 'pass').length;
+    const specPath = spec.type === 'plan-file' ? spec.specPath : '(PR body)';
+    const comment = formatVerifyComment({ specPath, port: config.port, results });
+    await postOrUpdateComment(owner, repo, prNumber, comment, VERIFY_MARKER, token);
+    return { mode: 'verified', passed, total: results.length, results };
 
   } finally {
     log('cleanup', 'Destroying sandbox');
