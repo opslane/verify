@@ -1,7 +1,6 @@
 import type { SandboxProvider } from '../sandbox/types.js';
 import type { RepoConfig } from '../db.js';
 import { decrypt } from '../crypto.js';
-import { buildInstallCommands, buildReadinessProbe, hasServiceDef } from './infra-services.js';
 import { drain, collect } from '../sandbox/stream.js';
 
 /** Escape a value for double-quoted .env format */
@@ -24,6 +23,13 @@ export function buildHealthCheckCommand(port: number, healthPath = '/'): string 
   }
   // Use sentinel prefix so we can reliably extract the status code from PTY noise
   return `curl -sf -o /dev/null -w "HEALTH_STATUS:%{http_code}" --max-time 5 http://localhost:${port}${path}`;
+}
+
+const SAFE_COMPOSE = /^[a-zA-Z0-9._\-/]+\.ya?ml$/;
+
+/** Validate compose_file path is safe for shell interpolation. Exported for testing. */
+export function validateComposeFile(path: string): boolean {
+  return SAFE_COMPOSE.test(path) && !path.includes('..');
 }
 
 interface SetupResult {
@@ -53,60 +59,48 @@ export async function setupSandbox(
     await provider.uploadFiles(sandboxId, [{ path: `${workDir}/.env`, content: envContent }]);
   }
 
-  // 2. Install runtime infra services
-  const infraServices = config.detected_infra ?? [];
-  if (infraServices.length > 0) {
-    const commands = buildInstallCommands(infraServices);
-    for (const cmd of commands) {
-      log('infra', `Running: ${cmd.slice(0, 80)}...`);
-      await drain(provider.runCommand(sandboxId, cmd, { rawOutput: true }));
+  // 2. Docker Compose (if compose_file configured)
+  if (config.compose_file) {
+    if (!validateComposeFile(config.compose_file)) {
+      return { success: false, error: `Invalid compose_file path: ${config.compose_file}` };
     }
-
-    // Wait for readiness
-    for (const svc of infraServices) {
-      if (!hasServiceDef(svc)) continue;
-      const probe = buildReadinessProbe(svc);
-      log('infra', `Waiting for ${svc} on port ${probe.port}`);
-      let ready = false;
-      for (let attempt = 0; attempt < probe.maxRetries; attempt++) {
-        try {
-          await drain(provider.runCommand(sandboxId, `${probe.command} && echo READY`, { rawOutput: true }));
-          log('infra', `${svc} is ready`);
-          ready = true;
-          break;
-        } catch {
-          await new Promise((r) => setTimeout(r, probe.intervalMs));
-        }
-      }
-      if (!ready) {
-        return { success: false, error: `${svc} failed readiness check after ${probe.maxRetries} attempts` };
-      }
+    log('compose', `Starting infra: docker compose -f ${config.compose_file} up -d --wait`);
+    try {
+      await drain(provider.runCommand(
+        sandboxId,
+        `docker compose -f ${config.compose_file} up -d --wait`,
+        { cwd: workDir, timeoutMs: 180_000, rawOutput: true },
+      ));
+      log('compose', 'Docker Compose services are up');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: `Docker Compose failed: ${msg}` };
     }
   }
 
-  // 3. Install dependencies
+  // 3. Install dependencies (always — idempotent, fast no-op if unchanged)
   const installCmd = config.install_command ?? 'npm install';
   log('install', `Running: ${installCmd}`);
   await drain(provider.runCommand(sandboxId, installCmd, { cwd: workDir, timeoutMs: 480_000, rawOutput: true }));
 
-  // Playwright + Chromium are pre-installed in the opslane-verify-v2 E2B template
-
-  // 4. Run pre-start script
-  if (config.pre_start_script) {
-    log('pre-start', 'Running pre-start script');
-    await provider.uploadFiles(sandboxId, [{
-      path: '/tmp/verify-prestart.sh',
-      content: config.pre_start_script,
-    }]);
-    await drain(provider.runCommand(sandboxId, 'chmod +x /tmp/verify-prestart.sh && /tmp/verify-prestart.sh', { cwd: workDir, rawOutput: true }));
+  // 4. Schema push (if schema_command configured — idempotent)
+  if (config.schema_command) {
+    log('schema', `Running: ${config.schema_command}`);
+    await drain(provider.runCommand(sandboxId, config.schema_command, { cwd: workDir, timeoutMs: 120_000, rawOutput: true }));
   }
 
-  // 5. Start the app (fire-and-forget — health check validates it started)
-  log('start', `Starting app: ${config.startup_command}`);
+  // 5. Seed DB (if seed_command configured)
+  if (config.seed_command) {
+    log('seed', `Running: ${config.seed_command}`);
+    await drain(provider.runCommand(sandboxId, config.seed_command, { cwd: workDir, timeoutMs: 120_000, rawOutput: true }));
+  }
+
+  // 6. Start dev server (fire-and-forget — health check validates it started)
+  log('start', `Starting dev server: ${config.dev_command}`);
   try {
     await drain(provider.runCommand(
       sandboxId,
-      `nohup ${config.startup_command} > /tmp/server.log 2>&1 & echo $! > /tmp/server.pid && sleep 1`,
+      `nohup ${config.dev_command} > /tmp/server.log 2>&1 & echo $! > /tmp/server.pid && sleep 1`,
       { cwd: workDir, rawOutput: true, timeoutMs: 10_000 },
     ));
   } catch (err) {
@@ -118,7 +112,7 @@ export async function setupSandbox(
     }
   }
 
-  // 6. Health check — poll until 2xx or timeout
+  // 7. Health check — poll until 2xx or timeout
   const healthCmd = buildHealthCheckCommand(config.port, config.health_path);
   const maxWaitMs = 120_000;
   const intervalMs = 2_000;

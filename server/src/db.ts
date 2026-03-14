@@ -80,15 +80,18 @@ export interface RepoConfig {
   installation_id: number | null;
   owner: string;
   repo: string;
-  startup_command: string;
+  dev_command: string;
   port: number;
   install_command: string | null;
-  pre_start_script: string | null;
   health_path: string;
   test_email: string | null;
   test_password: string | null;
   env_vars: Record<string, string> | null;
-  detected_infra: string[];
+  compose_file: string | null;
+  schema_command: string | null;
+  seed_command: string | null;
+  login_script: string | null;
+  sandbox_template: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -97,41 +100,51 @@ export async function upsertRepoConfig(params: {
   installationId: number | null;
   owner: string;
   repo: string;
-  startupCommand: string;
+  devCommand: string;
   port: number;
   installCommand?: string | null;
-  preStartScript?: string | null;
   healthPath?: string;
   testEmail?: string | null;
   testPassword?: string | null;
   envVars?: Record<string, string> | null;
-  detectedInfra?: string[];
+  composeFile?: string | null;
+  schemaCommand?: string | null;
+  seedCommand?: string | null;
+  loginScript?: string | null;
+  sandboxTemplate?: string | null;
 }): Promise<RepoConfig> {
   const rows = await sql<RepoConfig[]>`
     INSERT INTO repo_configs (
-      installation_id, owner, repo, startup_command, port,
-      install_command, pre_start_script, health_path,
-      test_email, test_password, env_vars, detected_infra
+      installation_id, owner, repo, dev_command, port,
+      install_command, health_path,
+      test_email, test_password, env_vars,
+      compose_file, schema_command, seed_command,
+      login_script, sandbox_template
     ) VALUES (
       ${params.installationId}, ${params.owner}, ${params.repo},
-      ${params.startupCommand}, ${params.port},
-      ${params.installCommand ?? null}, ${params.preStartScript ?? null},
-      ${params.healthPath ?? '/'}, ${params.testEmail ?? null},
-      ${params.testPassword ?? null},
+      ${params.devCommand}, ${params.port},
+      ${params.installCommand ?? null},
+      ${params.healthPath ?? '/'},
+      ${params.testEmail ?? null}, ${params.testPassword ?? null},
       ${params.envVars ? sql.json(params.envVars) : null},
-      ${sql.json(params.detectedInfra ?? [])}
+      ${params.composeFile ?? null}, ${params.schemaCommand ?? null},
+      ${params.seedCommand ?? null}, ${params.loginScript ?? null},
+      ${params.sandboxTemplate ?? null}
     )
     ON CONFLICT (owner, repo) DO UPDATE SET
       installation_id = EXCLUDED.installation_id,
-      startup_command = EXCLUDED.startup_command,
+      dev_command = EXCLUDED.dev_command,
       port = EXCLUDED.port,
       install_command = EXCLUDED.install_command,
-      pre_start_script = EXCLUDED.pre_start_script,
       health_path = EXCLUDED.health_path,
       test_email = EXCLUDED.test_email,
       test_password = EXCLUDED.test_password,
       env_vars = EXCLUDED.env_vars,
-      detected_infra = EXCLUDED.detected_infra,
+      compose_file = EXCLUDED.compose_file,
+      schema_command = EXCLUDED.schema_command,
+      seed_command = EXCLUDED.seed_command,
+      login_script = EXCLUDED.login_script,
+      sandbox_template = EXCLUDED.sandbox_template,
       updated_at = now()
     RETURNING *
   `;

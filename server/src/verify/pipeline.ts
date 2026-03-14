@@ -81,7 +81,7 @@ export async function runVerifyPipeline(
   log('sandbox', 'Creating E2B sandbox');
   const provider = new E2BSandboxProvider();
   const sandbox = await provider.create({
-    template: VERIFY_TEMPLATE,
+    template: config.sandbox_template ?? VERIFY_TEMPLATE,
     timeoutMs: VERIFY_TIMEOUT_MS,
     envVars: {
       GIT_TERMINAL_PROMPT: '0',

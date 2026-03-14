@@ -152,13 +152,13 @@ describe('db helpers (integration)', () => {
         installationId: 55001,
         owner: 'testorg',
         repo: 'testrepo',
-        startupCommand: 'npm run dev',
+        devCommand: 'npm run dev',
         port: 3000,
       });
 
       const config = await findRepoConfig('testorg', 'testrepo');
       expect(config).not.toBeNull();
-      expect(config!.startup_command).toBe('npm run dev');
+      expect(config!.dev_command).toBe('npm run dev');
       expect(config!.port).toBe(3000);
       expect(config!.health_path).toBe('/');
     });
@@ -176,7 +176,7 @@ describe('db helpers (integration)', () => {
         installationId: 55001,
         owner: 'testorg',
         repo: 'testrepo',
-        startupCommand: 'npm run dev',
+        devCommand: 'npm run dev',
         port: 3000,
       });
 
@@ -184,17 +184,41 @@ describe('db helpers (integration)', () => {
         installationId: 55001,
         owner: 'testorg',
         repo: 'testrepo',
-        startupCommand: 'pnpm dev',
+        devCommand: 'pnpm dev',
         port: 3001,
         healthPath: '/api/health',
-        detectedInfra: ['postgres', 'minio'],
       });
 
       const config = await findRepoConfig('testorg', 'testrepo');
-      expect(config!.startup_command).toBe('pnpm dev');
+      expect(config!.dev_command).toBe('pnpm dev');
       expect(config!.port).toBe(3001);
       expect(config!.health_path).toBe('/api/health');
-      expect(config!.detected_infra).toEqual(['postgres', 'minio']);
+    });
+
+    it('upserts repo config with v2 fields (compose_file, schema_command, seed_command)', async () => {
+      const { upsertRepoConfig, findRepoConfig } = await import('./db.js');
+
+      await upsertRepoConfig({
+        installationId: 55001,
+        owner: 'v2org',
+        repo: 'v2repo',
+        devCommand: 'pnpm --filter @app/web dev',
+        port: 3000,
+        composeFile: 'docker-compose.dev.yml',
+        schemaCommand: 'npx prisma db push --accept-data-loss',
+        seedCommand: 'pnpm db:seed',
+        loginScript: 'await page.goto("/login"); await page.fill("#email", "test@test.com");',
+        sandboxTemplate: 'opslane-formbricks',
+      });
+
+      const config = await findRepoConfig('v2org', 'v2repo');
+      expect(config).not.toBeNull();
+      expect(config!.dev_command).toBe('pnpm --filter @app/web dev');
+      expect(config!.compose_file).toBe('docker-compose.dev.yml');
+      expect(config!.schema_command).toBe('npx prisma db push --accept-data-loss');
+      expect(config!.seed_command).toBe('pnpm db:seed');
+      expect(config!.login_script).toContain('page.goto');
+      expect(config!.sandbox_template).toBe('opslane-formbricks');
     });
   });
 

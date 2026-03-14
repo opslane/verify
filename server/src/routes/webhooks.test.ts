@@ -223,9 +223,10 @@ describe('POST /github — issue_comment (/verify)', () => {
   it('accepts /verify comment when repo config exists', async () => {
     vi.mocked(findRepoConfig).mockResolvedValue({
       id: 'cfg-uuid', installation_id: 1, owner: 'org', repo: 'repo',
-      startup_command: 'npm start', port: 3000, install_command: null,
-      pre_start_script: null, health_path: '/', test_email: null,
-      test_password: null, env_vars: null, detected_infra: [],
+      dev_command: 'npm run dev', port: 3000, install_command: null,
+      health_path: '/', test_email: null, test_password: null,
+      env_vars: null, compose_file: null, schema_command: null,
+      seed_command: null, login_script: null, sandbox_template: null,
       created_at: new Date(), updated_at: new Date(),
     });
 
