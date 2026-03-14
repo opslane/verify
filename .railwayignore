@@ -1,0 +1,10 @@
+node_modules
+.git
+.verify
+.playwright-mcp
+.worktrees
+docs
+tests
+scripts
+skills
+*.md

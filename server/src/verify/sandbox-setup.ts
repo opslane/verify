@@ -22,8 +22,9 @@ export function buildHealthCheckCommand(port: number, healthPath = '/'): string 
   if (!VALID_PATH.test(path)) {
     throw new Error(`Invalid health path: ${path}`);
   }
-  // Use sentinel prefix so we can reliably extract the status code from PTY noise
-  return `curl -sf -o /dev/null -w "HEALTH_STATUS:%{http_code}" --max-time 5 http://localhost:${port}${path}`;
+  // Use sentinel prefix so we can reliably extract the status code from PTY noise.
+  // No -f flag: we want the status code even on HTTP errors (4xx/5xx).
+  return `curl -s -o /dev/null -w "HEALTH_STATUS:%{http_code}" --max-time 10 http://localhost:${port}${path}`;
 }
 
 interface SetupResult {
@@ -103,10 +104,13 @@ export async function setupSandbox(
 
   // 5. Start the app (fire-and-forget — health check validates it started)
   log('start', `Starting app: ${config.startup_command}`);
+  // Write a wrapper script to avoid nohup/env-var/quoting issues
+  const startScript = `#!/bin/bash\ncd ${workDir}\n${config.startup_command} > /tmp/server.log 2>&1 &\necho $! > /tmp/server.pid\n`;
+  await provider.uploadFiles(sandboxId, [{ path: '/tmp/start-app.sh', content: startScript }]);
   try {
     await drain(provider.runCommand(
       sandboxId,
-      `nohup ${config.startup_command} > /tmp/server.log 2>&1 & echo $! > /tmp/server.pid && sleep 1`,
+      'chmod +x /tmp/start-app.sh && /tmp/start-app.sh && sleep 1',
       { cwd: workDir, rawOutput: true, timeoutMs: 10_000 },
     ));
   } catch (err) {

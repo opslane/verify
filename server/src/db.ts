@@ -89,6 +89,8 @@ export interface RepoConfig {
   test_password: string | null;
   env_vars: Record<string, string> | null;
   detected_infra: string[];
+  sandbox_template: string | null;
+  login_script: string | null;
   created_at: Date;
   updated_at: Date;
 }

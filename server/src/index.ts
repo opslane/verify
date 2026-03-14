@@ -36,6 +36,7 @@ const server = serve({ fetch: app.fetch, port }, () => {
 // Graceful shutdown — close server and DB pool on SIGTERM/SIGINT
 async function shutdown() {
   server.close();
+  process.exit(0);
 }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

@@ -38,11 +38,12 @@ NAVIGATION PATTERN:
 
   if (input.testEmail || input.testPassword) {
     prompt += `
-**Test Credentials:**
+**Authentication:**
+The browser is already logged in with pre-injected session cookies. You do NOT need to log in — just navigate directly to the page you need.
+If you unexpectedly land on a login page, these fallback credentials are available:
 - Email: ${input.testEmail ?? 'N/A'}
 - Password: ${input.testPassword ?? 'N/A'}
-
-Use these credentials if the criterion requires authentication.
+But try navigating to the base URL first — cookies should handle authentication automatically.
 `;
   }
 
@@ -141,7 +142,7 @@ export interface AgentVerdict {
 }
 
 const CDP_PORT = 9222;
-const SANDBOX_ENV = 'NODE_PATH=/usr/local/lib/node_modules:/usr/lib/node_modules PLAYWRIGHT_BROWSERS_PATH=/ms-playwright';
+const SANDBOX_ENV = 'NODE_PATH=/home/user/.local/node_modules:/usr/local/lib/node_modules:/usr/lib/node_modules PLAYWRIGHT_BROWSERS_PATH=/ms-playwright';
 
 /** Chromium launch args optimized for E2B containers (matches opslane-v2) */
 const CHROMIUM_LAUNCH_ARGS = [
@@ -320,6 +321,154 @@ export async function ensureBrowserRunning(
     // File doesn't exist — launch browser
   }
   await launchPersistentBrowser(provider, sandboxId, log);
+}
+
+/**
+ * Run the customer's login script in a separate Playwright browser, capture
+ * the session cookies, then inject them into the persistent CDP browser.
+ *
+ * The login_script is a Playwright snippet provided by the customer during
+ * repo setup. It uses `page`, `EMAIL`, and `PASSWORD` variables.
+ * Example (formbricks):
+ *   await page.getByRole('button', { name: 'Login with Email' }).click();
+ *   await page.getByPlaceholder('work@email.com').fill(EMAIL);
+ *   ...
+ *
+ * This runs fresh each pipeline execution so cookies match the sandbox's DB state.
+ */
+export async function loginAndInjectAuth(
+  provider: SandboxProvider,
+  sandboxId: string,
+  baseUrl: string,
+  loginScript: string,
+  email: string,
+  password: string,
+  log: (msg: string) => void,
+): Promise<boolean> {
+  log('Running login script to capture fresh cookies...');
+
+  // Build a standalone Playwright script that:
+  // 1. Opens a new browser
+  // 2. Navigates to login page
+  // 3. Runs the customer's login script
+  // 4. Captures storageState (cookies + localStorage)
+  // 5. Outputs it as JSON
+  const captureScript = `const { chromium } = require('playwright');
+
+(async () => {
+  try {
+    const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    const EMAIL = ${JSON.stringify(email)};
+    const PASSWORD = ${JSON.stringify(password)};
+
+    // Navigate to login page
+    await page.goto(${JSON.stringify(baseUrl + '/auth/login')}, { waitUntil: 'networkidle', timeout: 15000 });
+
+    // Run customer login script
+    ${loginScript}
+
+    // Wait for navigation away from login
+    await page.waitForURL(url => !url.toString().includes('/auth/login') && !url.toString().includes('/setup/'), { timeout: 15000 });
+
+    // Capture storage state
+    const state = await context.storageState();
+    console.log(JSON.stringify({ ok: true, state }));
+    await browser.close();
+  } catch (err) {
+    console.log(JSON.stringify({ ok: false, error: err.message }));
+    process.exit(1);
+  }
+})();
+`;
+
+  await provider.uploadFiles(sandboxId, [{ path: '/home/user/verify-capture-auth.cjs', content: captureScript }]);
+
+  let output: string;
+  try {
+    output = await collectOutput(provider.runCommand(
+      sandboxId,
+      `${SANDBOX_ENV} node /home/user/verify-capture-auth.cjs`,
+      { rawOutput: true, timeoutMs: 60_000 },
+    ));
+  } catch (err: unknown) {
+    const ptyErr = err as { ptyOutput?: string };
+    output = ptyErr.ptyOutput ?? '';
+    log(`Login script exited with error: ${output.slice(0, 200)}`);
+  }
+
+  // Parse the captured storageState
+  let storageState: { cookies: Array<Record<string, unknown>>; origins: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }> } | null = null;
+  for (const line of output.split('\n')) {
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed.ok && parsed.state?.cookies) {
+        storageState = parsed.state;
+        break;
+      } else if (!parsed.ok) {
+        log(`Login script error: ${parsed.error}`);
+        return false;
+      }
+    } catch { /* not JSON */ }
+  }
+
+  if (!storageState) {
+    log('Login script failed — no storageState captured');
+    return false;
+  }
+
+  log(`Captured ${storageState.cookies.length} cookies — injecting into persistent browser`);
+
+  // Inject the captured cookies into the persistent CDP browser
+  const injectScript = buildToolScript(`
+    const state = ${JSON.stringify(storageState)};
+    const context = page.context();
+
+    if (state.cookies && state.cookies.length > 0) {
+      await context.addCookies(state.cookies);
+    }
+
+    if (state.origins && state.origins.length > 0) {
+      for (const origin of state.origins) {
+        if (origin.localStorage && origin.localStorage.length > 0) {
+          await page.goto(${JSON.stringify(baseUrl)}, { waitUntil: 'commit', timeout: 10000 }).catch(() => {});
+          await page.evaluate((items) => {
+            for (const item of items) {
+              localStorage.setItem(item.name, item.value);
+            }
+          }, origin.localStorage);
+        }
+      }
+    }
+
+    await page.goto(${JSON.stringify(baseUrl)}, { waitUntil: 'networkidle', timeout: 15000 });
+    return { url: page.url(), title: await page.title() };
+  `);
+
+  await provider.uploadFiles(sandboxId, [{ path: '/home/user/verify-browser-tool.cjs', content: injectScript }]);
+  const injectOutput = await collectOutput(provider.runCommand(
+    sandboxId, `${SANDBOX_ENV} node /home/user/verify-browser-tool.cjs`, { rawOutput: true, timeoutMs: 30_000 },
+  ));
+
+  // Check result
+  for (const line of injectOutput.split('\n')) {
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed.ok) {
+        const url = parsed.result?.url ?? '';
+        const isAuth = !url.includes('/auth/login') && !url.includes('/setup/');
+        log(isAuth
+          ? `Auth success — landed on ${url}`
+          : `Cookies injected but landed on ${url} (login may have failed)`);
+        return isAuth;
+      }
+    } catch { /* not JSON */ }
+  }
+
+  log('Auth injection — no parseable output');
+  return false;
 }
 
 export async function runBrowserAgent(

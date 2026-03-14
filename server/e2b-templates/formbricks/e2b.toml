@@ -1,0 +1,17 @@
+# This is a config for E2B sandbox template.
+# You can use template ID (okkpci24ikz5p89vwn09) or template name (opslane-formbricks) to create a sandbox:
+
+# Python SDK
+# from e2b import Sandbox, AsyncSandbox
+# sandbox = Sandbox.create("opslane-formbricks") # Sync sandbox
+# sandbox = await AsyncSandbox.create("opslane-formbricks") # Async sandbox
+
+# JS SDK
+# import { Sandbox } from 'e2b'
+# const sandbox = await Sandbox.create('opslane-formbricks')
+
+team_id = "824cf00b-6c58-49e6-ae5f-a8419069a091"
+start_cmd = "/entrypoint.sh"
+dockerfile = "Dockerfile"
+template_name = "opslane-formbricks"
+template_id = "okkpci24ikz5p89vwn09"

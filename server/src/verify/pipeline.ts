@@ -8,7 +8,7 @@ import { decrypt } from '../crypto.js';
 import { drain } from '../sandbox/stream.js';
 import { discoverSpec } from './spec-discovery.js';
 import { setupSandbox } from './sandbox-setup.js';
-import { runBrowserAgent, ensureBrowserRunning } from './browser-agent.js';
+import { runBrowserAgent, ensureBrowserRunning, loginAndInjectAuth } from './browser-agent.js';
 import { VERIFY_MARKER, formatVerifyComment, formatStartupFailureComment, formatNoSpecComment } from './comment.js';
 import type { AcResult } from './comment.js';
 
@@ -81,7 +81,7 @@ export async function runVerifyPipeline(
   log('sandbox', 'Creating E2B sandbox');
   const provider = new E2BSandboxProvider();
   const sandbox = await provider.create({
-    template: VERIFY_TEMPLATE,
+    template: config.sandbox_template ?? VERIFY_TEMPLATE,
     timeoutMs: VERIFY_TIMEOUT_MS,
     envVars: {
       GIT_TERMINAL_PROMPT: '0',
@@ -91,17 +91,26 @@ export async function runVerifyPipeline(
   });
 
   try {
-    // 7. Clone repo
+    // 7. Clone repo (or update if custom template pre-populated /home/user/repo)
     log('clone', `Cloning ${owner}/${repo}@${prMeta.headBranch}`);
     const authCloneUrl = prMeta.cloneUrl.replace(
       'https://github.com/',
       `https://x-access-token:${token}@github.com/`,
     );
-    await drain(provider.runCommand(
-      sandbox.id,
-      `git clone --depth=1 --branch '${prMeta.headBranch}' '${authCloneUrl}' /home/user/repo`,
-      { rawOutput: true },
-    ));
+    if (config.sandbox_template) {
+      // Custom template: repo is pre-cloned with deps installed — just fetch the PR branch
+      await drain(provider.runCommand(
+        sandbox.id,
+        `cd /home/user/repo && git remote set-url origin '${authCloneUrl}' && git fetch --depth=1 origin '${prMeta.headBranch}' && git checkout FETCH_HEAD`,
+        { rawOutput: true },
+      ));
+    } else {
+      await drain(provider.runCommand(
+        sandbox.id,
+        `git clone --depth=1 --branch '${prMeta.headBranch}' '${authCloneUrl}' /home/user/repo`,
+        { rawOutput: true },
+      ));
+    }
 
     // 8. If plan-file spec, fetch its content from the cloned repo
     let specContent: string;
@@ -142,8 +151,22 @@ export async function runVerifyPipeline(
     const testPassword = config.test_password ? decrypt(config.test_password) : undefined;
     const results: AcResult[] = [];
 
+    // Ensure playwright npm package is available (custom templates may not have it)
+    log('agent', 'Ensuring playwright package is installed');
+    await drain(provider.runCommand(sandbox.id, 'node -e "require(\'playwright\')" 2>/dev/null || npm install --prefix /home/user/.local playwright@latest', { rawOutput: true, timeoutMs: 120_000 }));
+
     log('agent', 'Launching persistent browser');
     await ensureBrowserRunning(provider, sandbox.id, (msg) => log('agent', msg));
+
+    // Pre-authenticate: run customer's login script, capture cookies, inject into browser
+    if (config.login_script && testEmail && testPassword) {
+      log('agent', 'Running login script to pre-authenticate browser');
+      const authOk = await loginAndInjectAuth(
+        provider, sandbox.id, baseUrl, config.login_script, testEmail, testPassword,
+        (msg) => log('agent', msg),
+      );
+      log('agent', authOk ? 'Browser pre-authenticated' : 'Login script failed — agent will handle login');
+    }
 
     for (const ac of criteria) {
       if (ac.testable === false) {
