@@ -1,13 +1,14 @@
 #!/bin/bash
 set -e
 
-# Start Postgres and wait for readiness
-pg_ctlcluster 16 main start
-until pg_isready -q; do sleep 0.2; done
-su - postgres -c "createdb app" 2>/dev/null || true
+# Start Docker daemon
+dockerd > /var/log/dockerd.log 2>&1 &
 
-# Start Redis
-redis-server --daemonize yes
+# Wait for Docker to be ready
+until docker info > /dev/null 2>&1; do sleep 0.5; done
+
+# Allow non-root user to access Docker
+chmod 666 /var/run/docker.sock
 
 # Keep container alive
 sleep infinity

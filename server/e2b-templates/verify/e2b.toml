@@ -1,4 +1,19 @@
-memory_mb = 4_096
-cpu_count = 2
+# This is a config for E2B sandbox template.
+# You can use template ID (56arqxmlnxc5f5bvb5sj) or template name (opslane-verify-v2) to create a sandbox:
+
+# Python SDK
+# from e2b import Sandbox, AsyncSandbox
+# sandbox = Sandbox.create("opslane-verify-v2") # Sync sandbox
+# sandbox = await AsyncSandbox.create("opslane-verify-v2") # Async sandbox
+
+# JS SDK
+# import { Sandbox } from 'e2b'
+# const sandbox = await Sandbox.create('opslane-verify-v2')
+
+team_id = "824cf00b-6c58-49e6-ae5f-a8419069a091"
+memory_mb = 8_192
+cpu_count = 4
+start_cmd = "/entrypoint.sh"
 dockerfile = "Dockerfile"
 template_name = "opslane-verify-v2"
+template_id = "56arqxmlnxc5f5bvb5sj"
