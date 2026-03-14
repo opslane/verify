@@ -286,11 +286,17 @@ COMPLETE — all 5 tasks done, code review passed, 93 tests passing
 ## sandbox-v2-verification (plan: docs/plans/2026-03-14-sandbox-v2-verification.md)
 
 ### Completed
-(none yet)
+- [x] Phase 1 + Phase 2: E2B template + Docker + Compose (commit: 47ae9de)
+  - Dockerfile: Docker CE 29.3.0 + Compose v5.1.0, no baked-in PG/Redis
+  - Entrypoint: dockerd + chmod socket for non-root
+  - e2b.toml: 8GB/4CPU
+  - AC-1 PASS: Docker runs, no baked-in services
+  - AC-2 PASS: Compose starts PG+Redis in 14.5s, both reachable
+  - AC-4 PASS: No OOM kills
+  - Total sandbox lifecycle: 21.8s
 
 ### Current
-Phase 1: Update E2B template (Docker in, Postgres/Redis out) + test script
+Phase 3: Prove setupSandbox() works end-to-end with compose
 
 ### Remaining
-Phase 2: Prove Docker Compose starts services inside E2B
-Phase 3: Prove setupSandbox() works end-to-end with compose
+(none after Phase 3)
