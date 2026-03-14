@@ -271,8 +271,14 @@ COMPLETE — all 12 tasks done, browser agent wired, 97 tests passing
   - 93 unit tests pass, 6 new tests (validateComposeFile + health path rejection)
   - tsc --noEmit clean, zero old field references in src/
 
+- [x] Task 5: Code review gate + fixes (commit: a132f17)
+  - Fixed: SAFE_COMPOSE regex now rejects absolute paths (must start with alphanumeric)
+  - Added: trust boundary comment for shell-interpolated command fields
+  - Added: absolute path rejection test
+  - Final: tsc clean, 93 tests pass, zero old field refs in src/
+
 ### Current
-Task 5: Code review gate + final verification
+COMPLETE — all 5 tasks done, code review passed, 93 tests passing
 
 ### Remaining
-(none after review)
+(none)
