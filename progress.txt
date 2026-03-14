@@ -295,8 +295,15 @@ COMPLETE — all 5 tasks done, code review passed, 93 tests passing
   - AC-4 PASS: No OOM kills
   - Total sandbox lifecycle: 21.8s
 
+- [x] Phase 3: setupSandbox() end-to-end (commit: f0fbb3c)
+  - AC-3 PASS: setupSandbox() returns { success: true }
+  - Timing: compose 11.5s, npm install 5.3s, schema <1s, total setup 27.7s
+  - AC-5 PASS: well within 5-8 min target (actual: ~30s for trivial app)
+  - No OOM kills
+  - 8GB RAM available, Docker + PG + Node + Playwright all running
+
 ### Current
-Phase 3: Prove setupSandbox() works end-to-end with compose
+COMPLETE — all ACs proven
 
 ### Remaining
-(none after Phase 3)
+(none)
