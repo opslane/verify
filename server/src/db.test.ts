@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import postgres from 'postgres';
 import { runMigrations } from './migrate.js';
 
@@ -9,6 +9,9 @@ describe('db helpers (integration)', () => {
 
   beforeAll(async () => {
     if (!TEST_DB) throw new Error('TEST_DATABASE_URL not set');
+    // Point db.js at the test database so upserts write to the same DB we assert against
+    process.env.DATABASE_URL = TEST_DB;
+    vi.resetModules();
     await runMigrations(TEST_DB);
     sql = postgres(TEST_DB);
     // Clean slate for this test run

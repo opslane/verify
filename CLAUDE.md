@@ -61,16 +61,17 @@ GitHub App webhook → /webhooks/github → HMAC verify → installation.created
 
 ### Server
 - Dev: `cd server && npm run dev` (loads `.env` via `--env-file`)
-- Tests (unit only): `cd server && npm test`
-- Tests (with DB integration): `cd server && DATABASE_URL=postgres://... TEST_DATABASE_URL=postgres://... npm test`
+- Tests (all, with .env): `cd server && node --env-file=.env ./node_modules/.bin/vitest run`
 - Docker smoke test: `bash scripts/test-docker.sh`
 - Required DB setup: `createdb verify_dev && createdb verify_test`
 
 ## Verification (run in this order before every commit)
 For server changes:
 1. `cd server && npx tsc --noEmit` — fix all type errors
-2. `cd server && DATABASE_URL=... TEST_DATABASE_URL=... npm test` — fix all failing tests
+2. `cd server && node --env-file=.env ./node_modules/.bin/vitest run` — fix all failing tests (loads .env for DB + secrets)
 3. Check no `any` escapes or eslint-disable without justification
+
+**Important:** Always run tests with `.env` loaded. `npm test` alone does NOT load `.env`, so DB integration and webhook tests will fail with misleading errors (skipped tests, missing secrets). Use `node --env-file=.env` as shown above.
 
 ## Conventions
 

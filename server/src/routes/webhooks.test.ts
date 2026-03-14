@@ -226,6 +226,7 @@ describe('POST /github — issue_comment (/verify)', () => {
       startup_command: 'npm start', port: 3000, install_command: null,
       pre_start_script: null, health_path: '/', test_email: null,
       test_password: null, env_vars: null, detected_infra: [],
+      sandbox_template: null, login_script: null,
       created_at: new Date(), updated_at: new Date(),
     });
 
@@ -264,7 +265,7 @@ describe('POST /github — issue_comment (/verify)', () => {
     });
     expect(res.status).toBe(200);
     const json = await res.json() as { reason: string };
-    expect(json.reason).toBe('not a verify command');
+    expect(json.reason).toBe('not a recognized command');
   });
 
   it('rejects when commenter is not a collaborator', async () => {
