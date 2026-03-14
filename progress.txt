@@ -256,3 +256,54 @@ COMPLETE — all 12 tasks done, browser agent wired, 97 tests passing
 
 ### Remaining
 (none)
+
+## sandbox-v2 (plan: docs/plans/2026-03-14-sandbox-v2-implementation.md)
+
+### Completed
+- [x] Task 1: DB Migration (commit: 9f0a439)
+  - Files: server/db/migrations/003_sandbox_v2.sql
+  - Renames startup_command → dev_command, drops detected_infra + pre_start_script, adds compose_file/schema_command/seed_command/login_script/sandbox_template
+
+- [x] Tasks 2-4: RepoConfig + sandbox-setup + pipeline + cleanup (commit: 5b1a2f9)
+  - Files: server/src/db.ts, server/src/db.test.ts, server/src/verify/sandbox-setup.ts, server/src/verify/sandbox-setup.test.ts, server/src/verify/pipeline.ts, server/src/routes/webhooks.test.ts
+  - Deleted: server/src/verify/infra-services.ts, server/src/verify/infra-services.test.ts
+  - Added validateComposeFile() for shell injection protection
+  - 93 unit tests pass, 6 new tests (validateComposeFile + health path rejection)
+  - tsc --noEmit clean, zero old field references in src/
+
+- [x] Task 5: Code review gate + fixes (commit: a132f17)
+  - Fixed: SAFE_COMPOSE regex now rejects absolute paths (must start with alphanumeric)
+  - Added: trust boundary comment for shell-interpolated command fields
+  - Added: absolute path rejection test
+  - Final: tsc clean, 93 tests pass, zero old field refs in src/
+
+### Current
+COMPLETE — all 5 tasks done, code review passed, 93 tests passing
+
+### Remaining
+(none)
+
+## sandbox-v2-verification (plan: docs/plans/2026-03-14-sandbox-v2-verification.md)
+
+### Completed
+- [x] Phase 1 + Phase 2: E2B template + Docker + Compose (commit: 47ae9de)
+  - Dockerfile: Docker CE 29.3.0 + Compose v5.1.0, no baked-in PG/Redis
+  - Entrypoint: dockerd + chmod socket for non-root
+  - e2b.toml: 8GB/4CPU
+  - AC-1 PASS: Docker runs, no baked-in services
+  - AC-2 PASS: Compose starts PG+Redis in 14.5s, both reachable
+  - AC-4 PASS: No OOM kills
+  - Total sandbox lifecycle: 21.8s
+
+- [x] Phase 3: setupSandbox() end-to-end (commit: f0fbb3c)
+  - AC-3 PASS: setupSandbox() returns { success: true }
+  - Timing: compose 11.5s, npm install 5.3s, schema <1s, total setup 27.7s
+  - AC-5 PASS: well within 5-8 min target (actual: ~30s for trivial app)
+  - No OOM kills
+  - 8GB RAM available, Docker + PG + Node + Playwright all running
+
+### Current
+COMPLETE — all ACs proven
+
+### Remaining
+(none)

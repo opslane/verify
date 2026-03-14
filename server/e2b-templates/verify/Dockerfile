@@ -5,13 +5,25 @@ ENV DEBIAN_FRONTEND=noninteractive
 # --- System packages ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl wget gnupg2 ca-certificates lsb-release sudo git \
-    build-essential python3 \
-    # Postgres 16
-    postgresql-common && \
+    build-essential python3 unzip \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# --- PostgreSQL client only (for schema commands — no server) ---
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-common && \
     yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh && \
-    apt-get install -y --no-install-recommends postgresql-16 postgresql-client-16 && \
-    # Redis
-    apt-get install -y --no-install-recommends redis-server && \
+    apt-get install -y --no-install-recommends postgresql-client-16 && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# --- Docker CE + Compose plugin ---
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+    https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+    > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+    docker-ce docker-ce-cli containerd.io docker-compose-plugin && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --- Node.js 22 ---
@@ -27,11 +39,6 @@ ENV PATH="/root/.bun/bin:${PATH}"
 # --- Playwright + Chromium ---
 RUN npx playwright@latest install --with-deps chromium
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-
-# --- Postgres config: trust local connections ---
-RUN echo "local all all trust" > /etc/postgresql/16/main/pg_hba.conf && \
-    echo "host all all 127.0.0.1/32 trust" >> /etc/postgresql/16/main/pg_hba.conf && \
-    echo "host all all ::1/128 trust" >> /etc/postgresql/16/main/pg_hba.conf
 
 # --- Working directory ---
 RUN mkdir -p /home/user && chmod 777 /home/user
