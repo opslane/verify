@@ -25,7 +25,8 @@ export function buildHealthCheckCommand(port: number, healthPath = '/'): string 
   return `curl -sf -o /dev/null -w "HEALTH_STATUS:%{http_code}" --max-time 5 http://localhost:${port}${path}`;
 }
 
-const SAFE_COMPOSE = /^[a-zA-Z0-9._\-/]+\.ya?ml$/;
+// Must be a relative path (no leading /) ending in .yml or .yaml
+const SAFE_COMPOSE = /^[a-zA-Z0-9][a-zA-Z0-9._\-/]*\.ya?ml$/;
 
 /** Validate compose_file path is safe for shell interpolation. Exported for testing. */
 export function validateComposeFile(path: string): boolean {
@@ -77,6 +78,10 @@ export async function setupSandbox(
       return { success: false, error: `Docker Compose failed: ${msg}` };
     }
   }
+
+  // Steps 3-6 interpolate config commands into shell strings. These values come from
+  // repo_configs written by authenticated admins — if the config surface is ever exposed
+  // to less-trusted callers (e.g., self-serve UI), add command validation here.
 
   // 3. Install dependencies (always — idempotent, fast no-op if unchanged)
   const installCmd = config.install_command ?? 'npm install';

