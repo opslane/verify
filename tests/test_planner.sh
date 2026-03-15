@@ -20,7 +20,7 @@ MOCK
 chmod +x "$MOCK_CLAUDE"
 
 mkdir -p .verify
-CLAUDE_BIN="$MOCK_CLAUDE" VERIFY_BASE_URL="http://localhost:3000" \
+CLAUDE_BIN="$MOCK_CLAUDE" VERIFY_ALLOW_DANGEROUS=1 VERIFY_BASE_URL="http://localhost:3000" \
   "$SCRIPTS_DIR/planner.sh" "$FIXTURES/test-spec.md" 2>/dev/null
 
 [ -f ".verify/plan.json" ] || { echo "FAIL: plan.json not created"; exit 1; }
