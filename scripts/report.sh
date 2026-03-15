@@ -19,6 +19,16 @@ jq -c '.criteria[]' .verify/report.json | while IFS= read -r criterion; do
     error)   echo "  ⚠ $AC_ID: $REASON" ;;
     *)       echo "  ? $AC_ID: $STATUS — $REASON" ;;
   esac
+  # Code review status
+  CR_STATUS=$(echo "$criterion" | jq -r '.code_review.status // "unavailable"')
+  CR_FINDING_COUNT=$(echo "$criterion" | jq -r '.code_review.findings | length // 0')
+  CR_COVERAGE=$(echo "$criterion" | jq -r '.code_review.coverage // "unknown"')
+  case "$CR_STATUS" in
+    clean)        echo "     code: clean" ;;
+    has_findings) echo "     code: ⚠ $CR_FINDING_COUNT finding(s), coverage: $CR_COVERAGE" ;;
+    unavailable)  echo "     code: unavailable" ;;
+    *)            echo "     code: $CR_STATUS" ;;
+  esac
 done
 
 SKIPPED_COUNT=$(jq '.skipped | length' .verify/report.json)
@@ -86,6 +96,28 @@ for c in criteria:
     else:
         video_cell = '<span style="color:#475569">—</span>'
 
+    # Code review
+    cr = c.get("code_review", {})
+    cr_status = cr.get("status", "unavailable")
+    cr_findings = cr.get("findings", [])
+    cr_coverage = cr.get("coverage", "unknown")
+
+    if cr_status == "clean":
+        cr_badge = '<span style="color:#22c55e;font-weight:600">&#10003; clean</span>'
+    elif cr_status == "has_findings":
+        cr_badge = f'<span style="color:#f59e0b;font-weight:600">&#9888; {len(cr_findings)} finding(s)</span>'
+        if cr_findings:
+            cr_badge += '<ul style="margin:6px 0 0 0;padding-left:18px;color:#cbd5e1;font-size:0.85em">'
+            for f in cr_findings:
+                cr_badge += f'<li>{_html.escape(f)}</li>'
+            cr_badge += '</ul>'
+        if cr_coverage != "full":
+            cr_badge += f'<div style="margin-top:4px;font-size:0.8em;color:#94a3b8">Coverage: {_html.escape(cr_coverage)}</div>'
+    else:
+        cr_badge = '<span style="color:#64748b">unavailable</span>'
+
+    cr_cell = f'<td style="padding:12px 16px">{cr_badge}</td>'
+
     rows += f"""
     <tr>
       <td style="padding:12px 16px;white-space:nowrap;font-weight:600;color:#e2e8f0">{ac_id}</td>
@@ -96,11 +128,12 @@ for c in criteria:
       <td style="padding:12px 16px;color:#cbd5e1;line-height:1.5">{reason}</td>
       <td style="padding:12px 16px">{imgs_cell}</td>
       <td style="padding:12px 16px">{video_cell}</td>
+      {cr_cell}
     </tr>"""
 
 skipped_rows = ""
 for s in skipped:
-    skipped_rows += f'<tr><td colspan="5" style="padding:8px 16px;color:#64748b;font-size:0.85em">⊘ {s}</td></tr>'
+    skipped_rows += f'<tr><td colspan="6" style="padding:8px 16px;color:#64748b;font-size:0.85em">⊘ {s}</td></tr>'
 
 html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -128,7 +161,7 @@ html = f"""<!DOCTYPE html>
 <table>
   <thead>
     <tr>
-      <th>AC</th><th>Status</th><th>Notes</th><th>Screenshots</th><th>Video</th>
+      <th>AC</th><th>Status</th><th>Notes</th><th>Screenshots</th><th>Video</th><th>Code Review</th>
     </tr>
   </thead>
   <tbody>
