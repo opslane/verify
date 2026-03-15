@@ -6,38 +6,53 @@
 
 ### Completed
 - [x] Task 1: R2 upload helper (commit: e00def6)
-  - Files: server/src/storage/r2.ts, server/src/storage/r2.test.ts
-  - Uses presigned URLs (no public bucket), 7-day expiry
-  - 4 tests pass
-
 - [x] Task 2: Screenshot capture + E2B download (commit: e00def6)
-  - Files: server/src/sandbox/types.ts, server/src/sandbox/e2b-provider.ts, server/src/verify/pipeline.ts
-  - Added downloadUrl to SandboxProvider interface
-  - CDP screenshot capture after each AC, download via E2B signed URL, upload to R2
-
 - [x] Task 3: Judge module (commit: e00def6)
-  - Files: server/src/verify/judge.ts, server/src/verify/judge.test.ts
-  - Opus vision reviews screenshots independently
-  - Can override agent verdicts
-  - 5 tests pass
-
 - [x] Task 4: Comment formatter + wire judge (commit: e00def6)
-  - Files: server/src/verify/comment.ts, server/src/verify/pipeline.ts
-  - AcResult now has screenshotUrl, judgeReasoning, judgeOverride
-  - Collapsible evidence sections with embedded screenshots
-  - Judge runs after AC loop, can override pass/fail verdicts
-
 - [x] Task 5: E2E verification (commit: 42fc5b5)
-  - Files: server/src/verify/test-e2e-judge.ts, server/src/verify/sandbox-setup.ts
-  - Tested against abhishekray07/formbricks PR #2
-  - Screenshots captured and uploaded to R2: PASS
-  - Opus judge ran and reviewed screenshots: PASS
-  - Judge correctly identified untestable state (setup redirect): PASS
-  - Comment formatted with evidence sections: PASS
-  - Fixes: compose timeout 300s, health check 300s, install/schema/seed try-catch
 
-### Current
+### Status
 COMPLETE — all 5 tasks done, E2E verified, 132 tests passing
 
+---
+
+## verify-v2-browse (plan: docs/plans/2026-03-15-verify-v2-implementation.md)
+
+### Completed
+- [x] Task 1: Browse Binary Installer (commit: 953a71a)
+  - Files: scripts/install-browse.sh
+  - Downloads/caches gstack browse at ~/.cache/verify/browse
+
+- [x] Task 2: Update Preflight for Browse Engine (commit: 353d036)
+  - Files: scripts/preflight.sh
+  - VERIFY_ENGINE toggle (browse default, mcp legacy)
+
+- [x] Task 3: Rewrite Agent Prompt for Browse CLI (commit: b57ed25)
+  - Files: scripts/prompts/agent-browse.txt
+  - Browse CLI commands: goto, snapshot, click, fill, screenshot
+
+- [x] Task 4: Update agent.sh for Browse Engine (commit: 8119dd5)
+  - Files: scripts/agent.sh
+  - Engine branching: browse (no MCP) vs mcp (Playwright MCP)
+
+- [x] Task 5: Update Judge for Structured Evidence (commit: 446f04f)
+  - Files: scripts/judge.sh, scripts/prompts/judge-browse.txt
+  - Prefers result.json, falls back to agent.log
+
+- [x] Task 6: Update Report for Browse Engine (commit: b2a37a6)
+  - Files: scripts/report.sh
+  - Shows result.json and screenshot paths for failures
+
+- [x] Task 7: Rewrite /verify-setup Skill (commit: 1d0576c)
+  - Files: skills/verify-setup/SKILL.md
+  - Cookie import from real browser, legacy MCP fallback
+
+- [x] Task 8: Update /verify Skill (commit: a4bc608)
+  - Files: skills/verify/SKILL.md
+  - Foreground execution, browse engine references
+
+### Current
+Task 9: Smoke Test on Real App (manual — requires running app)
+
 ### Remaining
-(none)
+(none — Task 9 is manual testing)
