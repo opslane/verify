@@ -5,13 +5,17 @@ import { findRepoConfig } from '../db.js';
 import { E2BSandboxProvider } from '../sandbox/e2b-provider.js';
 import { requireEnv } from '../env.js';
 import { decrypt } from '../crypto.js';
-import { drain } from '../sandbox/stream.js';
+import { drain, collectOutput } from '../sandbox/stream.js';
 import { discoverSpec } from './spec-discovery.js';
 import { setupSandbox } from './sandbox-setup.js';
 import { runBrowserAgent, ensureBrowserRunning, loginAndInjectAuth } from './browser-agent.js';
+import { runJudge } from './judge.js';
+import { uploadScreenshot } from '../storage/r2.js';
 import { VERIFY_MARKER, formatVerifyComment, formatStartupFailureComment, formatNoSpecComment } from './comment.js';
 import type { AcResult } from './comment.js';
+import type { SandboxProvider } from '../sandbox/types.js';
 
+const SANDBOX_ENV = 'NODE_PATH=/home/user/.local/node_modules:/usr/local/lib/node_modules:/usr/lib/node_modules PLAYWRIGHT_BROWSERS_PATH=/ms-playwright';
 const VERIFY_TEMPLATE = process.env.E2B_VERIFY_TEMPLATE ?? 'opslane-verify-v2';
 const VERIFY_TIMEOUT_MS = 900_000; // 15 minutes total sandbox lifetime
 const SAFE_BRANCH_RE = /^[a-zA-Z0-9._\-/]+$/;
@@ -33,6 +37,65 @@ export type VerifyResult =
   | { mode: 'no-spec'; comment?: string }
   | { mode: 'startup-failed'; comment?: string }
   | { mode: 'verified'; comment?: string; passed: number; total: number; results: AcResult[] };
+
+/**
+ * Take a viewport screenshot of the current browser state,
+ * download from sandbox, upload to R2 for a presigned URL.
+ */
+async function captureAndPersistScreenshot(
+  provider: SandboxProvider,
+  sandboxId: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+  acId: string,
+  log: (step: string, msg: string) => void,
+): Promise<{ screenshotUrl?: string; screenshotBuffer?: Buffer }> {
+  const screenshotPath = `/home/user/evidence-ac-${acId.replace(/[^a-zA-Z0-9_-]/g, '_')}.png`;
+
+  try {
+    const screenshotScript = `const { chromium } = require('playwright');
+(async () => {
+  const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
+  const page = browser.contexts()[0]?.pages()[0];
+  if (page) {
+    await page.screenshot({ path: '${screenshotPath}' });
+    console.log(JSON.stringify({ ok: true }));
+  } else {
+    console.log(JSON.stringify({ ok: false, error: 'No page found' }));
+  }
+  process.exit(0);
+})();`;
+
+    await provider.uploadFiles(sandboxId, [{ path: '/home/user/capture-screenshot.cjs', content: screenshotScript }]);
+    await drain(provider.runCommand(sandboxId,
+      `${SANDBOX_ENV} node /home/user/capture-screenshot.cjs`,
+      { rawOutput: true, timeoutMs: 15_000 },
+    ));
+
+    // Download via E2B signed URL (fetch server-side before sandbox is destroyed)
+    const tempUrl = await provider.downloadUrl(sandboxId, screenshotPath);
+    const response = await fetch(tempUrl);
+    if (!response.ok) {
+      log('screenshot', `Download failed: ${response.status}`);
+      return {};
+    }
+    const screenshotBuffer = Buffer.from(await response.arrayBuffer());
+
+    // Upload to R2 for presigned URL
+    const screenshotUrl = await uploadScreenshot(owner, repo, prNumber, acId, screenshotBuffer);
+    if (screenshotUrl) {
+      log('screenshot', `Uploaded to R2: ${screenshotUrl.slice(0, 80)}...`);
+    } else {
+      log('screenshot', 'R2 not configured — screenshot captured but not persisted');
+    }
+
+    return { screenshotUrl, screenshotBuffer };
+  } catch (err) {
+    log('screenshot', `Failed: ${err instanceof Error ? err.message : String(err)}`);
+    return {};
+  }
+}
 
 export async function runVerifyPipeline(
   input: VerifyPipelineInput,
@@ -150,6 +213,7 @@ export async function runVerifyPipeline(
     const testEmail = config.test_email ? decrypt(config.test_email) : undefined;
     const testPassword = config.test_password ? decrypt(config.test_password) : undefined;
     const results: AcResult[] = [];
+    const screenshotBuffers: Map<string, Buffer> = new Map();
 
     // Ensure playwright npm package is available (custom templates may not have it)
     log('agent', 'Ensuring playwright package is installed');
@@ -185,6 +249,13 @@ export async function runVerifyPipeline(
         { goal: ac.description, baseUrl: ac.url ? `${baseUrl}${ac.url}` : baseUrl, testEmail, testPassword },
         (msg) => log('agent', msg),
       );
+
+      // Capture screenshot after agent finishes (browser still has final state)
+      const { screenshotUrl, screenshotBuffer } = await captureAndPersistScreenshot(
+        provider, sandbox.id, owner, repo, prNumber, ac.id, log,
+      );
+      if (screenshotBuffer) screenshotBuffers.set(ac.id, screenshotBuffer);
+
       results.push({
         id: ac.id,
         description: ac.description,
@@ -192,7 +263,37 @@ export async function runVerifyPipeline(
         expected: verdict.expected,
         observed: verdict.observed,
         reason: verdict.result === 'error' ? verdict.error : undefined,
+        screenshotUrl,
       });
+    }
+
+    // Run judge — independent verdict verification via Opus vision
+    log('judge', 'Running Opus judge');
+    const judgeEvidence = results
+      .filter((r) => r.result !== 'skipped')
+      .map((r) => ({
+        id: r.id,
+        description: r.description,
+        agentVerdict: r.result,
+        agentReasoning: r.observed ?? r.reason ?? 'none',
+        screenshotBase64: screenshotBuffers.get(r.id)?.toString('base64'),
+      }));
+
+    if (judgeEvidence.length > 0) {
+      const judgeVerdicts = await runJudge(judgeEvidence, (msg) => log('judge', msg));
+
+      for (const jv of judgeVerdicts) {
+        const result = results.find((r) => r.id === jv.ac_id);
+        if (!result) continue;
+
+        result.judgeReasoning = jv.reasoning;
+        if (result.result !== jv.status && result.result !== 'skipped') {
+          log('judge', `Override: ${jv.ac_id} agent=${result.result} → judge=${jv.status} (${jv.reasoning})`);
+          result.result = jv.status === 'error' ? 'skipped' : jv.status;
+          result.judgeOverride = true;
+          if (jv.status === 'error') result.reason = jv.reasoning;
+        }
+      }
     }
 
     const passed = results.filter((r) => r.result === 'pass').length;

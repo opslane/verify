@@ -232,6 +232,15 @@ export class E2BSandboxProvider implements SandboxProvider {
     return sandbox.files.read(path);
   }
 
+  async downloadUrl(sandboxId: string, path: string): Promise<string> {
+    if (!path.startsWith('/') || path.includes('..')) {
+      throw new Error(`downloadUrl path must be absolute without traversal: ${path}`);
+    }
+    const sandbox = this.sandboxes.get(sandboxId);
+    if (!sandbox) throw new Error(`Sandbox ${sandboxId} not found`);
+    return sandbox.downloadUrl(path);
+  }
+
   async uploadFiles(sandboxId: string, files: FileUpload[]): Promise<void> {
     const sandbox = this.sandboxes.get(sandboxId);
     if (!sandbox) throw new Error(`Sandbox ${sandboxId} not found`);

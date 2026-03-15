@@ -7,6 +7,9 @@ export interface AcResult {
   expected?: string;
   observed?: string;
   reason?: string;
+  screenshotUrl?: string;
+  judgeReasoning?: string;
+  judgeOverride?: boolean;
 }
 
 interface VerifyCommentInput {
@@ -30,14 +33,23 @@ export function formatVerifyComment(input: VerifyCommentInput): string {
     .join('\n');
 
   const details = input.results
-    .filter((r) => r.result === 'fail')
     .map((r) => {
-      let detail = `**${r.id} — Fail**\n`;
-      if (r.expected) detail += `> Expected: ${r.expected}\n`;
-      if (r.observed) detail += `> Observed: ${r.observed}\n`;
-      return detail;
+      const parts: string[] = [];
+      const icon = ICON[r.result];
+      const label = LABEL[r.result];
+      parts.push(`<details${r.result === 'fail' ? ' open' : ''}>`);
+      parts.push(`<summary>${icon} <strong>${r.id}: ${r.description}</strong> — ${label}${r.judgeOverride ? ' (judge override)' : ''}</summary>\n`);
+
+      if (r.expected) parts.push(`> **Expected:** ${r.expected}`);
+      if (r.observed) parts.push(`> **Observed:** ${r.observed}`);
+      if (r.reason) parts.push(`> **Reason:** ${r.reason}`);
+      if (r.judgeReasoning) parts.push(`> **Judge:** ${r.judgeReasoning}`);
+      if (r.screenshotUrl) parts.push(`\n![${r.id} screenshot](${r.screenshotUrl})`);
+
+      parts.push('\n</details>');
+      return parts.join('\n');
     })
-    .join('\n');
+    .join('\n\n');
 
   return `${VERIFY_MARKER}
 ## Verify Report
@@ -45,13 +57,16 @@ export function formatVerifyComment(input: VerifyCommentInput): string {
 **Spec:** \`${input.specPath}\`
 **App:** Started on port ${input.port}
 
-### Acceptance Criteria
+### Results: ${passed}/${total} passed
 
 | | AC | Result |
 |---|---|---|
 ${rows}
 
-${details ? `### Details\n\n${details}` : ''}
+### Evidence
+
+${details}
+
 ---
 
 *${passed} of ${total} criteria passed \u00b7 Powered by Opslane Verify*

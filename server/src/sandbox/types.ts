@@ -33,4 +33,5 @@ export interface SandboxProvider {
   runCommand(sandboxId: string, command: string, opts?: RunOptions): AsyncIterable<string>;
   uploadFiles(sandboxId: string, files: FileUpload[]): Promise<void>;
   readFile(sandboxId: string, path: string): Promise<string>;
+  downloadUrl(sandboxId: string, path: string): Promise<string>;
 }
