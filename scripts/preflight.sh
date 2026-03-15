@@ -21,6 +21,20 @@ else
 fi
 export TIMEOUT_CMD
 
+# Engine selection: browse (v2, default) or mcp (v1 legacy)
+VERIFY_ENGINE="${VERIFY_ENGINE:-browse}"
+export VERIFY_ENGINE
+
+if [ "$VERIFY_ENGINE" = "browse" ]; then
+  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/browse}"
+  if [ ! -x "$BROWSE_BIN" ]; then
+    echo "→ Browse binary not found. Installing..."
+    BROWSE_BIN=$(bash "$(dirname "$0")/install-browse.sh" | tail -1)
+  fi
+  export BROWSE_BIN
+  echo "✓ Browse binary: $BROWSE_BIN"
+fi
+
 # Load config inline
 CONFIG_FILE=".verify/config.json"
 VERIFY_BASE_URL="${VERIFY_BASE_URL:-$(jq -r '.baseUrl // "http://localhost:3000"' "$CONFIG_FILE" 2>/dev/null || echo "http://localhost:3000")}"
@@ -50,23 +64,40 @@ echo "✓ Dev server reachable"
 
 # 2. Auth validity check
 if [ "$SKIP_AUTH" = false ]; then
-  if [ ! -f ".verify/auth.json" ]; then
-    echo "✗ No auth state found. Run /verify setup first."
-    exit 1
+  if [ "$VERIFY_ENGINE" = "browse" ]; then
+    # Browse engine: validate auth by navigating and checking for login redirect
+    echo "→ Checking auth via browse daemon..."
+    # Start daemon if needed
+    "$BROWSE_BIN" status >/dev/null 2>&1 || "$BROWSE_BIN" goto "$VERIFY_BASE_URL" >/dev/null 2>&1
+    SNAPSHOT=$("$BROWSE_BIN" snapshot -i 2>/dev/null || echo "")
+    if [ -z "$SNAPSHOT" ]; then
+      echo "→ No auth state in browse daemon. Run /verify-setup to import cookies."
+      echo "  (Continuing without auth — some pages may redirect to login.)"
+    elif echo "$SNAPSHOT" | grep -qi "login\|sign.in\|password\|log.in"; then
+      echo "✗ Auth cookies expired or invalid. Re-run /verify-setup."
+      exit 1
+    else
+      echo "✓ Auth valid (browse daemon)"
+    fi
+  else
+    # MCP engine (legacy): validate via auth.json + curl
+    if [ ! -f ".verify/auth.json" ]; then
+      echo "✗ No auth state found. Run /verify-setup first."
+      exit 1
+    fi
+    AUTH_URL="${VERIFY_BASE_URL}${VERIFY_AUTH_CHECK_URL}"
+    echo "→ Checking auth at $AUTH_URL..."
+    COOKIE_STR=$(jq -r '[.cookies[]? | "\(.name)=\(.value)"] | join("; ")' .verify/auth.json 2>/dev/null || echo "")
+    HTTP_CODE=$(curl -sf --max-time 5 \
+      ${COOKIE_STR:+-H "Cookie: $COOKIE_STR"} \
+      -o /dev/null -w "%{http_code}" \
+      "$AUTH_URL" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "000" ]; then
+      echo "✗ Session expired or invalid (HTTP $HTTP_CODE). Run /verify-setup to re-authenticate."
+      exit 1
+    fi
+    echo "✓ Auth valid (HTTP $HTTP_CODE)"
   fi
-  AUTH_URL="${VERIFY_BASE_URL}${VERIFY_AUTH_CHECK_URL}"
-  echo "→ Checking auth at $AUTH_URL..."
-  # Build Cookie header string from Playwright storageState JSON
-  COOKIE_STR=$(jq -r '[.cookies[]? | "\(.name)=\(.value)"] | join("; ")' .verify/auth.json 2>/dev/null || echo "")
-  HTTP_CODE=$(curl -sf --max-time 5 \
-    ${COOKIE_STR:+-H "Cookie: $COOKIE_STR"} \
-    -o /dev/null -w "%{http_code}" \
-    "$AUTH_URL" 2>/dev/null || echo "000")
-  if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ] || [ "$HTTP_CODE" = "302" ] || [ "$HTTP_CODE" = "000" ]; then
-    echo "✗ Session expired or invalid (HTTP $HTTP_CODE). Run /verify setup to re-authenticate."
-    exit 1
-  fi
-  echo "✓ Auth valid (HTTP $HTTP_CODE)"
 fi
 
 # 3. Spec doc detection
