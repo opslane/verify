@@ -178,10 +178,25 @@ mkdir -p .verify/evidence
 
 Run agents sequentially in the foreground:
 ```bash
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/orchestrate.sh
+VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/code-review.sh &
+CR_PID=$!
+
+VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/orchestrate.sh &
+ORCH_PID=$!
 ```
 
-This runs each AC check one at a time using the persistent browse daemon. Each check takes ~10-20 seconds. Total time for 5 ACs: ~1-2 minutes.
+Then poll progress until done:
+```bash
+while kill -0 $ORCH_PID 2>/dev/null; do
+  TOTAL=$(jq '.criteria | length' .verify/plan.json 2>/dev/null || echo "?")
+  DONE=$(ls .verify/evidence/*/agent.log 2>/dev/null | wc -l | tr -d ' ')
+  CURRENT=$(ls -t .verify/evidence/*/claude.log 2>/dev/null | head -1 | cut -d/ -f4)
+  echo "  Progress: $DONE/$TOTAL done${CURRENT:+ — $CURRENT running}"
+  sleep 10
+done
+wait $ORCH_PID
+wait $CR_PID || true  # graceful degradation — don't fail pipeline if code review fails
+```
 
 ---
 

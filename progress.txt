@@ -56,3 +56,52 @@ Task 9: Smoke Test on Real App (manual — requires running app)
 
 ### Remaining
 (none — Task 9 is manual testing)
+
+---
+
+## code-review (plan: docs/plans/2026-03-15-code-review-in-verify-implementation.md)
+
+### Completed
+- [x] Task 1: Create code review prompt template (commit: d6518ea)
+  - Files: scripts/prompts/code-review.txt
+  - Structured JSON output with findings + ac_coverage
+
+- [x] Task 2: Create code-review.sh stage script (commit: 658e1ac)
+  - Files: scripts/code-review.sh
+  - Diff base detection (env > config > auto), diff truncation, Claude call
+
+- [x] Task 3: Create test for code-review.sh (commit: 04ec3f8)
+  - Files: tests/test_code-review.sh
+  - Tests: valid run (2 findings), empty diff (0 findings)
+
+- [x] Task 4: Update judge prompt for code review track (commit: 93044fa)
+  - Files: scripts/prompts/judge.txt
+  - Added code_review field per AC, rules 8-12 for code review handling
+
+- [x] Task 5: Update judge.sh to read code review findings (commit: 9943393)
+  - Files: scripts/judge.sh
+  - Appends code-review.json to judge prompt if present, graceful if absent
+
+- [x] Task 6: Update test_judge.sh for code review fields (commit: 73557e0)
+  - Files: tests/test_judge.sh
+  - Tests: with code review (code_review.status=clean), without code review file
+
+- [x] Task 7: Update report.sh terminal + HTML output (commit: 99375d6)
+  - Files: scripts/report.sh
+  - Terminal: code review status line per AC
+  - HTML: new Code Review column with badges and findings
+
+- [x] Task 8: Update test_report.sh for code review output (commit: eb8b967)
+  - Files: tests/test_report.sh
+  - Tests: clean, has_findings, unavailable code review states
+
+- [x] Task 9: Update sync hook + SKILL.md for parallel execution (commit: 33a0310)
+  - Files: .claude/hooks/sync-skill.sh, skills/verify/SKILL.md
+  - code-review.sh runs in parallel with orchestrate.sh
+  - Graceful degradation: wait $CR_PID || true
+
+### Current
+COMPLETE — all 9 tasks done, all E2E tests passing
+
+### Remaining
+(none)
