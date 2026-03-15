@@ -71,7 +71,7 @@ export async function setupSandbox(
       await drain(provider.runCommand(
         sandboxId,
         `docker compose -f ${config.compose_file} up -d --wait`,
-        { cwd: workDir, timeoutMs: 180_000, rawOutput: true },
+        { cwd: workDir, timeoutMs: 300_000, rawOutput: true },
       ));
       log('compose', 'Docker Compose services are up');
     } catch (err) {
@@ -87,18 +87,33 @@ export async function setupSandbox(
   // 3. Install dependencies (always — idempotent, fast no-op if unchanged)
   const installCmd = config.install_command ?? 'npm install';
   log('install', `Running: ${installCmd}`);
-  await drain(provider.runCommand(sandboxId, installCmd, { cwd: workDir, timeoutMs: 480_000, rawOutput: true }));
+  try {
+    await drain(provider.runCommand(sandboxId, installCmd, { cwd: workDir, timeoutMs: 480_000, rawOutput: true }));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: `Install command failed: ${msg}` };
+  }
 
   // 4. Schema push (if schema_command configured — idempotent)
   if (config.schema_command) {
     log('schema', `Running: ${config.schema_command}`);
-    await drain(provider.runCommand(sandboxId, config.schema_command, { cwd: workDir, timeoutMs: 120_000, rawOutput: true }));
+    try {
+      await drain(provider.runCommand(sandboxId, config.schema_command, { cwd: workDir, timeoutMs: 120_000, rawOutput: true }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: `Schema command failed: ${msg}` };
+    }
   }
 
   // 5. Seed DB (if seed_command configured)
   if (config.seed_command) {
     log('seed', `Running: ${config.seed_command}`);
-    await drain(provider.runCommand(sandboxId, config.seed_command, { cwd: workDir, timeoutMs: 120_000, rawOutput: true }));
+    try {
+      await drain(provider.runCommand(sandboxId, config.seed_command, { cwd: workDir, timeoutMs: 120_000, rawOutput: true }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, error: `Seed command failed: ${msg}` };
+    }
   }
 
   // 6. Start dev server (fire-and-forget — health check validates it started)
@@ -120,7 +135,7 @@ export async function setupSandbox(
 
   // 7. Health check — poll until 2xx or timeout
   const healthCmd = buildHealthCheckCommand(config.port, config.health_path);
-  const maxWaitMs = 120_000;
+  const maxWaitMs = 300_000;
   const intervalMs = 2_000;
   const startTime = Date.now();
 
