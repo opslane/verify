@@ -213,6 +213,7 @@ interface AcceptanceCriterion {
   id: string;
   description: string;
   testable?: boolean;
+  url?: string;
 }
 
 /**
@@ -265,7 +266,7 @@ export function parseAcceptanceCriteriaJson(text: string): AcceptanceCriterion[]
   try {
     const parsed = JSON.parse(jsonMatch[0]) as unknown[];
     return parsed
-      .filter((item): item is { id: string; description: string; testable?: boolean } =>
+      .filter((item): item is { id: string; description: string; testable?: boolean; url?: string } =>
         typeof item === 'object' && item !== null &&
         'id' in item && typeof (item as Record<string, unknown>).id === 'string' &&
         'description' in item && typeof (item as Record<string, unknown>).description === 'string'
@@ -274,6 +275,7 @@ export function parseAcceptanceCriteriaJson(text: string): AcceptanceCriterion[]
         id: item.id,
         description: item.description,
         testable: typeof item.testable === 'boolean' ? item.testable : true,
+        url: typeof (item as Record<string, unknown>).url === 'string' ? (item as Record<string, unknown>).url as string : undefined,
       }));
   } catch {
     return [];

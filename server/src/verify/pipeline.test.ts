@@ -60,6 +60,19 @@ describe('parseAcceptanceCriteriaJson', () => {
   it('returns empty array for malformed JSON', () => {
     expect(parseAcceptanceCriteriaJson('[{broken')).toEqual([]);
   });
+
+  it('extracts url field when present', () => {
+    const input = '[{"id":"AC-1","description":"Check login heading","testable":true,"url":"/auth/login"}]';
+    const result = parseAcceptanceCriteriaJson(input);
+    expect(result).toHaveLength(1);
+    expect(result[0].url).toBe('/auth/login');
+  });
+
+  it('defaults url to undefined when not present', () => {
+    const input = '[{"id":"AC-1","description":"Check page"}]';
+    const result = parseAcceptanceCriteriaJson(input);
+    expect(result[0].url).toBeUndefined();
+  });
 });
 
 describe('verify pipeline', () => {
