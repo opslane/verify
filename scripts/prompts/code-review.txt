@@ -1,13 +1,5 @@
 You are a code reviewer analyzing changes against acceptance criteria.
 
-ACCEPTANCE CRITERIA:
-{{ACS}}
-
-GIT DIFF (against base branch):
-{{DIFF_STAT}}
-
-{{DIFF}}
-
 Review the diff and return ONLY a valid JSON object. No markdown fences, no explanation. Raw JSON only. The FIRST character of your response must be `{`.
 
 Tasks:

@@ -31,11 +31,11 @@ echo "  Diff base: $DIFF_BASE"
 
 # ── Capture diff ──────────────────────────────────────────────────────────────
 # Exclude binary files, lockfiles, and common non-code assets
-DIFF_EXCLUDES="-- . ':!*.png' ':!*.jpg' ':!*.jpeg' ':!*.gif' ':!*.webm' ':!*.webp' ':!*.ico' ':!*.woff' ':!*.woff2' ':!*.ttf' ':!*.eot' ':!*.svg' ':!package-lock.json' ':!yarn.lock' ':!pnpm-lock.yaml'"
+DIFF_EXCLUDES=(-- . ':!*.png' ':!*.jpg' ':!*.jpeg' ':!*.gif' ':!*.webm' ':!*.webp' ':!*.ico' ':!*.woff' ':!*.woff2' ':!*.ttf' ':!*.eot' ':!*.svg' ':!package-lock.json' ':!yarn.lock' ':!pnpm-lock.yaml')
 
-DIFF_STAT=$(eval git diff --stat "$DIFF_BASE"...HEAD $DIFF_EXCLUDES 2>/dev/null || echo "No diff stats available")
+DIFF_STAT=$(git diff --stat "$DIFF_BASE"...HEAD "${DIFF_EXCLUDES[@]}" 2>/dev/null || echo "No diff stats available")
 
-FULL_DIFF=$(eval git diff --no-ext-diff "$DIFF_BASE"...HEAD $DIFF_EXCLUDES 2>/dev/null || echo "")
+FULL_DIFF=$(git diff --no-ext-diff "$DIFF_BASE"...HEAD "${DIFF_EXCLUDES[@]}" 2>/dev/null || echo "")
 
 if [ -z "$FULL_DIFF" ]; then
   echo "  No code changes found against $DIFF_BASE"
