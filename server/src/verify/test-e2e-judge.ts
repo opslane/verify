@@ -31,10 +31,10 @@ async function main() {
     healthPath: '/auth/login',
     composeFile: 'docker-compose.dev.yml',
     schemaCommand: 'set -a && . .env && set +a && cd packages/database && npx prisma db push --accept-data-loss',
-    seedCommand: null,
+    seedCommand: 'set -a && . .env && set +a && cd packages/database && npx tsx src/seed.ts',
     sandboxTemplate: null,
-    testEmail: encrypt('test@example.com'),
-    testPassword: encrypt('Test1234!'),
+    testEmail: encrypt('admin@formbricks.com'),
+    testPassword: encrypt('Password#123'),
     loginScript: `await page.getByRole('button', { name: 'Login with Email' }).click();
 await page.getByPlaceholder('work@email.com').fill(EMAIL);
 await page.getByPlaceholder('*******').fill(PASSWORD);
