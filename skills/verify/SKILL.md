@@ -177,6 +177,9 @@ mkdir -p .verify/evidence
 
 Run orchestrate in background so you can monitor it:
 ```bash
+VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/code-review.sh &
+CR_PID=$!
+
 VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/orchestrate.sh &
 ORCH_PID=$!
 ```
@@ -191,6 +194,7 @@ while kill -0 $ORCH_PID 2>/dev/null; do
   sleep 10
 done
 wait $ORCH_PID
+wait $CR_PID || true  # graceful degradation — don't fail pipeline if code review fails
 ```
 
 ---
