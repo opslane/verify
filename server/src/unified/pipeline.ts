@@ -172,21 +172,31 @@ function formatAcTable(results: AcResult[]): string {
     .join('\n');
 
   const details = results
-    .filter((r) => r.result === 'fail')
+    .filter((r) => r.result !== 'skipped')
     .map((r) => {
-      let detail = `**${r.id} — Fail**\n`;
-      if (r.expected) detail += `> Expected: ${r.expected}\n`;
-      if (r.observed) detail += `> Observed: ${r.observed}\n`;
-      return detail;
+      const icon = ICON[r.result];
+      const label = LABEL[r.result];
+      const parts: string[] = [];
+      parts.push(`<details${r.result === 'fail' ? ' open' : ''}>`);
+      parts.push(`<summary>${icon} <strong>${r.id}: ${r.description}</strong> — ${label}${r.judgeOverride ? ' (judge override)' : ''}</summary>\n`);
+
+      if (r.expected) parts.push(`> **Expected:** ${r.expected}`);
+      if (r.observed) parts.push(`> **Observed:** ${r.observed}`);
+      if (r.reason) parts.push(`> **Reason:** ${r.reason}`);
+      if (r.judgeReasoning) parts.push(`> **Judge:** ${r.judgeReasoning}`);
+      if (r.screenshotUrl) parts.push(`\n![${r.id} screenshot](${r.screenshotUrl})`);
+
+      parts.push('\n</details>');
+      return parts.join('\n');
     })
-    .join('\n');
+    .join('\n\n');
 
   let table = `| | AC | Result |
 |---|---|---|
 ${rows}`;
 
   if (details) {
-    table += `\n\n#### Details\n\n${details}`;
+    table += `\n\n#### Evidence\n\n${details}`;
   }
 
   return table;
