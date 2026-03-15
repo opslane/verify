@@ -117,7 +117,7 @@ async function main() {
 - [ ] Clicking a project opens the project detail page
 - [ ] User can create a new project via the "New Project" button`;
 
-      const criteria = await parseAcceptanceCriteria(testSpec);
+      const criteria = await parseAcceptanceCriteria(testSpec, '');
       report('AC-29', `parseAcceptanceCriteria extracts ACs from spec (got ${criteria.length})`,
         Array.isArray(criteria) && criteria.length >= 3 &&
         typeof criteria[0].id === 'string' && typeof criteria[0].description === 'string');

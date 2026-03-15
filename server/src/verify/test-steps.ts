@@ -231,7 +231,7 @@ const { chromium } = require(path.join(globalRoot, 'playwright'));
   await step('10. Parse ACs (Anthropic)', async () => {
     const { parseAcceptanceCriteria } = await import('./pipeline.js');
     const pr = await fetchPullRequest(OWNER, REPO, PR, token);
-    const criteria = await parseAcceptanceCriteria(pr.body ?? '');
+    const criteria = await parseAcceptanceCriteria(pr.body ?? '', pr.diff ?? '');
     console.log(`  Found ${criteria.length} ACs:`);
     for (const ac of criteria) {
       console.log(`    ${ac.id}: ${ac.description} (testable: ${ac.testable})`);

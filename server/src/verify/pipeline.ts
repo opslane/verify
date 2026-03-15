@@ -142,7 +142,7 @@ export async function runVerifyPipeline(
 
     // 10. Parse spec into acceptance criteria (planner step)
     log('verify', `Parsing spec into acceptance criteria (${specContent.length} chars)`);
-    const criteria = await parseAcceptanceCriteria(specContent);
+    const criteria = await parseAcceptanceCriteria(specContent, prMeta.diff);
     log('verify', `Found ${criteria.length} acceptance criteria`);
 
     // 11. Launch browser once, then run agent for each AC
@@ -182,7 +182,7 @@ export async function runVerifyPipeline(
       log('agent', `Testing AC: ${ac.id} — ${ac.description}`);
       const verdict = await runBrowserAgent(
         provider, sandbox.id,
-        { goal: ac.description, baseUrl, testEmail, testPassword },
+        { goal: ac.description, baseUrl: ac.url ? `${baseUrl}${ac.url}` : baseUrl, testEmail, testPassword },
         (msg) => log('agent', msg),
       );
       results.push({
@@ -217,12 +217,20 @@ interface AcceptanceCriterion {
 }
 
 /**
- * Use Claude to parse a spec document into individual, testable acceptance criteria.
+ * Use Claude to parse a spec document + code diff into individual, testable acceptance criteria.
+ * The diff is the primary input — ACs should test what actually changed.
  * Exported for testing.
  */
-export async function parseAcceptanceCriteria(specContent: string): Promise<AcceptanceCriterion[]> {
-  // Mitigate prompt injection: strip XML-like tags that could break out of our delimiter
-  const sanitized = specContent.replace(/<\/?spec>/gi, '[spec-tag-removed]');
+export async function parseAcceptanceCriteria(specContent: string, diff: string): Promise<AcceptanceCriterion[]> {
+  // Sanitize inputs to prevent prompt injection via delimiter-like patterns
+  const sanitizedSpec = specContent.replace(/<<<\/?(?:SPEC|DIFF|END_SPEC|END_DIFF)>>>/gi, '[delimiter-removed]');
+  const sanitizedDiff = diff.replace(/<<<\/?(?:SPEC|DIFF|END_SPEC|END_DIFF)>>>/gi, '[delimiter-removed]');
+
+  // Cap diff at ~500 lines to stay within reasonable token budget
+  const diffLines = sanitizedDiff.split('\n');
+  const cappedDiff = diffLines.length > 500
+    ? diffLines.slice(0, 500).join('\n') + '\n\n[diff truncated at 500 lines]'
+    : sanitizedDiff;
 
   const client = new Anthropic();
   const response = await client.messages.create({
@@ -231,25 +239,29 @@ export async function parseAcceptanceCriteria(specContent: string): Promise<Acce
     messages: [
       {
         role: 'user',
-        content: `You are an autonomous QA engineer. Extract the key acceptance criteria from this spec/PR description for browser-based verification.
+        content: `You are an autonomous QA engineer. Extract acceptance criteria from this PR for browser-based verification.
 
-IMPORTANT RULES:
-1. **Consolidate related checks into a single AC.** For example, "component renders, has a button, button is clickable" should be ONE AC, not three. Group by user flow or component.
-2. **Maximum 5 testable ACs.** If the spec implies more, merge related ones. Focus on the most important user-visible behaviors.
-3. **Each AC description must include full navigation steps.** A browser agent will execute each AC independently with no prior context. Include EVERY step from the home page: "Navigate to base URL, click 'ComponentName' nav button, then verify X". Never assume the agent is already on the right page.
-4. **Be specific about UI interactions.** Use button labels and visible text, not vague descriptions. Example: "Navigate to base URL, click 'WatcherBug' button, then click 'Increment' button 3 times, verify counter stays at 0" — not "verify counter behavior".
-5. Mark ACs as "testable": false only if they genuinely cannot be checked in a browser (e.g., database state, external API calls).
+RULES:
+1. READ THE CODE DIFF FIRST. The diff tells you exactly what changed. Generate ACs that test the delta — what would fail on the old code and pass on the new code.
+2. Each AC must include a "url" field with the path (e.g. "/auth/login") where the change is visible in the browser.
+3. Maximum 5 testable ACs. Consolidate related checks into single ACs.
+4. Be SPECIFIC — "heading says 'Sign in to your account'" not "UI renders correctly".
+5. Focus on OBSERVABLE browser changes — what a user would see or interact with differently.
+6. If the change is a locale/translation/i18n file, identify which page renders the changed key and write the AC against that page with the expected text.
+7. If the change is CSS/styling, describe the visual difference specifically.
+8. Each AC description must include navigation steps. A browser agent will execute each AC independently with no prior context.
+9. Mark ACs as "testable": false only if they genuinely cannot be checked in a browser (e.g., database state, external API calls).
 
-For each criterion, return a JSON object with:
-- "id": e.g. "AC-1", "AC-2"
-- "description": a concrete test scenario (what to do and what to verify)
-- "testable": true if verifiable via browser interaction, false otherwise
+<<<DIFF>>>
+${cappedDiff}
+<<<END_DIFF>>>
 
-<spec>
-${sanitized}
-</spec>
+<<<SPEC>>>
+${sanitizedSpec || 'No spec provided — generate ACs from the code diff alone.'}
+<<<END_SPEC>>>
 
-Respond with ONLY the JSON array, no other text.`,
+Respond with ONLY a JSON array, no other text:
+[{ "id": "AC-1", "description": "Navigate to /auth/login and verify...", "testable": true, "url": "/auth/login" }]`,
       },
     ],
   });
