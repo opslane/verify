@@ -10,7 +10,7 @@ export interface VerifyPayload {
 
 export const verifyPrTask = task({
   id: 'verify-pr',
-  maxDuration: 600,
+  maxDuration: 900,  // 15 min — matches VERIFY_TIMEOUT_MS in pipeline.ts
   run: async (payload: VerifyPayload) => {
     const log = (step: string, message: string, data?: unknown) => {
       logger.info(`[${step}] ${message}`, data ? { data } : undefined);

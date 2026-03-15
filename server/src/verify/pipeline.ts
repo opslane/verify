@@ -287,7 +287,7 @@ export function parseAcceptanceCriteriaJson(text: string): AcceptanceCriterion[]
         id: item.id,
         description: item.description,
         testable: typeof item.testable === 'boolean' ? item.testable : true,
-        url: typeof (item as Record<string, unknown>).url === 'string' ? (item as Record<string, unknown>).url as string : undefined,
+        url: typeof item.url === 'string' && item.url.startsWith('/') && !item.url.includes('..') ? item.url : undefined,
       }));
   } catch {
     return [];

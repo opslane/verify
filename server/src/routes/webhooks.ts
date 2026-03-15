@@ -121,7 +121,15 @@ export function createWebhookApp(): Hono {
         const unifiedPayload: UnifiedPayload = { owner, repo, prNumber, deliveryId };
         await tasks.trigger<typeof unifiedPrTask>('unified-pr', unifiedPayload);
       } else {
-        console.warn('TRIGGER_SECRET_KEY not set — skipping task dispatch');
+        console.log(`[inline] Running unified pipeline for ${owner}/${repo}#${prNumber}`);
+        runUnifiedPipeline(
+          { owner, repo, prNumber },
+          { log: (step, msg, data) => console.log(`[${step}]`, msg, data ?? '') },
+        ).then(result => {
+          console.log(`[inline] Pipeline complete for ${owner}/${repo}#${prNumber}`, result.commentUrl);
+        }).catch(err => {
+          console.error(`[inline] Pipeline failed for ${owner}/${repo}#${prNumber}`, err);
+        });
       }
       dedup.markSeen(deliveryId);
 
@@ -190,7 +198,7 @@ export function createWebhookApp(): Hono {
         return c.json({ error: 'Invalid owner or repo' }, 400);
       }
 
-      const deliveryId = c.req.header('svix-id') ?? crypto.randomUUID();
+      const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID();
       if (dedup.isDuplicate(deliveryId)) {
         return c.json({ accepted: false, reason: 'Duplicate delivery' }, 200);
       }

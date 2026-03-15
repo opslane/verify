@@ -37,8 +37,10 @@ RUN npm install -g pnpm@9 yarn@1.22 && \
 ENV PATH="/root/.bun/bin:${PATH}"
 
 # --- Playwright + Chromium ---
-RUN npx playwright@latest install --with-deps chromium
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npm install -g playwright@latest && \
+    npx playwright install --with-deps chromium && \
+    chmod -R o+rx /ms-playwright
 
 # --- Working directory ---
 RUN mkdir -p /home/user && chmod 777 /home/user

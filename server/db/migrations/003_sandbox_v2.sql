@@ -4,17 +4,34 @@
 -- Replaces pre_start_script with schema_command + seed_command
 -- Adds login_script, sandbox_template
 
-BEGIN;
+DO $$
+BEGIN
+  -- Rename startup_command → dev_command (skip if already renamed)
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'repo_configs' AND column_name = 'startup_command'
+  ) THEN
+    ALTER TABLE repo_configs RENAME COLUMN startup_command TO dev_command;
+  END IF;
 
-ALTER TABLE repo_configs RENAME COLUMN startup_command TO dev_command;
+  -- Drop old columns (skip if already dropped)
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'repo_configs' AND column_name = 'detected_infra'
+  ) THEN
+    ALTER TABLE repo_configs DROP COLUMN detected_infra;
+  END IF;
 
-ALTER TABLE repo_configs DROP COLUMN detected_infra;
-ALTER TABLE repo_configs DROP COLUMN pre_start_script;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'repo_configs' AND column_name = 'pre_start_script'
+  ) THEN
+    ALTER TABLE repo_configs DROP COLUMN pre_start_script;
+  END IF;
+END $$;
 
-ALTER TABLE repo_configs ADD COLUMN compose_file text;
-ALTER TABLE repo_configs ADD COLUMN schema_command text;
-ALTER TABLE repo_configs ADD COLUMN seed_command text;
-ALTER TABLE repo_configs ADD COLUMN login_script text;
-ALTER TABLE repo_configs ADD COLUMN sandbox_template text;
-
-COMMIT;
+ALTER TABLE repo_configs ADD COLUMN IF NOT EXISTS compose_file text;
+ALTER TABLE repo_configs ADD COLUMN IF NOT EXISTS schema_command text;
+ALTER TABLE repo_configs ADD COLUMN IF NOT EXISTS seed_command text;
+ALTER TABLE repo_configs ADD COLUMN IF NOT EXISTS login_script text;
+ALTER TABLE repo_configs ADD COLUMN IF NOT EXISTS sandbox_template text;
