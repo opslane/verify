@@ -5,7 +5,7 @@ import { findRepoConfig } from '../db.js';
 import { E2BSandboxProvider } from '../sandbox/e2b-provider.js';
 import { requireEnv } from '../env.js';
 import { decrypt } from '../crypto.js';
-import { drain, collectOutput } from '../sandbox/stream.js';
+import { drain } from '../sandbox/stream.js';
 import { discoverSpec } from './spec-discovery.js';
 import { setupSandbox } from './sandbox-setup.js';
 import { runBrowserAgent, ensureBrowserRunning, loginAndInjectAuth } from './browser-agent.js';
@@ -59,7 +59,7 @@ async function captureAndPersistScreenshot(
   const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
   const page = browser.contexts()[0]?.pages()[0];
   if (page) {
-    await page.screenshot({ path: '${screenshotPath}' });
+    await page.screenshot({ path: ${JSON.stringify(screenshotPath)} });
     console.log(JSON.stringify({ ok: true }));
   } else {
     console.log(JSON.stringify({ ok: false, error: 'No page found' }));
@@ -280,19 +280,23 @@ export async function runVerifyPipeline(
       }));
 
     if (judgeEvidence.length > 0) {
-      const judgeVerdicts = await runJudge(judgeEvidence, (msg) => log('judge', msg));
+      try {
+        const judgeVerdicts = await runJudge(judgeEvidence, (msg) => log('judge', msg));
 
-      for (const jv of judgeVerdicts) {
-        const result = results.find((r) => r.id === jv.ac_id);
-        if (!result) continue;
+        for (const jv of judgeVerdicts) {
+          const result = results.find((r) => r.id === jv.ac_id);
+          if (!result) continue;
 
-        result.judgeReasoning = jv.reasoning;
-        if (result.result !== jv.status && result.result !== 'skipped') {
-          log('judge', `Override: ${jv.ac_id} agent=${result.result} → judge=${jv.status} (${jv.reasoning})`);
-          result.result = jv.status === 'error' ? 'skipped' : jv.status;
-          result.judgeOverride = true;
-          if (jv.status === 'error') result.reason = jv.reasoning;
+          result.judgeReasoning = jv.reasoning;
+          if (result.result !== jv.status && result.result !== 'skipped') {
+            log('judge', `Override: ${jv.ac_id} agent=${result.result} → judge=${jv.status} (${jv.reasoning})`);
+            result.result = jv.status === 'error' ? 'skipped' : jv.status;
+            result.judgeOverride = true;
+            if (jv.status === 'error') result.reason = jv.reasoning;
+          }
         }
+      } catch (err) {
+        log('judge', `Judge failed — keeping agent verdicts: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
