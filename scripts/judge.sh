@@ -20,10 +20,13 @@ while IFS= read -r line; do
 done < <(jq -r '.criteria[].id' .verify/plan.json)
 
 PROMPT_FILE=".verify/judge-prompt.txt"
-# Build prompt by appending directly to file — avoids printf %b interpreting
-# backslash sequences in log content (e.g. \n, \t inside agent logs)
+JUDGE_PROMPT="$SCRIPT_DIR/prompts/judge.txt"
+if [ "${VERIFY_ENGINE:-browse}" = "browse" ]; then
+  JUDGE_PROMPT="$SCRIPT_DIR/prompts/judge-browse.txt"
+fi
+
 {
-  cat "$SCRIPT_DIR/prompts/judge.txt"
+  cat "$JUDGE_PROMPT"
   printf "\n\nEVIDENCE:\n"
 } > "$PROMPT_FILE"
 
@@ -31,13 +34,20 @@ for AC_ID in "${AC_IDS[@]}"; do
   AC_DESC=$(jq -r --arg id "$AC_ID" '.criteria[] | select(.id==$id) | .description' .verify/plan.json)
   printf "\n--- AC: %s ---\nCRITERION: %s\n" "$AC_ID" "$AC_DESC" >> "$PROMPT_FILE"
 
+  # Prefer result.json (browse engine), fall back to agent.log (MCP engine)
+  RESULT_FILE=".verify/evidence/$AC_ID/result.json"
   LOG_FILE=".verify/evidence/$AC_ID/agent.log"
-  if [ -f "$LOG_FILE" ]; then
-    printf "AGENT LOG:\n" >> "$PROMPT_FILE"
+
+  if [ -f "$RESULT_FILE" ]; then
+    printf "AGENT RESULT (structured):\n" >> "$PROMPT_FILE"
+    cat "$RESULT_FILE" >> "$PROMPT_FILE"
+    printf "\n" >> "$PROMPT_FILE"
+  elif [ -f "$LOG_FILE" ]; then
+    printf "AGENT LOG (unstructured):\n" >> "$PROMPT_FILE"
     cat "$LOG_FILE" >> "$PROMPT_FILE"
     printf "\n" >> "$PROMPT_FILE"
   else
-    printf "AGENT LOG: not found\n" >> "$PROMPT_FILE"
+    printf "AGENT EVIDENCE: not found (agent may have crashed)\n" >> "$PROMPT_FILE"
   fi
 
   # Embed one screenshot per AC — resize to 300px to keep prompt under limits
