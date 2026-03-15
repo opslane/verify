@@ -1,6 +1,6 @@
 ---
 name: verify-setup
-description: One-time auth setup for /verify. Captures Playwright session state to .verify/auth.json.
+description: One-time auth setup for /verify. Imports cookies from your real browser via gstack browse.
 ---
 
 # /verify-setup
@@ -12,7 +12,7 @@ Run once before using /verify on any app that requires authentication.
 ### 1. Add .verify/ to .gitignore
 
 ```bash
-for pattern in ".verify/auth.json" ".verify/evidence/" ".verify/prompts/" ".verify/report.json" ".verify/plan.json" ".verify/.spec_path" ".verify/chrome-profile/"; do
+for pattern in ".verify/evidence/" ".verify/prompts/" ".verify/report.json" ".verify/plan.json" ".verify/.spec_path" ".verify/browse.json" ".verify/report.html" ".verify/judge-prompt.txt" ".verify/progress.jsonl"; do
   grep -qF "$pattern" .gitignore 2>/dev/null || echo "$pattern" >> .gitignore
 done
 echo "✓ .gitignore updated"
@@ -26,7 +26,6 @@ if [ ! -f .verify/config.json ]; then
   cat > .verify/config.json << 'CONFIG'
 {
   "baseUrl": "http://localhost:3000",
-  "authCheckUrl": "/api/me",
   "specPath": null
 }
 CONFIG
@@ -35,57 +34,68 @@ fi
 
 Ask the user:
 - "What is your dev server URL? (default: http://localhost:3000)"
-- "What URL returns 200 when authenticated? (default: /api/me)"
 
-Update .verify/config.json with their answers using:
+Update .verify/config.json with their answer:
 ```bash
-jq --arg url "THEIR_URL" --arg check "THEIR_CHECK" \
-  '.baseUrl = $url | .authCheckUrl = $check' \
+jq --arg url "THEIR_URL" '.baseUrl = $url' \
   .verify/config.json > .verify/config.tmp && mv .verify/config.tmp .verify/config.json
 ```
 
-### 3. Check dev server is running
+### 3. Install browse binary
+
+```bash
+BROWSE_BIN=$(bash scripts/install-browse.sh | tail -1)
+echo "✓ Browse binary: $BROWSE_BIN"
+```
+
+### 4. Check dev server is running
 
 ```bash
 BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
-curl -sf "$BASE_URL" > /dev/null 2>&1 || echo "⚠ Dev server not running at $BASE_URL. Start it before logging in."
+curl -sf "$BASE_URL" > /dev/null 2>&1 || echo "⚠ Dev server not running at $BASE_URL. Start it before continuing."
 ```
 
-### 4. Capture auth via Playwright codegen
+### 5. Import cookies from browser
 
-`playwright codegen` opens a headed browser, lets the user log in, and saves auth state on exit.
+Ask the user:
+- "Which browser are you logged into your app with? (Chrome / Arc / Edge / Brave / Comet)"
+- "What domain should I import cookies for? (e.g. localhost)"
 
+Then import:
 ```bash
-BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
-mkdir -p .verify
-echo "A browser will open. Log in, then close the browser window."
-npx playwright codegen --save-storage=.verify/auth.json "$BASE_URL"
+$BROWSE_BIN cookie-import-browser BROWSER --domain DOMAIN
 ```
 
-This is the correct approach — the same browser session that captures login also saves the storage state. No session transfer needed.
-
-### 5. Set permissions
-
-```bash
-chmod 600 .verify/auth.json
-echo "✓ Auth saved to .verify/auth.json (chmod 600)"
-```
+First time: a macOS Keychain dialog will appear. The user must click "Allow" or "Always Allow".
 
 ### 6. Verify auth was captured
 
 ```bash
-if [ -f .verify/auth.json ] && [ -s .verify/auth.json ]; then
-  COOKIE_COUNT=$(jq '.cookies | length' .verify/auth.json 2>/dev/null || echo 0)
-  echo "✓ Auth state captured: $COOKIE_COUNT cookies"
-else
-  echo "✗ auth.json is empty. Log in when the browser opens, then close it."
-  exit 1
-fi
+BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
+$BROWSE_BIN goto "$BASE_URL"
+$BROWSE_BIN snapshot -i
 ```
 
-### 7. Done
+Show the snapshot output to the user and ask: "Does this look like your app's authenticated page? (y/n)"
 
-Tell the user:
+If yes:
 ```
-✓ Setup complete. Run /verify before your next PR.
+✓ Setup complete. Run /verify before your next push.
+```
+
+If no:
+```
+Auth may not have imported correctly. Make sure you're logged into DOMAIN in BROWSER, then try again.
+```
+
+### 7. Legacy MCP setup (fallback)
+
+If cookie import fails or the user prefers the old approach:
+
+```bash
+BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
+echo "Falling back to Playwright codegen. A browser will open — log in, then close it."
+npx playwright codegen --save-storage=.verify/auth.json "$BASE_URL"
+chmod 600 .verify/auth.json
+echo "✓ Auth saved. Use VERIFY_ENGINE=mcp when running /verify."
 ```
