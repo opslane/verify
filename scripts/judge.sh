@@ -57,6 +57,17 @@ for AC_ID in "${AC_IDS[@]}"; do
   fi
 done
 
+# ── Append code review findings (if available) ───────────────────────────────
+if [ -f ".verify/code-review.json" ]; then
+  printf "\n\n--- CODE REVIEW FINDINGS ---\n" >> "$PROMPT_FILE"
+  cat ".verify/code-review.json" >> "$PROMPT_FILE"
+  printf "\n" >> "$PROMPT_FILE"
+  echo "  Including code review findings"
+else
+  printf "\n\n--- CODE REVIEW FINDINGS ---\nUnavailable (code review did not run or failed)\n" >> "$PROMPT_FILE"
+  echo "  Code review findings not available — judge will mark as unavailable"
+fi
+
 printf "\nSKIPPED FROM PLAN: %s\n" "$SKIPPED" >> "$PROMPT_FILE"
 
 REPORT_JSON=$("$CLAUDE" -p \
