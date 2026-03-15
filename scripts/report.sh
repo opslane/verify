@@ -35,8 +35,13 @@ echo ""
 jq -r '.criteria[] | select(.status=="fail") | .ac_id' .verify/report.json | while IFS= read -r AC_ID; do
   TRACE=".verify/evidence/$AC_ID/trace"
   VIDEO=".verify/evidence/$AC_ID/session.webm"
+  RESULT=".verify/evidence/$AC_ID/result.json"
   [ -d "$TRACE" ] && echo "  Debug: npx playwright show-report $TRACE"
   [ -f "$VIDEO" ]  && echo "  Video: open $VIDEO"
+  [ -f "$RESULT" ] && echo "  Evidence: cat $RESULT"
+  ls .verify/evidence/"$AC_ID"/screenshot-*.png 2>/dev/null | while read -r img; do
+    echo "  Screenshot: open $img"
+  done
 done
 
 # ── Generate HTML report ───────────────────────────────────────────────────────
