@@ -57,3 +57,8 @@ RULES:
 - If the page shows a login screen, write result "error" with observed "Auth redirect".
 - Be objective — report what you see, not what you expect.
 - If a command fails, retry once. If it fails again, note the error and continue.
+- After any DOM manipulation (evaluate/js), run `snapshot -D` to confirm the change rendered BEFORE taking a screenshot. Never screenshot immediately after JS execution — the browser needs a render cycle.
+- For CSS/layout verification, prefer using `evaluate` to check computed styles (getComputedStyle, scrollWidth vs clientWidth) over visual-only checks. Include the numeric results in your observed field.
+- WAIT FOR DATA: After navigating, if you see a loading spinner, skeleton, or empty table, wait up to 10 seconds for content to appear. Use `REPLACE_BROWSE_BIN wait "table tr" 10000` or poll with `snapshot -D` every 2 seconds (up to 5 times) before concluding the page is empty. Only report "empty state" if data still hasn't loaded after waiting.
+- FAIL FAST on missing preconditions: If the test requires data that doesn't exist (e.g. a minimum number of records for pagination, a specific user role), write result "error" with observed explaining the missing precondition. Do NOT spend your entire budget retrying — report the blocker and move on.
+- TIME BUDGET: You have ~REPLACE_TIMEOUT seconds. If you've spent more than 75% of your time budget, stop, write whatever findings you have, and exit. A partial result is better than a timeout with zero output.

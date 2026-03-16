@@ -5,16 +5,23 @@ Return ONLY a valid JSON object. No markdown fences, no explanation. Raw JSON on
 Schema:
 {
   "slug": "<kebab-case run identifier, e.g. 'pr-7387-look-and-feel-input-color' — derived from PR number + 2-4 word feature summary>",
+  "setup": [
+    "<shell command to seed data or configure state needed by ANY criteria below>",
+    "<e.g. psql command to insert 60 test records for pagination testing>",
+    "<e.g. curl -X POST to create a resource via the app's API>"
+  ],
   "criteria": [
     {
       "id": "ac1",
       "testability": "direct",
       "description": "<AC description>",
       "url": "<path, e.g. /dashboard>",
+      "setup": ["<shell commands specific to THIS AC, run before the browser agent>"],
       "steps": [
         "<concrete browser action or assertion>"
       ],
-      "screenshot_at": ["<snake_case label>"]
+      "screenshot_at": ["<snake_case label>"],
+      "timeout_seconds": 60
     },
     {
       "id": "ac2",
@@ -22,8 +29,10 @@ Schema:
       "description": "<AC description>",
       "condition": "<what must be true for this to be testable, e.g. 'bookings-v3 feature flag must be enabled in the database'>",
       "url": "<path>",
+      "setup": ["<shell commands to make the condition true — seed data, set flags, create records>"],
       "steps": ["<steps assuming condition is met>"],
-      "screenshot_at": ["<snake_case label>"]
+      "screenshot_at": ["<snake_case label>"],
+      "timeout_seconds": 120
     }
   ],
   "skipped": ["<id>: <reason — too vague, requires email/payment/external service, or fundamentally untestable>"]
@@ -46,3 +55,19 @@ Rules:
 8. Avoid brittle pixel measurements. Use ratios, class checks, or relative comparisons.
 9. If code context is provided and an AC cannot be grounded in the diff, note that in the condition or skip reason.
 10. Output raw JSON only — no ```json fences, no preamble, no explanation. The FIRST character of your response must be `{`.
+
+CRITICAL — Self-sufficiency:
+11. You cannot ask questions or get clarifications. Infer URLs from route definitions and page file paths. Infer test data from seed files, fixtures, or migrations. When in doubt, make a reasonable assumption and encode it in the plan.
+12. For locale/translation ACs: if the spec mentions translated text or i18n, check if the app has locale routing (e.g. `/de/`, `/es/` path prefixes or `?lng=` params). Use a non-English locale in the test steps. If you can't determine the locale mechanism from the code, test the underlying CSS behavior that handles variable-length content, rather than requiring an actual locale switch.
+13. NEVER skip an AC just because data doesn't exist — generate setup commands to CREATE the data. For pagination: write a database insert to create test records. For specific user roles: write a DB update. For feature flags: write the SQL to enable them. Look at the code for the DB schema (Prisma schema, migrations, models) and API routes to craft the right commands. Use the DATABASE_URL from .env if available. The setup field accepts shell commands that run before the browser agent.
+    - Global setup: use the top-level "setup" array for data needed by multiple ACs
+    - Per-AC setup: use the per-criteria "setup" array for data specific to one AC
+    - Setup commands must be idempotent (use INSERT ... ON CONFLICT DO NOTHING, or check-before-create)
+    - Only skip an AC if it requires an external service (email, payment, OAuth) that truly cannot be mocked locally
+14. For data-dependent ACs (tables, lists, feeds): always include a wait step — "Wait for table rows / list items to appear (up to 10s)" before asserting on content. SPAs and SSR pages may show empty states or loading skeletons before data arrives.
+15. Set timeout_seconds per AC based on complexity:
+    - 60s: CSS class check, element presence, single-page assertion (1-3 steps)
+    - 90s: Navigate + interact + verify (4-6 steps, e.g. click button, check toast)
+    - 120s: Multi-step flows (7+ steps, form fills, pagination, state changes)
+    - 180s: Only for flows requiring multiple page navigations or long waits
+    Never exceed 180s. If an AC needs more, it's too complex — split it or skip it.
