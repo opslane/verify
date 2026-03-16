@@ -52,7 +52,7 @@ fi
 
 if [ "${VERIFY_ENGINE:-browse}" = "browse" ]; then
   # ─── Browse engine (v2) ───
-  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/gstack/browse/dist/browse}"
+  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/browse}"
   PROMPT_TEMPLATE="$SCRIPT_DIR/prompts/agent-browse.txt"
 
   REPLACE_AC_DESCRIPTION="$AC_DESC" \
@@ -148,6 +148,10 @@ LOG_FILE=".verify/evidence/$AC_ID/agent.log"
 PROGRESS_FILE=".verify/progress.jsonl"
 TS=$(date +%s)
 
+# Disable set -e for the verdict-extraction section — grep/sed failures are
+# handled explicitly and must not kill the script (which would leave no agent.log).
+set +e
+
 _append_progress() {
   # Use jq for safe JSON construction — handles quotes/special chars in AC_ID or verdict
   jq -n --arg ac_id "$1" --arg status "$2" --arg verdict "$3" --argjson ts "$TS" \
@@ -155,21 +159,49 @@ _append_progress() {
 }
 
 if [ $EXIT_CODE -eq 124 ]; then
-  printf "VERDICT: timeout\nREASONING: Agent exceeded ${TIMEOUT_SECS}s\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
-  echo "  ⏱ $AC_ID: timeout"
-  _append_progress "$AC_ID" "timeout" "timeout"
+  # Timeout — but the agent may have finished its work before Claude flushed
+  # its final text output. Check result.json as the authoritative source.
+  RESULT_FILE=".verify/evidence/$AC_ID/result.json"
+  if [ -f "$RESULT_FILE" ]; then
+    RESULT_VERDICT=$(jq -r '.result // empty' "$RESULT_FILE" 2>/dev/null)
+    RESULT_OBSERVED=$(jq -r '.observed // "unknown"' "$RESULT_FILE" 2>/dev/null)
+    if [ -n "$RESULT_VERDICT" ]; then
+      printf "VERDICT: %s\nREASONING: %s (recovered from result.json after timeout)\nSTEPS_COMPLETED: complete\n" \
+        "$RESULT_VERDICT" "$RESULT_OBSERVED" > "$LOG_FILE"
+      echo "  ✓ $AC_ID: done (verdict: $RESULT_VERDICT, recovered from timeout)"
+      _append_progress "$AC_ID" "done" "$RESULT_VERDICT"
+    else
+      printf "VERDICT: timeout\nREASONING: Agent exceeded ${TIMEOUT_SECS}s\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
+      echo "  ⏱ $AC_ID: timeout"
+      _append_progress "$AC_ID" "timeout" "timeout"
+    fi
+  else
+    printf "VERDICT: timeout\nREASONING: Agent exceeded ${TIMEOUT_SECS}s\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
+    echo "  ⏱ $AC_ID: timeout"
+    _append_progress "$AC_ID" "timeout" "timeout"
+  fi
 elif [ $EXIT_CODE -ne 0 ]; then
   printf "VERDICT: error\nREASONING: Agent exited with code $EXIT_CODE\nSTEPS_COMPLETED: 0/unknown\n" > "$LOG_FILE"
   echo "  ✗ $AC_ID: error (exit $EXIT_CODE)"
   _append_progress "$AC_ID" "error" "error"
 else
   if [ ! -f "$LOG_FILE" ]; then
-    grep -A2 "^VERDICT:" ".verify/evidence/$AC_ID/claude.log" > "$LOG_FILE" 2>/dev/null || \
-      printf "VERDICT: error\nREASONING: Agent did not write agent.log\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
+    grep -A2 "^VERDICT:" ".verify/evidence/$AC_ID/claude.log" > "$LOG_FILE" 2>/dev/null || true
   fi
-  # Validate agent.log has expected VERDICT line; overwrite with structured error if malformed
-  if ! grep -q "^VERDICT:" "$LOG_FILE"; then
-    printf "VERDICT: error\nREASONING: claude.log missing VERDICT line\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
+  # Validate agent.log has expected VERDICT line; fall back to result.json, then error
+  if ! grep -q "^VERDICT:" "$LOG_FILE" 2>/dev/null; then
+    RESULT_FILE=".verify/evidence/$AC_ID/result.json"
+    if [ -f "$RESULT_FILE" ]; then
+      RESULT_VERDICT=$(jq -r '.result // empty' "$RESULT_FILE" 2>/dev/null)
+      RESULT_OBSERVED=$(jq -r '.observed // "unknown"' "$RESULT_FILE" 2>/dev/null)
+      if [ -n "$RESULT_VERDICT" ]; then
+        printf "VERDICT: %s\nREASONING: %s (recovered from result.json)\nSTEPS_COMPLETED: complete\n" \
+          "$RESULT_VERDICT" "$RESULT_OBSERVED" > "$LOG_FILE"
+      fi
+    fi
+  fi
+  if ! grep -q "^VERDICT:" "$LOG_FILE" 2>/dev/null; then
+    printf "VERDICT: error\nREASONING: No verdict in claude.log or result.json\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
   fi
   # Use sed to capture full verdict value (handles multi-word verdicts like "partial pass")
   VERDICT=$(sed -n 's/^VERDICT: *//p' "$LOG_FILE" | head -1)

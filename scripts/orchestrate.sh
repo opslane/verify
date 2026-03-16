@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -e
+# No set -e: individual agent failures must not kill the loop — each agent
+# writes its own verdict (pass/fail/timeout/error) and the judge evaluates them.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AGENT_BIN="${AGENT_BIN:-$SCRIPT_DIR/agent.sh}"
 
@@ -34,7 +35,7 @@ echo "→ Running $COUNT browser agent(s)..."
 # Default sequential: avoids Playwright MCP port/video contention on shared machines
 if [ "${VERIFY_SEQUENTIAL:-1}" = "1" ]; then
   echo "  Mode: sequential"
-  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/gstack/browse/dist/browse}"
+  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/browse}"
   DONE=0
   for AC_ID in "${AC_IDS[@]}"; do
     DONE=$((DONE + 1))
@@ -43,10 +44,12 @@ if [ "${VERIFY_SEQUENTIAL:-1}" = "1" ]; then
       "$BROWSE_BIN" goto "about:blank" >/dev/null 2>&1 || true
     fi
     # Per-AC timeout from plan.json, fallback to AGENT_TIMEOUT or 120s
+    # Minimum 90s — Claude startup + prompt processing + browse overhead needs headroom
     AC_TIMEOUT=$(jq -r --arg id "$AC_ID" '.criteria[] | select(.id==$id) | .timeout_seconds // empty' .verify/plan.json 2>/dev/null)
     AC_TIMEOUT="${AC_TIMEOUT:-${AGENT_TIMEOUT:-120}}"
+    [ "$AC_TIMEOUT" -lt 90 ] 2>/dev/null && AC_TIMEOUT=90
     echo "  [$DONE/$COUNT] Starting $AC_ID (timeout: ${AC_TIMEOUT}s)..."
-    "$AGENT_BIN" "$AC_ID" "$AC_TIMEOUT"
+    "$AGENT_BIN" "$AC_ID" "$AC_TIMEOUT" || echo "  ⚠ $AC_ID: agent exited with error (continuing)"
   done
 else
   # Parallel background jobs — each agent gets its own claude -p + Playwright server + video
