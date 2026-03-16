@@ -18,3 +18,4 @@ docs/evals/
 node_modules/
 .env
 .env.local
+.gstack/

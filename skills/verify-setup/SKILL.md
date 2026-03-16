@@ -44,7 +44,7 @@ jq --arg url "THEIR_URL" '.baseUrl = $url' \
 ### 3. Install browse binary
 
 ```bash
-BROWSE_BIN=$(bash scripts/install-browse.sh | tail -1)
+BROWSE_BIN=$(bash ~/.claude/tools/verify/install-browse.sh | tail -1)
 echo "✓ Browse binary: $BROWSE_BIN"
 ```
 

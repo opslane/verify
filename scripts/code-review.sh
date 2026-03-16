@@ -33,9 +33,26 @@ echo "  Diff base: $DIFF_BASE"
 # Exclude binary files, lockfiles, and common non-code assets
 DIFF_EXCLUDES=(-- . ':!*.png' ':!*.jpg' ':!*.jpeg' ':!*.gif' ':!*.webm' ':!*.webp' ':!*.ico' ':!*.woff' ':!*.woff2' ':!*.ttf' ':!*.eot' ':!*.svg' ':!package-lock.json' ':!yarn.lock' ':!pnpm-lock.yaml')
 
-DIFF_STAT=$(git diff --stat "$DIFF_BASE"...HEAD "${DIFF_EXCLUDES[@]}" 2>/dev/null || echo "No diff stats available")
-
+# Try branch diff first, then fall back to staged+unstaged changes
 FULL_DIFF=$(git diff --no-ext-diff "$DIFF_BASE"...HEAD "${DIFF_EXCLUDES[@]}" 2>/dev/null || echo "")
+
+# If branch diff is empty (e.g. running on main), try uncommitted changes
+if [ -z "$FULL_DIFF" ]; then
+  echo "  No branch diff — checking uncommitted changes..."
+  FULL_DIFF=$(git diff --no-ext-diff HEAD "${DIFF_EXCLUDES[@]}" 2>/dev/null || echo "")
+fi
+
+# If still empty, try the PR commit from the spec (planner already extracted it)
+if [ -z "$FULL_DIFF" ]; then
+  PR_COMMIT=$(jq -r '.pr_commit // empty' .verify/plan.json 2>/dev/null || echo "")
+  if [ -n "$PR_COMMIT" ]; then
+    echo "  No local diff — using PR commit $PR_COMMIT..."
+    FULL_DIFF=$(git show --no-ext-diff "$PR_COMMIT" "${DIFF_EXCLUDES[@]}" 2>/dev/null || echo "")
+  fi
+fi
+
+DIFF_STAT=$(git diff --stat "$DIFF_BASE"...HEAD "${DIFF_EXCLUDES[@]}" 2>/dev/null || \
+  git diff --stat HEAD "${DIFF_EXCLUDES[@]}" 2>/dev/null || echo "No diff stats available")
 
 if [ -z "$FULL_DIFF" ]; then
   echo "  No code changes found against $DIFF_BASE"

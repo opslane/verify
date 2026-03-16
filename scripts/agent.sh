@@ -10,7 +10,7 @@ if [ "${VERIFY_ALLOW_DANGEROUS:-0}" != "1" ]; then
 fi
 
 AC_ID="$1"
-TIMEOUT_SECS="${2:-240}"
+TIMEOUT_SECS="${2:-120}"
 
 [ -n "$AC_ID" ] || { echo "Usage: $0 <ac_id> [timeout_secs]"; exit 1; }
 [ -f ".verify/plan.json" ] || { echo "✗ .verify/plan.json not found"; exit 1; }
@@ -39,9 +39,20 @@ SCREENSHOTS=$(echo "$AC_JSON" | jq -r '.screenshot_at | join(", ")')
 # Build agent prompt
 mkdir -p ".verify/evidence/$AC_ID" ".verify/prompts"
 
+# ── Run per-AC setup commands ──────────────────────────────────────────────────
+AC_SETUP_COUNT=$(echo "$AC_JSON" | jq '.setup // [] | length')
+if [ "$AC_SETUP_COUNT" -gt 0 ]; then
+  echo "  → Running $AC_SETUP_COUNT setup command(s) for $AC_ID..."
+  echo "$AC_JSON" | jq -r '.setup[]' | while IFS= read -r cmd; do
+    echo "    → $cmd"
+    echo "  ⚡ Running: $cmd"
+    eval "$cmd" 2>&1 | sed 's/^/      /' || echo "    ⚠ Setup failed (continuing)"
+  done
+fi
+
 if [ "${VERIFY_ENGINE:-browse}" = "browse" ]; then
   # ─── Browse engine (v2) ───
-  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/browse}"
+  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/gstack/browse/dist/browse}"
   PROMPT_TEMPLATE="$SCRIPT_DIR/prompts/agent-browse.txt"
 
   REPLACE_AC_DESCRIPTION="$AC_DESC" \
@@ -50,6 +61,7 @@ if [ "${VERIFY_ENGINE:-browse}" = "browse" ]; then
   REPLACE_SCREENSHOT_AT="$SCREENSHOTS" \
   REPLACE_STEPS_VAL="$STEPS" \
   REPLACE_BROWSE_BIN_VAL="$BROWSE_BIN" \
+  REPLACE_TIMEOUT_VAL="$TIMEOUT_SECS" \
   python3 -c "
 import sys, os
 content = open(sys.argv[1]).read()
@@ -59,26 +71,22 @@ content = content.replace('REPLACE_BASE_URL',       os.environ['REPLACE_BASE_URL
 content = content.replace('REPLACE_SCREENSHOT_AT',  os.environ['REPLACE_SCREENSHOT_AT'])
 content = content.replace('REPLACE_STEPS',          os.environ['REPLACE_STEPS_VAL'])
 content = content.replace('REPLACE_BROWSE_BIN',     os.environ['REPLACE_BROWSE_BIN_VAL'])
+content = content.replace('REPLACE_TIMEOUT',        os.environ['REPLACE_TIMEOUT_VAL'])
 print(content, end='')
 " "$PROMPT_TEMPLATE" > ".verify/prompts/${AC_ID}-agent.txt"
 
   echo "  → Agent $AC_ID [browse] (timeout: ${TIMEOUT_SECS}s)..."
 
+  # Marker file for tracking new videos (bash 3 compatible — no process substitution)
+  SHARED_EVIDENCE_DIR="$(pwd)/.verify/evidence"
+  touch ".verify/evidence/$AC_ID/.video-marker"
+
   set +e
-  EXIT_CODE=1
-  for attempt in 1 2 3; do
-    $TIMEOUT_CMD "$TIMEOUT_SECS" "$CLAUDE" -p \
-      --model sonnet \
-      --dangerously-skip-permissions \
-      < ".verify/prompts/${AC_ID}-agent.txt" > ".verify/evidence/$AC_ID/claude.log" 2>&1
-    EXIT_CODE=$?
-    [ $EXIT_CODE -eq 0 ] && break
-    [ $EXIT_CODE -eq 124 ] && break
-    if [ $attempt -lt 3 ]; then
-      echo "  ↻ $AC_ID: attempt $attempt failed (exit $EXIT_CODE), retrying in 5s..."
-      sleep 5
-    fi
-  done
+  $TIMEOUT_CMD "$TIMEOUT_SECS" "$CLAUDE" -p \
+    --model sonnet \
+    --dangerously-skip-permissions \
+    < ".verify/prompts/${AC_ID}-agent.txt" > ".verify/evidence/$AC_ID/claude.log" 2>&1
+  EXIT_CODE=$?
   set -e
 
 else
@@ -127,21 +135,12 @@ print(content, end='')
   echo "  → Agent $AC_ID [mcp] (timeout: ${TIMEOUT_SECS}s)..."
 
   set +e
-  EXIT_CODE=1
-  for attempt in 1 2 3; do
-    $TIMEOUT_CMD "$TIMEOUT_SECS" "$CLAUDE" -p \
-      --model sonnet \
-      --dangerously-skip-permissions \
-      --mcp-config "$MCP_CONFIG_FILE" \
-      < ".verify/prompts/${AC_ID}-agent.txt" > ".verify/evidence/$AC_ID/claude.log" 2>&1
-    EXIT_CODE=$?
-    [ $EXIT_CODE -eq 0 ] && break
-    [ $EXIT_CODE -eq 124 ] && break
-    if [ $attempt -lt 3 ]; then
-      echo "  ↻ $AC_ID: attempt $attempt failed (exit $EXIT_CODE), retrying in 5s..."
-      sleep 5
-    fi
-  done
+  $TIMEOUT_CMD "$TIMEOUT_SECS" "$CLAUDE" -p \
+    --model sonnet \
+    --dangerously-skip-permissions \
+    --mcp-config "$MCP_CONFIG_FILE" \
+    < ".verify/prompts/${AC_ID}-agent.txt" > ".verify/evidence/$AC_ID/claude.log" 2>&1
+  EXIT_CODE=$?
   set -e
 fi
 
@@ -178,9 +177,19 @@ else
   _append_progress "$AC_ID" "done" "$VERDICT"
 fi
 
-# Video lands in the evidence dir via --output-dir; rename UUID to session.webm
-LATEST_VIDEO=$(find "$EVIDENCE_DIR" -name "*.webm" 2>/dev/null | head -1)
+# Video: MCP engine writes to $EVIDENCE_DIR directly; browse engine writes to shared .verify/evidence/
+EVIDENCE_DIR="$(pwd)/.verify/evidence/$AC_ID"
+LATEST_VIDEO=$(find "$EVIDENCE_DIR" -maxdepth 1 -name "*.webm" 2>/dev/null | head -1)
 if [ -n "$LATEST_VIDEO" ] && [ "$LATEST_VIDEO" != "$EVIDENCE_DIR/session.webm" ]; then
   mv "$LATEST_VIDEO" "$EVIDENCE_DIR/session.webm"
   echo "  📹 $AC_ID: video saved"
+fi
+
+# Browse engine: check shared video dir for new files created during this agent run
+if [ "${VERIFY_ENGINE:-browse}" = "browse" ] && [ ! -f "$EVIDENCE_DIR/session.webm" ]; then
+  NEW_VIDEO=$(find "$SHARED_EVIDENCE_DIR" -maxdepth 1 -name "*.webm" -newer ".verify/evidence/$AC_ID/.video-marker" 2>/dev/null | head -1)
+  if [ -n "$NEW_VIDEO" ] && [ -f "$NEW_VIDEO" ]; then
+    mv "$NEW_VIDEO" "$EVIDENCE_DIR/session.webm"
+    echo "  📹 $AC_ID: video saved (browse)"
+  fi
 fi

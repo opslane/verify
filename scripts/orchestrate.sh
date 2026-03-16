@@ -2,7 +2,6 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AGENT_BIN="${AGENT_BIN:-$SCRIPT_DIR/agent.sh}"
-CLAUDE="${CLAUDE_BIN:-claude}"
 
 [ -f ".verify/plan.json" ] || { echo "✗ .verify/plan.json not found"; exit 1; }
 
@@ -18,16 +17,36 @@ while IFS= read -r line; do
   AC_IDS+=("$line")
 done < <(jq -r '.criteria[].id' .verify/plan.json)
 COUNT=${#AC_IDS[@]}
+
+# ── Run global setup commands ─────────────────────────────────────────────────
+SETUP_COUNT=$(jq '.setup // [] | length' .verify/plan.json 2>/dev/null || echo 0)
+if [ "$SETUP_COUNT" -gt 0 ]; then
+  echo "→ Running $SETUP_COUNT global setup command(s)..."
+  jq -r '.setup[]' .verify/plan.json | while IFS= read -r cmd; do
+    echo "  → $cmd"
+    echo "  ⚡ Running: $cmd"
+    eval "$cmd" 2>&1 | sed 's/^/    /' || echo "  ⚠ Setup command failed (continuing)"
+  done
+fi
+
 echo "→ Running $COUNT browser agent(s)..."
 
 # Default sequential: avoids Playwright MCP port/video contention on shared machines
 if [ "${VERIFY_SEQUENTIAL:-1}" = "1" ]; then
   echo "  Mode: sequential"
+  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/gstack/browse/dist/browse}"
   DONE=0
   for AC_ID in "${AC_IDS[@]}"; do
     DONE=$((DONE + 1))
-    echo "  [$DONE/$COUNT] Starting $AC_ID..."
-    "$AGENT_BIN" "$AC_ID" "${AGENT_TIMEOUT:-240}"
+    # Reset page state between ACs (navigate to blank page) — preserves cookies
+    if [ "${VERIFY_ENGINE:-browse}" = "browse" ] && [ "$DONE" -gt 1 ]; then
+      "$BROWSE_BIN" goto "about:blank" >/dev/null 2>&1 || true
+    fi
+    # Per-AC timeout from plan.json, fallback to AGENT_TIMEOUT or 120s
+    AC_TIMEOUT=$(jq -r --arg id "$AC_ID" '.criteria[] | select(.id==$id) | .timeout_seconds // empty' .verify/plan.json 2>/dev/null)
+    AC_TIMEOUT="${AC_TIMEOUT:-${AGENT_TIMEOUT:-120}}"
+    echo "  [$DONE/$COUNT] Starting $AC_ID (timeout: ${AC_TIMEOUT}s)..."
+    "$AGENT_BIN" "$AC_ID" "$AC_TIMEOUT"
   done
 else
   # Parallel background jobs — each agent gets its own claude -p + Playwright server + video
