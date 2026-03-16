@@ -22,13 +22,13 @@ This skill is turn-based. Each turn has a trigger and a bounded set of actions. 
 
 **Trigger:** User invokes `/verify`.
 
-**Your only action:** Send this message and end your response:
+**Check for arguments first.** If the user passed a file path as an argument (e.g. `/verify path/to/spec.md`), skip this turn entirely — go straight to Turn 2 using that path.
+
+**Otherwise**, send this message and end your response:
 
 > "What spec are you verifying? Paste the spec content or give a file path."
 
 Do not call any tools. Do not run any bash commands. Do not read any files. End your response and wait for the user to reply.
-
-**Even if the user passed a path as an argument to `/verify`**, still send this prompt to confirm — do not skip ahead to Turn 2.
 
 ---
 
