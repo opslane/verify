@@ -12,6 +12,18 @@ if [ "${VERIFY_ALLOW_DANGEROUS:-0}" != "1" ]; then
   exit 1
 fi
 
+# Validate and enforce minimum timeout (90s). Claude startup + prompt processing
+# + browse overhead needs headroom; planners often underestimate.
+_safe_timeout() {
+  local val="$1"
+  local fallback="${2:-120}"
+  case "$val" in
+    ''|*[!0-9]*) val="$fallback" ;;  # non-numeric → fallback
+  esac
+  [ "$val" -lt 90 ] && val=90
+  echo "$val"
+}
+
 # Read all AC IDs (compatible with bash 3 on macOS — no mapfile)
 AC_IDS=()
 while IFS= read -r line; do
@@ -43,11 +55,9 @@ if [ "${VERIFY_SEQUENTIAL:-1}" = "1" ]; then
     if [ "${VERIFY_ENGINE:-browse}" = "browse" ] && [ "$DONE" -gt 1 ]; then
       "$BROWSE_BIN" goto "about:blank" >/dev/null 2>&1 || true
     fi
-    # Per-AC timeout from plan.json, fallback to AGENT_TIMEOUT or 120s
-    # Minimum 90s — Claude startup + prompt processing + browse overhead needs headroom
+    # Per-AC timeout from plan.json, fallback to AGENT_TIMEOUT or 120s, minimum 90s
     AC_TIMEOUT=$(jq -r --arg id "$AC_ID" '.criteria[] | select(.id==$id) | .timeout_seconds // empty' .verify/plan.json 2>/dev/null)
-    AC_TIMEOUT="${AC_TIMEOUT:-${AGENT_TIMEOUT:-120}}"
-    [ "$AC_TIMEOUT" -lt 90 ] 2>/dev/null && AC_TIMEOUT=90
+    AC_TIMEOUT=$(_safe_timeout "${AC_TIMEOUT:-${AGENT_TIMEOUT:-120}}")
     echo "  [$DONE/$COUNT] Starting $AC_ID (timeout: ${AC_TIMEOUT}s)..."
     "$AGENT_BIN" "$AC_ID" "$AC_TIMEOUT" || echo "  ⚠ $AC_ID: agent exited with error (continuing)"
   done
@@ -57,9 +67,11 @@ else
   PIDS=()
   for AC_ID in "${AC_IDS[@]}"; do
     mkdir -p ".verify/evidence/$AC_ID"
-    "$AGENT_BIN" "$AC_ID" "${AGENT_TIMEOUT:-240}" > ".verify/evidence/$AC_ID/orchestrate.log" 2>&1 &
+    AC_TIMEOUT=$(jq -r --arg id "$AC_ID" '.criteria[] | select(.id==$id) | .timeout_seconds // empty' .verify/plan.json 2>/dev/null)
+    AC_TIMEOUT=$(_safe_timeout "${AC_TIMEOUT:-${AGENT_TIMEOUT:-240}}")
+    "$AGENT_BIN" "$AC_ID" "$AC_TIMEOUT" > ".verify/evidence/$AC_ID/orchestrate.log" 2>&1 &
     PIDS+=($!)
-    echo "  → spawned $AC_ID (pid $!)"
+    echo "  → spawned $AC_ID (pid $!, timeout: ${AC_TIMEOUT}s)"
   done
 
   # Kill all agents if orchestrate.sh is interrupted

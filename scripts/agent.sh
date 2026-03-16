@@ -158,23 +158,31 @@ _append_progress() {
     '{"ac_id":$ac_id,"status":$status,"verdict":$verdict,"ts":$ts}' >> "$PROGRESS_FILE"
 }
 
+# Try to recover a verdict from result.json (written by the agent via tool calls).
+# Returns 0 if verdict was recovered and written to $LOG_FILE, 1 otherwise.
+_recover_from_result_json() {
+  local reason_suffix="$1"
+  local result_file=".verify/evidence/$AC_ID/result.json"
+  if [ -f "$result_file" ]; then
+    local verdict observed
+    verdict=$(jq -r '.result // empty' "$result_file" 2>/dev/null)
+    observed=$(jq -r '.observed // "unknown"' "$result_file" 2>/dev/null)
+    if [ -n "$verdict" ]; then
+      printf "VERDICT: %s\nREASONING: %s (%s)\nSTEPS_COMPLETED: complete\n" \
+        "$verdict" "$observed" "$reason_suffix" > "$LOG_FILE"
+      return 0
+    fi
+  fi
+  return 1
+}
+
 if [ $EXIT_CODE -eq 124 ]; then
   # Timeout — but the agent may have finished its work before Claude flushed
   # its final text output. Check result.json as the authoritative source.
-  RESULT_FILE=".verify/evidence/$AC_ID/result.json"
-  if [ -f "$RESULT_FILE" ]; then
-    RESULT_VERDICT=$(jq -r '.result // empty' "$RESULT_FILE" 2>/dev/null)
-    RESULT_OBSERVED=$(jq -r '.observed // "unknown"' "$RESULT_FILE" 2>/dev/null)
-    if [ -n "$RESULT_VERDICT" ]; then
-      printf "VERDICT: %s\nREASONING: %s (recovered from result.json after timeout)\nSTEPS_COMPLETED: complete\n" \
-        "$RESULT_VERDICT" "$RESULT_OBSERVED" > "$LOG_FILE"
-      echo "  ✓ $AC_ID: done (verdict: $RESULT_VERDICT, recovered from timeout)"
-      _append_progress "$AC_ID" "done" "$RESULT_VERDICT"
-    else
-      printf "VERDICT: timeout\nREASONING: Agent exceeded ${TIMEOUT_SECS}s\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
-      echo "  ⏱ $AC_ID: timeout"
-      _append_progress "$AC_ID" "timeout" "timeout"
-    fi
+  if _recover_from_result_json "recovered from result.json after timeout"; then
+    VERDICT=$(sed -n 's/^VERDICT: *//p' "$LOG_FILE" | head -1)
+    echo "  ↻ $AC_ID: done (verdict: $VERDICT, recovered from timeout)"
+    _append_progress "$AC_ID" "done" "$VERDICT"
   else
     printf "VERDICT: timeout\nREASONING: Agent exceeded ${TIMEOUT_SECS}s\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
     echo "  ⏱ $AC_ID: timeout"
@@ -190,24 +198,17 @@ else
   fi
   # Validate agent.log has expected VERDICT line; fall back to result.json, then error
   if ! grep -q "^VERDICT:" "$LOG_FILE" 2>/dev/null; then
-    RESULT_FILE=".verify/evidence/$AC_ID/result.json"
-    if [ -f "$RESULT_FILE" ]; then
-      RESULT_VERDICT=$(jq -r '.result // empty' "$RESULT_FILE" 2>/dev/null)
-      RESULT_OBSERVED=$(jq -r '.observed // "unknown"' "$RESULT_FILE" 2>/dev/null)
-      if [ -n "$RESULT_VERDICT" ]; then
-        printf "VERDICT: %s\nREASONING: %s (recovered from result.json)\nSTEPS_COMPLETED: complete\n" \
-          "$RESULT_VERDICT" "$RESULT_OBSERVED" > "$LOG_FILE"
-      fi
-    fi
-  fi
-  if ! grep -q "^VERDICT:" "$LOG_FILE" 2>/dev/null; then
-    printf "VERDICT: error\nREASONING: No verdict in claude.log or result.json\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
+    _recover_from_result_json "recovered from result.json" || \
+      printf "VERDICT: error\nREASONING: No verdict in claude.log or result.json\nSTEPS_COMPLETED: unknown\n" > "$LOG_FILE"
   fi
   # Use sed to capture full verdict value (handles multi-word verdicts like "partial pass")
   VERDICT=$(sed -n 's/^VERDICT: *//p' "$LOG_FILE" | head -1)
   echo "  ✓ $AC_ID: done (verdict: $VERDICT)"
   _append_progress "$AC_ID" "done" "$VERDICT"
 fi
+
+# Re-enable set -e for the video-handling section
+set -e
 
 # Video: MCP engine writes to $EVIDENCE_DIR directly; browse engine writes to shared .verify/evidence/
 EVIDENCE_DIR="$(pwd)/.verify/evidence/$AC_ID"
