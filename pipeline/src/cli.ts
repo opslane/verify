@@ -108,8 +108,41 @@ if (command === "run-stage" && stageName) {
       }
       break;
     }
+    case "judge": {
+      const { collectEvidencePaths, buildJudgePrompt, parseJudgeOutput } = await import("./stages/judge.js");
+      const evidenceRefs = collectEvidencePaths(runDir);
+      if (evidenceRefs.length === 0) {
+        console.log('{"verdicts":[]}');
+        break;
+      }
+      const prompt = buildJudgePrompt(evidenceRefs);
+      const result = await runClaude({ prompt, model: "opus", timeoutMs: 120_000, stage: "judge", runDir, ...permissions });
+      const verdicts = parseJudgeOutput(result.stdout);
+      if (verdicts) {
+        writeFileSync(join(runDir, "verdicts.json"), JSON.stringify(verdicts, null, 2));
+        console.log(JSON.stringify(verdicts, null, 2));
+      } else {
+        console.error("Judge failed to produce valid output. Check logs:", join(runDir, "logs"));
+        process.exit(1);
+      }
+      break;
+    }
+    case "learner": {
+      const { buildLearnerPrompt, backupAndRestore } = await import("./stages/learner.js");
+      const learningsPath = join(verifyDir, "learnings.md");
+      const { restore } = backupAndRestore(learningsPath);
+      const prompt = buildLearnerPrompt({
+        verdictsPath: join(runDir, "verdicts.json"),
+        timelinePath: join(runDir, "logs", "timeline.jsonl"),
+        learningsPath,
+      });
+      await runClaude({ prompt, model: "sonnet", timeoutMs: 60_000, stage: "learner", runDir, ...permissions });
+      restore();
+      console.log("Learner complete. Learnings at:", learningsPath);
+      break;
+    }
     default:
-      console.error(`Unknown stage: ${stageName}. Available: ac-generator, planner, plan-validator, setup-writer, browse-agent`);
+      console.error(`Unknown stage: ${stageName}. Available: ac-generator, planner, plan-validator, setup-writer, browse-agent, judge, learner`);
       process.exit(1);
   }
 } else {
@@ -117,10 +150,12 @@ if (command === "run-stage" && stageName) {
   console.error("  npx tsx src/cli.ts run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
   console.error("");
   console.error("Stages:");
-  console.error("  ac-generator  --spec <path>");
+  console.error("  ac-generator   --spec <path>");
   console.error("  planner");
   console.error("  plan-validator");
-  console.error("  setup-writer  --group <id> [--condition <text>]");
-  console.error("  browse-agent  --ac <id>");
+  console.error("  setup-writer   --group <id> [--condition <text>]");
+  console.error("  browse-agent   --ac <id>");
+  console.error("  judge");
+  console.error("  learner");
   process.exit(1);
 }
