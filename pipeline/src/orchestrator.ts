@@ -22,6 +22,7 @@ import { buildBrowseAgentPrompt, parseBrowseResult } from "./stages/browse-agent
 import { collectEvidencePaths, buildJudgePrompt, parseJudgeOutput } from "./stages/judge.js";
 import { buildLearnerPrompt, backupAndRestore } from "./stages/learner.js";
 import { resolveBrowseBin, resetPage } from "./lib/browse.js";
+import { extractTableNames, snapshotTables, restoreSnapshot } from "./lib/db-snapshot.js";
 import { findAndRenameVideo } from "./lib/video.js";
 import { formatTerminalReport, formatTimingSummary } from "./report.js";
 
@@ -176,6 +177,9 @@ export async function runPipeline(
     const condition = groupConditions.get(groupId);
 
     // Setup (if group has a condition requiring data state)
+    let snapshotPath: string | null = null;
+    let snapshotTableList: string[] = [];
+
     if (condition) {
       const setupPrompt = buildSetupWriterPrompt(groupId, condition);
       const setupResult = await runClaude({
@@ -191,8 +195,19 @@ export async function runPipeline(
         return;
       }
 
-      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot, seedIds);
+      // Snapshot affected tables BEFORE running setup SQL
+      snapshotTableList = extractTableNames(commands.setup_commands);
+      const snapshotDir = join(runDir, "setup", groupId);
+      mkdirSync(snapshotDir, { recursive: true });
+      snapshotPath = snapshotTables(snapshotTableList, snapshotDir, projectEnv);
+      if (snapshotPath) {
+        callbacks.onLog(`  Snapshotted ${snapshotTableList.length} tables for ${groupId}`);
+      }
+
+      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot);
       if (!setupExec.success) {
+        // Restore snapshot on setup failure
+        if (snapshotPath) restoreSnapshot(snapshotPath, snapshotTableList, projectEnv);
         for (const ac of groupAcs) {
           allVerdicts.push({ ac_id: ac.id, verdict: "setup_failed", confidence: "high", reasoning: `Setup failed: ${setupExec.error}` });
           progress.update(ac.id, "error", "setup_failed");
@@ -200,8 +215,6 @@ export async function runPipeline(
         return;
       }
 
-      // Save teardown commands for later
-      mkdirSync(join(runDir, "setup", groupId), { recursive: true });
       writeFileSync(join(runDir, "setup", groupId, "commands.json"), JSON.stringify(commands, null, 2));
     }
 
@@ -255,13 +268,12 @@ export async function runPipeline(
       resetPage();
     }
 
-    // Teardown (best effort)
-    if (condition) {
-      const commandsPath = join(runDir, "setup", groupId, "commands.json");
-      if (existsSync(commandsPath)) {
-        const commands = JSON.parse(readFileSync(commandsPath, "utf-8"));
-        const teardownErrors = executeTeardownCommands(commands.teardown_commands ?? [], projectEnv, projectRoot, seedIds);
-        for (const err of teardownErrors) callbacks.onLog(`  ⚠ ${err}`);
+    // Teardown: restore DB snapshot (replaces LLM-generated teardown commands)
+    if (snapshotPath && snapshotTableList.length > 0) {
+      callbacks.onLog(`  Restoring DB snapshot for ${groupId}...`);
+      const restoreResult = restoreSnapshot(snapshotPath, snapshotTableList, projectEnv);
+      if (!restoreResult.success) {
+        callbacks.onLog(`  ⚠ Snapshot restore failed: ${restoreResult.error}`);
       }
     }
   }
