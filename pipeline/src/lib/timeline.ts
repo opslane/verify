@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync, existsSync } from "node:fs";
+import { appendFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { TimelineEvent } from "./types.js";
 
@@ -7,16 +7,22 @@ export function appendTimelineEvent(
   event: Omit<TimelineEvent, "ts">
 ): void {
   const entry: TimelineEvent = { ts: new Date().toISOString(), ...event };
-  const path = join(runDir, "logs", "timeline.jsonl");
-  appendFileSync(path, JSON.stringify(entry) + "\n");
+  const logsDir = join(runDir, "logs");
+  mkdirSync(logsDir, { recursive: true });
+  appendFileSync(join(logsDir, "timeline.jsonl"), JSON.stringify(entry) + "\n");
 }
 
 export function readTimeline(runDir: string): TimelineEvent[] {
   const path = join(runDir, "logs", "timeline.jsonl");
   if (!existsSync(path)) return [];
-  return readFileSync(path, "utf-8")
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
+  const events: TimelineEvent[] = [];
+  for (const line of readFileSync(path, "utf-8").trim().split("\n")) {
+    if (!line) continue;
+    try {
+      events.push(JSON.parse(line) as TimelineEvent);
+    } catch {
+      // Skip malformed lines
+    }
+  }
+  return events;
 }

@@ -15,7 +15,7 @@ export function loadConfig(verifyDir: string): VerifyConfig {
     try {
       fileConfig = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
-      // Malformed config — use defaults
+      console.warn(`[verify] Warning: failed to parse ${configPath}, using defaults`);
     }
   }
 

@@ -91,7 +91,7 @@ export type Confidence = "high" | "medium" | "low";
 export interface ACVerdict {
   ac_id: string;
   verdict: Verdict;
-  confidence: Confidence;               // NEW from eng review
+  confidence: Confidence;
   reasoning: string;
 }
 
