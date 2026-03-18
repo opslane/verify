@@ -153,3 +153,42 @@ COMPLETE — all 9 tasks done, all E2E tests passing
 
 ### Status
 COMPLETE — all 10 WS1 tasks done, typecheck clean, 47 tests passing
+
+---
+
+## pipeline-v2-ws4 (plan: docs/plans/2026-03-18-pipeline-v2-implementation.md)
+
+### Completed
+- [x] Task 4.1: Judge prompt template (commit: 0b1ba72)
+  - Files: pipeline/src/prompts/judge.txt
+  - Confidence scoring (high/medium/low), 7 rules for evidence evaluation
+
+- [x] Task 4.2: Judge stage (commit: 2b36279)
+  - Files: pipeline/src/stages/judge.ts, pipeline/test/judge.test.ts, pipeline/test/fixtures/result.json, pipeline/test/fixtures/verdicts.json
+  - collectEvidencePaths, buildJudgePrompt, parseJudgeOutput, 7 tests
+
+- [x] Task 4.3: Learner prompt template (commit: 2067278)
+  - Files: pipeline/src/prompts/learner.txt
+  - Self-healing patterns, setup corrections, 4 template vars
+
+- [x] Task 4.4: Learner stage (commit: 5fa2586)
+  - Files: pipeline/src/stages/learner.ts, pipeline/test/learner.test.ts
+  - buildLearnerPrompt, backupAndRestore with safety checks, 6 tests
+
+- [x] Task 4.5: CLI entry point (commit: 2db4540)
+  - Files: pipeline/src/cli.ts
+  - run-stage judge/learner subcommands, parseArgs
+
+- [x] Task 4.6: CLI tests (commit: 885bd3d)
+  - Files: pipeline/test/cli.test.ts
+  - 5 tests: help, no command, unknown stage, missing run-dir, empty evidence
+
+- [x] Task 4.7: Full typecheck pass
+  - Typecheck: PASS
+
+- [x] Task 4.8: Full test suite pass
+  - Typecheck: PASS
+  - Tests: 65/65 passing across 10 test files
+
+### Status
+COMPLETE — all 8 WS4 tasks done, typecheck clean, 65 tests passing
