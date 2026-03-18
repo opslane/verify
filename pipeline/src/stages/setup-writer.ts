@@ -60,12 +60,17 @@ export function loadProjectEnv(projectRoot: string): Record<string, string> {
   return env;
 }
 
-export function executeSetupCommands(commands: string[], env?: Record<string, string>): SetupResult {
+export interface ExecOptions {
+  env?: Record<string, string>;
+  cwd?: string;
+}
+
+export function executeSetupCommands(commands: string[], env?: Record<string, string>, cwd?: string): SetupResult {
   if (commands.length === 0) return { success: true };
   const execEnv = env ?? (process.env as Record<string, string>);
   for (const cmd of commands) {
     try {
-      execSync(cmd, { timeout: 30_000, stdio: "pipe", env: execEnv });
+      execSync(cmd, { timeout: 30_000, stdio: "pipe", env: execEnv, ...(cwd ? { cwd } : {}) });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, error: `Setup command failed: ${cmd}\n${message}` };
@@ -74,12 +79,12 @@ export function executeSetupCommands(commands: string[], env?: Record<string, st
   return { success: true };
 }
 
-export function executeTeardownCommands(commands: string[], env?: Record<string, string>): string[] {
+export function executeTeardownCommands(commands: string[], env?: Record<string, string>, cwd?: string): string[] {
   const errors: string[] = [];
   const execEnv = env ?? (process.env as Record<string, string>);
   for (const cmd of commands) {
     try {
-      execSync(cmd, { timeout: 30_000, stdio: "pipe", env: execEnv });
+      execSync(cmd, { timeout: 30_000, stdio: "pipe", env: execEnv, ...(cwd ? { cwd } : {}) });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`Teardown command failed: ${cmd}\n${message}`);

@@ -175,7 +175,7 @@ export async function runPipeline(
         return;
       }
 
-      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv);
+      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot);
       if (!setupExec.success) {
         for (const ac of groupAcs) {
           allVerdicts.push({ ac_id: ac.id, verdict: "setup_failed", confidence: "high", reasoning: `Setup failed: ${setupExec.error}` });
@@ -244,7 +244,7 @@ export async function runPipeline(
       const commandsPath = join(runDir, "setup", groupId, "commands.json");
       if (existsSync(commandsPath)) {
         const commands = JSON.parse(readFileSync(commandsPath, "utf-8"));
-        executeTeardownCommands(commands.teardown_commands ?? [], projectEnv);
+        executeTeardownCommands(commands.teardown_commands ?? [], projectEnv, projectRoot);
       }
     }
   }

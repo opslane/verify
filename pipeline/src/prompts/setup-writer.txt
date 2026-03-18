@@ -26,11 +26,15 @@ OUTPUT: Write valid JSON to stdout with this exact schema:
 }
 
 RULES:
-1. setup_commands: SQL that creates the required state. Use $DATABASE_URL.
-2. teardown_commands: SQL that reverses the setup. Always clean up what you created.
-3. Use INSERT ... ON CONFLICT DO UPDATE for idempotent setup.
-4. Never DROP or TRUNCATE tables — only INSERT/UPDATE/DELETE specific rows.
-5. Use realistic but identifiable test data (e.g., email: "verify-test@example.com").
-6. If the condition is null or empty, output empty arrays for both commands.
+1. setup_commands: SQL that creates the required state.
+2. ALWAYS use `psql "$DATABASE_URL"` directly. The $DATABASE_URL env var is ALREADY SET in the execution environment. Do NOT try to read it from .env files or use grep/cut/sed to extract it. Just use $DATABASE_URL.
+3. If $DATABASE_URL contains query parameters (like ?schema=public), strip them with: psql "${DATABASE_URL%%\?*}" -c "..."
+4. teardown_commands: SQL that reverses the setup. Always clean up what you created.
+5. Use INSERT ... ON CONFLICT DO UPDATE for idempotent setup.
+6. Always include --set ON_ERROR_STOP=1 in psql commands.
+7. Never DROP or TRUNCATE tables — only INSERT/UPDATE/DELETE specific rows.
+8. Quote mixed-case table/column names with double quotes (e.g., "Organization", "isActive").
+9. Use realistic but identifiable test data (e.g., email: "verify-test@example.com").
+10. If the condition is null or empty, output empty arrays for both commands.
 
 Output ONLY the JSON. No explanation, no markdown fences.
