@@ -192,3 +192,38 @@ COMPLETE — all 10 WS1 tasks done, typecheck clean, 47 tests passing
 
 ### Status
 COMPLETE — all 8 WS4 tasks done, typecheck clean, 65 tests passing
+
+---
+
+## pipeline-v2-ws5 (plan: docs/plans/2026-03-18-pipeline-v2-implementation.md)
+
+### Completed
+- [x] Task 5.0: Init/preflight checks (commit: bf37d18)
+  - Files: pipeline/src/init.ts, pipeline/test/init.test.ts
+  - checkDevServer, checkSpecFile, checkBrowseDaemon, runPreflight, 5 tests
+
+- [x] Task 5.1: Run ID generation (commit: 6fe7e5e)
+  - Files: pipeline/src/lib/run-id.ts, pipeline/test/run-id.test.ts
+  - generateRunId → YYYY-MM-DD-HHMM-slug format, 4 tests
+
+- [x] Task 5.2: Orchestrator full implementation (commit: bd8c60f)
+  - Files: pipeline/src/orchestrator.ts
+  - Wires all stages: preflight → ac-generator → planner → setup/browse-agents → judge → learner → report
+  - cwd: projectRoot passed to every runClaude call
+  - 240s timeouts for tool-using stages (planner, setup-writer)
+  - Concurrency-capped parallel group execution, circuit breaker on auth failure
+
+- [x] Task 5.3: Report generator (commit: bd8c60f)
+  - Files: pipeline/src/report.ts, pipeline/test/report.test.ts
+  - formatTerminalReport + formatTimingSummary, 8 tests
+
+- [x] Task 5.4-5.5: Orchestrator tests + typecheck (commit: e2bbf14)
+  - Files: pipeline/test/orchestrator.test.ts
+  - 12 integration tests: cwd propagation, timeouts, circuit breaker, failure handling, planner retry, learner safety, user abort, output artifacts
+
+- [x] Task 5.6: Wire CLI + review fixes (commits: 142f0bb, b9df47d)
+  - Files: pipeline/src/cli.ts (added `run` command)
+  - Code review findings fixed: judge verdict reconciliation, removed dead imports, concurrency comment
+
+### Status
+COMPLETE — all WS5 tasks done, typecheck clean, 146 tests passing across 21 files
