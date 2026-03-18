@@ -17,7 +17,7 @@ import { runPreflight } from "./init.js";
 import { buildACGeneratorPrompt, parseACGeneratorOutput, fanOutPureUIGroups } from "./stages/ac-generator.js";
 import { buildPlannerPrompt, parsePlannerOutput, buildRetryPrompt, filterPlanErrors } from "./stages/planner.js";
 import { validatePlan } from "./stages/plan-validator.js";
-import { buildSetupWriterPrompt, parseSetupWriterOutput, executeSetupCommands, executeTeardownCommands } from "./stages/setup-writer.js";
+import { buildSetupWriterPrompt, parseSetupWriterOutput, executeSetupCommands, executeTeardownCommands, loadProjectEnv } from "./stages/setup-writer.js";
 import { buildBrowseAgentPrompt, parseBrowseResult } from "./stages/browse-agent.js";
 import { collectEvidencePaths, buildJudgePrompt, parseJudgeOutput } from "./stages/judge.js";
 import { buildLearnerPrompt, backupAndRestore } from "./stages/learner.js";
@@ -63,7 +63,7 @@ export async function runPipeline(
   callbacks.onLog(`Run: ${runId}`);
 
   // ── Init (preflight) ──────────────────────────────────────────────────
-  const preflight = await runPreflight(config.baseUrl, specPath);
+  const preflight = await runPreflight(config.baseUrl, specPath, verifyDir);
   if (!preflight.ok) {
     for (const err of preflight.errors) callbacks.onError(err);
     return { runDir, verdicts: null };
@@ -138,6 +138,7 @@ export async function runPipeline(
   callbacks.onLog("Stage 3-4: Executing browser agents...");
   const browseBin = resolveBrowseBin();
   const abortController = new AbortController();
+  const projectEnv = loadProjectEnv(projectRoot);
 
   // Group ACs by their group id
   const groupMap = new Map<string, typeof plan.criteria>();
@@ -174,7 +175,7 @@ export async function runPipeline(
         return;
       }
 
-      const setupExec = executeSetupCommands(commands.setup_commands);
+      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv);
       if (!setupExec.success) {
         for (const ac of groupAcs) {
           allVerdicts.push({ ac_id: ac.id, verdict: "setup_failed", confidence: "high", reasoning: `Setup failed: ${setupExec.error}` });
@@ -243,7 +244,7 @@ export async function runPipeline(
       const commandsPath = join(runDir, "setup", groupId, "commands.json");
       if (existsSync(commandsPath)) {
         const commands = JSON.parse(readFileSync(commandsPath, "utf-8"));
-        executeTeardownCommands(commands.teardown_commands ?? []);
+        executeTeardownCommands(commands.teardown_commands ?? [], projectEnv);
       }
     }
   }

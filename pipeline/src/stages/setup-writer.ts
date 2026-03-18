@@ -30,11 +30,42 @@ export interface SetupResult {
   error?: string;
 }
 
-export function executeSetupCommands(commands: string[]): SetupResult {
+/**
+ * Load env vars from a project's .env file.
+ * Parses KEY=VALUE and KEY='VALUE' and KEY="VALUE" lines.
+ * Returns merged env: process.env + .env overrides.
+ */
+export function loadProjectEnv(projectRoot: string): Record<string, string> {
+  const env: Record<string, string> = { ...process.env as Record<string, string> };
+  for (const candidate of [".env.local", ".env"]) {
+    const envPath = join(projectRoot, candidate);
+    if (existsSync(envPath)) {
+      const content = readFileSync(envPath, "utf-8");
+      for (const line of content.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx === -1) continue;
+        const key = trimmed.slice(0, eqIdx);
+        let value = trimmed.slice(eqIdx + 1);
+        // Strip surrounding quotes
+        if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
+          value = value.slice(1, -1);
+        }
+        env[key] = value;
+      }
+      break; // Use first found
+    }
+  }
+  return env;
+}
+
+export function executeSetupCommands(commands: string[], env?: Record<string, string>): SetupResult {
   if (commands.length === 0) return { success: true };
+  const execEnv = env ?? (process.env as Record<string, string>);
   for (const cmd of commands) {
     try {
-      execSync(cmd, { timeout: 30_000, stdio: "pipe" });
+      execSync(cmd, { timeout: 30_000, stdio: "pipe", env: execEnv });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return { success: false, error: `Setup command failed: ${cmd}\n${message}` };
@@ -43,11 +74,12 @@ export function executeSetupCommands(commands: string[]): SetupResult {
   return { success: true };
 }
 
-export function executeTeardownCommands(commands: string[]): string[] {
+export function executeTeardownCommands(commands: string[], env?: Record<string, string>): string[] {
   const errors: string[] = [];
+  const execEnv = env ?? (process.env as Record<string, string>);
   for (const cmd of commands) {
     try {
-      execSync(cmd, { timeout: 30_000, stdio: "pipe" });
+      execSync(cmd, { timeout: 30_000, stdio: "pipe", env: execEnv });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`Teardown command failed: ${cmd}\n${message}`);

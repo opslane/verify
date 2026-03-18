@@ -47,6 +47,11 @@ vi.mock("../src/lib/video.js", () => ({
   findAndRenameVideo: vi.fn(() => null),
 }));
 
+// ── Mock init/preflight ──────────────────────────────────────────────────────
+vi.mock("../src/init.js", () => ({
+  runPreflight: vi.fn(async () => ({ ok: true, errors: [] })),
+}));
+
 // ── Mock setup-writer execution ─────────────────────────────────────────────
 vi.mock("../src/stages/setup-writer.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../src/stages/setup-writer.js")>();
@@ -54,6 +59,7 @@ vi.mock("../src/stages/setup-writer.js", async (importOriginal) => {
     ...original,
     executeSetupCommands: vi.fn(() => ({ success: true })),
     executeTeardownCommands: vi.fn(() => []),
+    loadProjectEnv: vi.fn(() => ({ ...process.env })),
   };
 });
 
