@@ -36,5 +36,6 @@ KEEP IT TIGHT:
 - Group IDs: "group-a", "group-b", etc.
 - Descriptions: one sentence max. Specific enough for a browser agent to verify.
 - If an AC is ambiguous, make it concrete based on the code you can read.
+- NEVER use template variables like {envId}, {environmentId}, {orgId} in conditions or descriptions. If the spec uses these, resolve them to actual IDs by reading app.json or seed data in the codebase. The condition field must contain only concrete, resolved values.
 
 Output ONLY the JSON. No explanation, no markdown fences.

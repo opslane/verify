@@ -318,7 +318,7 @@ export async function runPipeline(
     learningsPath,
   });
   await runClaude({
-    prompt: learnerPrompt, model: "sonnet", timeoutMs: 60_000,
+    prompt: learnerPrompt, model: "sonnet", timeoutMs: 120_000,
     stage: "learner", runDir, ...perms("learner"),
   });
   restore(); // Safety: restore backup if learner corrupted the file

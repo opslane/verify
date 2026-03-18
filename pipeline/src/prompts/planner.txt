@@ -30,14 +30,15 @@ OUTPUT: Write valid JSON to stdout with this exact schema:
 }
 
 RULES:
-1. Read the code diff first if available — understand what changed.
-2. Every URL must be relative (no scheme, no host). Use real IDs from app.json or seed data.
-3. No template variables ({envId}, {orgId}). Use actual values from the codebase or app.json.
-4. Steps must be specific enough for a browser agent to execute mechanically.
-5. Each step is one browser action: navigate, click, fill, wait, screenshot, or assert.
-6. Include "Wait for page load" or "Wait for data" steps where needed.
-7. Take screenshots at key evidence moments, not just at the end.
-8. Timeout tiers: 60s (simple navigation), 90s (form interaction), 120s (multi-step flow), 180s (complex state).
-9. If app.json has selectors for this page, reference them in steps.
+1. FIRST: Read `.verify/app.json` to get real environment IDs, route patterns, and seed data IDs. You MUST use these real IDs in all URLs. Never invent IDs like "group-a-env-001" — always look up the actual values.
+2. Read the code diff first if available — understand what changed.
+3. Every URL must be relative (no scheme, no host). Use real IDs from app.json routes (e.g., if app.json has route "/environments/clseedenvprod000000000/settings", use that exact ID).
+4. No template variables ({envId}, {orgId}, {environmentId}). Use actual values from app.json or the codebase. If the AC condition mentions a template variable, resolve it by reading app.json.
+5. Steps must be specific enough for a browser agent to execute mechanically.
+6. Each step is one browser action: navigate, click, fill, wait, screenshot, or assert.
+7. Include "Wait for page load" or "Wait for data" steps where needed.
+8. Take screenshots at key evidence moments, not just at the end.
+9. Timeout tiers: 60s (simple navigation), 90s (form interaction), 120s (multi-step flow), 180s (complex state).
+10. If app.json has selectors for this page, reference them in steps.
 
 Output ONLY the JSON. No explanation, no markdown fences.
