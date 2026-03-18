@@ -15,7 +15,7 @@ export function buildSetupWriterPrompt(groupId: string, condition: string): stri
 
 export function parseSetupWriterOutput(raw: string): SetupCommands | null {
   const parsed = parseJsonOutput<SetupCommands>(raw);
-  if (!parsed || !Array.isArray(parsed.setup_commands)) return null;
+  if (!parsed || !Array.isArray(parsed.setup_commands) || !Array.isArray(parsed.teardown_commands)) return null;
   return parsed;
 }
 

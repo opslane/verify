@@ -1,5 +1,8 @@
 // pipeline/test/browse.test.ts
 import { describe, it, expect, afterEach } from "vitest";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { resolveBrowseBin } from "../src/lib/browse.js";
 
 describe("resolveBrowseBin", () => {
@@ -10,14 +13,15 @@ describe("resolveBrowseBin", () => {
     expect(resolveBrowseBin()).toBe("/custom/browse");
   });
 
-  it("falls back to default cache path", () => {
+  it("throws when browse binary is not found and BROWSE_BIN is unset", () => {
     delete process.env.BROWSE_BIN;
-    // This may throw if browse is not installed — that's OK for unit test
-    try {
-      const bin = resolveBrowseBin();
-      expect(bin).toContain(".cache/verify/browse");
-    } catch (e: unknown) {
-      expect((e as Error).message).toContain("Browse binary not found");
+    const cached = join(homedir(), ".cache", "verify", "browse");
+    if (existsSync(cached)) {
+      // Browse is actually installed — verify it returns the cached path
+      expect(resolveBrowseBin()).toBe(cached);
+    } else {
+      // Browse is not installed — verify it throws
+      expect(() => resolveBrowseBin()).toThrow("Browse binary not found");
     }
   });
 });

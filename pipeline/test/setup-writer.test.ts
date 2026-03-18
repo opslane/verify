@@ -31,6 +31,10 @@ describe("parseSetupWriterOutput", () => {
   it("returns null when setup_commands is missing", () => {
     expect(parseSetupWriterOutput('{"group_id": "g1"}')).toBeNull();
   });
+
+  it("returns null when teardown_commands is missing", () => {
+    expect(parseSetupWriterOutput('{"group_id": "g1", "setup_commands": ["x"]}')).toBeNull();
+  });
 });
 
 describe("detectORM", () => {

@@ -15,7 +15,8 @@ interface BrowseAgentOpts {
 
 export function buildBrowseAgentPrompt(ac: PlannedAC, opts: BrowseAgentOpts): string {
   const template = readFileSync(join(__dirname, "../prompts/browse-agent.txt"), "utf-8");
-  const fullUrl = `${opts.baseUrl.replace(/\/$/, "")}${ac.url}`;
+  const path = ac.url.startsWith("/") ? ac.url : `/${ac.url}`;
+  const fullUrl = `${opts.baseUrl.replace(/\/$/, "")}${path}`;
   return template
     .replaceAll("{{acId}}", ac.id)
     .replaceAll("{{description}}", ac.description)
@@ -29,5 +30,8 @@ export function buildBrowseAgentPrompt(ac: PlannedAC, opts: BrowseAgentOpts): st
 export function parseBrowseResult(raw: string): BrowseResult | null {
   const parsed = parseJsonOutput<BrowseResult>(raw);
   if (!parsed || typeof parsed.observed !== "string") return null;
+  // Ensure arrays default to empty if LLM omits them
+  if (!Array.isArray(parsed.screenshots)) parsed.screenshots = [];
+  if (!Array.isArray(parsed.commands_run)) parsed.commands_run = [];
   return parsed;
 }
