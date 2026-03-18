@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-interface LearnerPaths {
+export interface LearnerPaths {
   verdictsPath: string;
   timelinePath: string;
   learningsPath: string;

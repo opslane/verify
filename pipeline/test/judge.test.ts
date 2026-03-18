@@ -65,4 +65,32 @@ describe("parseJudgeOutput", () => {
   it("returns null for garbage", () => {
     expect(parseJudgeOutput("nope")).toBeNull();
   });
+
+  it("returns null for invalid verdict values", () => {
+    const output = JSON.stringify({
+      verdicts: [{ ac_id: "ac1", verdict: "maybe", confidence: "high", reasoning: "unsure" }],
+    });
+    expect(parseJudgeOutput(output)).toBeNull();
+  });
+
+  it("returns null for invalid confidence values", () => {
+    const output = JSON.stringify({
+      verdicts: [{ ac_id: "ac1", verdict: "pass", confidence: "very_high", reasoning: "sure" }],
+    });
+    expect(parseJudgeOutput(output)).toBeNull();
+  });
+
+  it("returns null for missing ac_id", () => {
+    const output = JSON.stringify({
+      verdicts: [{ verdict: "pass", confidence: "high", reasoning: "ok" }],
+    });
+    expect(parseJudgeOutput(output)).toBeNull();
+  });
+
+  it("parses markdown-fenced JSON from LLM output", () => {
+    const output = '```json\n{"verdicts":[{"ac_id":"ac1","verdict":"fail","confidence":"medium","reasoning":"not found"}]}\n```';
+    const result = parseJudgeOutput(output);
+    expect(result).not.toBeNull();
+    expect(result!.verdicts[0].verdict).toBe("fail");
+  });
 });
