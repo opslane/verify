@@ -10,6 +10,7 @@ export function validatePlan(
   appIndex: AppIndex | null
 ): PlanValidationResult {
   const errors: PlanValidationError[] = [];
+  const knownRoutes = appIndex ? Object.keys(appIndex.routes) : [];
 
   for (const ac of plan.criteria) {
     if (TEMPLATE_VAR_RE.test(ac.url)) {
@@ -27,7 +28,6 @@ export function validatePlan(
     }
 
     if (appIndex && !TEMPLATE_VAR_RE.test(ac.url) && !ABSOLUTE_URL_RE.test(ac.url)) {
-      const knownRoutes = Object.keys(appIndex.routes);
       const urlBase = ac.url.split("?")[0];
       const routeExists = knownRoutes.some(
         (route) => urlBase === route || urlBase.startsWith(route + "/")

@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function buildPlannerPrompt(acsPath: string): string {
   const template = readFileSync(join(__dirname, "../prompts/planner.txt"), "utf-8");
-  return template.replace("{{acsPath}}", acsPath);
+  return template.replaceAll("{{acsPath}}", acsPath);
 }
 
 export function parsePlannerOutput(raw: string): PlannerOutput | null {
@@ -22,7 +22,11 @@ export function buildRetryPrompt(acsPath: string, errors: PlanValidationError[])
   const errorBlock = errors
     .map((e) => `- AC ${e.acId}, field "${e.field}": ${e.message}`)
     .join("\n");
-  return `${base}\n\nYOUR PREVIOUS PLAN HAD THESE ERRORS. Fix them:\n${errorBlock}`;
+  // Insert error block before the final "Output ONLY" line so the JSON-only instruction stays last
+  const lastNewline = base.lastIndexOf("\n");
+  const beforeLast = base.slice(0, lastNewline);
+  const lastLine = base.slice(lastNewline);
+  return `${beforeLast}\n\nYOUR PREVIOUS PLAN HAD THESE ERRORS. Fix them:\n${errorBlock}${lastLine}`;
 }
 
 export function filterPlanErrors(
@@ -36,8 +40,8 @@ export function filterPlanErrors(
     },
     planErrors: [...errorAcIds].map((acId) => ({
       ac_id: acId,
-      verdict: "plan_error" as const,
-      confidence: "high" as const,
+      verdict: "plan_error",
+      confidence: "high",
       reasoning: errors.filter((e) => e.acId === acId).map((e) => e.message).join("; "),
     })),
   };

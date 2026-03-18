@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function buildACGeneratorPrompt(specPath: string): string {
   const template = readFileSync(join(__dirname, "../prompts/ac-generator.txt"), "utf-8");
-  return template.replace("{{specPath}}", specPath);
+  return template.replaceAll("{{specPath}}", specPath);
 }
 
 export function parseACGeneratorOutput(raw: string): ACGeneratorOutput | null {
