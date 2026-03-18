@@ -1,6 +1,6 @@
 // pipeline/test/setup-writer.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { buildSetupWriterPrompt, parseSetupWriterOutput, detectORM, executeSetupCommands } from "../src/stages/setup-writer.js";
+import { buildSetupWriterPrompt, parseSetupWriterOutput, detectORM, executeSetupCommands, executeTeardownCommands } from "../src/stages/setup-writer.js";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -71,5 +71,22 @@ describe("executeSetupCommands", () => {
   it("returns success for empty command list", () => {
     const result = executeSetupCommands([]);
     expect(result.success).toBe(true);
+  });
+});
+
+describe("executeTeardownCommands", () => {
+  it("runs valid teardown commands", () => {
+    const errors = executeTeardownCommands(["echo cleanup"]);
+    expect(errors).toHaveLength(0);
+  });
+
+  it("does not throw on failing teardown commands", () => {
+    const errors = executeTeardownCommands(["exit 1", "echo still-runs"]);
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it("returns empty array for empty command list", () => {
+    const errors = executeTeardownCommands([]);
+    expect(errors).toHaveLength(0);
   });
 });

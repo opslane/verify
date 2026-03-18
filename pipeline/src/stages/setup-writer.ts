@@ -42,3 +42,16 @@ export function executeSetupCommands(commands: string[]): SetupResult {
   }
   return { success: true };
 }
+
+export function executeTeardownCommands(commands: string[]): string[] {
+  const errors: string[] = [];
+  for (const cmd of commands) {
+    try {
+      execSync(cmd, { timeout: 30_000, stdio: "pipe" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`Teardown command failed: ${cmd}\n${message}`);
+    }
+  }
+  return errors;
+}
