@@ -1,8 +1,8 @@
 // pipeline/src/orchestrator.ts — Wires all stages together into a single pipeline run
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type {
-  VerifyConfig, ACGeneratorOutput, PlannerOutput, JudgeOutput,
+  ACGeneratorOutput, PlannerOutput, JudgeOutput,
   ACVerdict, ProgressEvent,
 } from "./lib/types.js";
 import { STAGE_PERMISSIONS, isAuthFailure } from "./lib/types.js";
@@ -51,6 +51,8 @@ export async function runPipeline(
   mkdirSync(join(runDir, "logs"), { recursive: true });
 
   const progress = new ProgressEmitter(callbacks.onProgress);
+  // Note: allVerdicts is mutated from concurrent executeGroup promises.
+  // Safe because Node.js is single-threaded and all pushes are synchronous between awaits.
   const allVerdicts: ACVerdict[] = [];
 
   /** Merge stage permissions with cwd — every runClaude call uses this */
@@ -240,7 +242,6 @@ export async function runPipeline(
     if (condition) {
       const commandsPath = join(runDir, "setup", groupId, "commands.json");
       if (existsSync(commandsPath)) {
-        const { readFileSync } = await import("node:fs");
         const commands = JSON.parse(readFileSync(commandsPath, "utf-8"));
         executeTeardownCommands(commands.teardown_commands ?? []);
       }
@@ -248,8 +249,7 @@ export async function runPipeline(
   }
 
   // Run groups with concurrency cap
-  const groupIds = [...groupMap.keys()];
-  const queue = [...groupIds];
+  const queue = [...groupMap.keys()];
   const active: Promise<void>[] = [];
 
   while (queue.length > 0 || active.length > 0) {
@@ -278,7 +278,6 @@ export async function runPipeline(
 
   // ── Stage 5: Judge ────────────────────────────────────────────────────
   const evidenceRefs = collectEvidencePaths(runDir);
-  let judgeVerdicts: JudgeOutput | null = null;
 
   if (evidenceRefs.length > 0) {
     callbacks.onLog("Stage 5: Judging evidence...");
@@ -287,9 +286,18 @@ export async function runPipeline(
       prompt: judgePrompt, model: "opus", timeoutMs: 120_000,
       stage: "judge", runDir, ...perms("judge"),
     });
-    judgeVerdicts = parseJudgeOutput(judgeResult.stdout);
-    if (judgeVerdicts) {
-      allVerdicts.push(...judgeVerdicts.verdicts);
+    const judgeOutput = parseJudgeOutput(judgeResult.stdout);
+    if (judgeOutput) {
+      allVerdicts.push(...judgeOutput.verdicts);
+    }
+
+    // Reconciliation: any AC with evidence but no verdict gets an error fallback
+    const verdictIds = new Set(allVerdicts.map(v => v.ac_id));
+    for (const ref of evidenceRefs) {
+      if (!verdictIds.has(ref.acId)) {
+        allVerdicts.push({ ac_id: ref.acId, verdict: "error", confidence: "high", reasoning: "Judge did not produce a verdict for this AC" });
+        progress.update(ref.acId, "error", "judge_missing");
+      }
     }
   } else {
     callbacks.onLog("No evidence collected — skipping Judge.");

@@ -12,7 +12,9 @@ export function formatTerminalReport(verdicts: ACVerdict[]): string {
   lines.push(`\nResults: ${passCount} pass, ${failCount} fail, ${otherCount} other (${verdicts.length} total)\n`);
 
   for (const v of verdicts) {
-    const icon = v.verdict === "pass" ? "\u2713" : v.verdict === "fail" ? "\u2717" : "!";
+    let icon = "!";
+    if (v.verdict === "pass") icon = "\u2713";
+    else if (v.verdict === "fail") icon = "\u2717";
     const conf = v.confidence !== "high" ? ` (${v.confidence} confidence)` : "";
     lines.push(`  ${icon} ${v.ac_id}: ${v.verdict}${conf} \u2014 ${v.reasoning}`);
   }
