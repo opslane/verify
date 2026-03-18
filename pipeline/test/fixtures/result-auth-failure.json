@@ -1,0 +1,6 @@
+{
+  "ac_id": "ac1",
+  "observed": "Auth redirect — page shows login form at /login",
+  "screenshots": [],
+  "commands_run": ["goto http://localhost:3000/settings"]
+}
