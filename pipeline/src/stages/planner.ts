@@ -22,11 +22,15 @@ export function buildRetryPrompt(acsPath: string, errors: PlanValidationError[])
   const errorBlock = errors
     .map((e) => `- AC ${e.acId}, field "${e.field}": ${e.message}`)
     .join("\n");
-  // Insert error block before the final "Output ONLY" line so the JSON-only instruction stays last
-  const lastNewline = base.lastIndexOf("\n");
-  const beforeLast = base.slice(0, lastNewline);
-  const lastLine = base.slice(lastNewline);
-  return `${beforeLast}\n\nYOUR PREVIOUS PLAN HAD THESE ERRORS. Fix them:\n${errorBlock}${lastLine}`;
+  // Insert error block before the "Output ONLY" line so the JSON-only instruction stays last
+  const marker = "Output ONLY the JSON.";
+  const markerIdx = base.indexOf(marker);
+  if (markerIdx === -1) {
+    return `${base}\n\nYOUR PREVIOUS PLAN HAD THESE ERRORS. Fix them:\n${errorBlock}`;
+  }
+  const before = base.slice(0, markerIdx);
+  const after = base.slice(markerIdx);
+  return `${before}YOUR PREVIOUS PLAN HAD THESE ERRORS. Fix them:\n${errorBlock}\n\n${after}`;
 }
 
 export function filterPlanErrors(
