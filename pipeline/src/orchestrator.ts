@@ -221,7 +221,7 @@ export async function runPipeline(
         baseUrl: config.baseUrl, browseBin, evidenceDir,
       });
       const agentResult = await runClaude({
-        prompt: agentPrompt, model: "sonnet", timeoutMs: ac.timeout_seconds * 1000,
+        prompt: agentPrompt, model: "sonnet", timeoutMs: Math.max(ac.timeout_seconds, 180) * 1000,
         stage: `browse-agent-${ac.id}`, runDir, ...perms("browse-agent"),
       });
 
