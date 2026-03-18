@@ -24,7 +24,7 @@ OUTPUT: Write valid JSON to stdout with this exact schema:
         "Take screenshot of the banner"
       ],
       "screenshot_at": ["trial_banner_visible"],
-      "timeout_seconds": 90
+      "timeout_seconds": 180
     }
   ]
 }
@@ -38,7 +38,7 @@ RULES:
 6. Each step is one browser action: navigate, click, fill, wait, screenshot, or assert.
 7. Include "Wait for page load" or "Wait for data" steps where needed.
 8. Take screenshots at key evidence moments, not just at the end.
-9. Timeout tiers: 60s (simple navigation), 90s (form interaction), 120s (multi-step flow), 180s (complex state).
+9. Timeout tiers: 120s (simple navigation/assertion), 180s (form interaction or multi-step flow), 240s (complex multi-page state changes). The browse agent uses claude -p which needs time for tool calls — always err on the side of longer timeouts.
 10. If app.json has selectors for this page, reference them in steps.
 
 Output ONLY the JSON. No explanation, no markdown fences.
