@@ -1,0 +1,22 @@
+{
+  "criteria": [
+    {
+      "id": "ac1",
+      "group": "group-a",
+      "description": "Trial banner",
+      "url": "/environments/{envId}/settings",
+      "steps": [],
+      "screenshot_at": [],
+      "timeout_seconds": 30
+    },
+    {
+      "id": "ac2",
+      "group": "group-a",
+      "description": "Billing page",
+      "url": "https://app.example.com/billing",
+      "steps": ["Go to billing"],
+      "screenshot_at": [],
+      "timeout_seconds": 500
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "criteria": [
+    {
+      "id": "ac1",
+      "group": "group-a",
+      "description": "Trial banner appears",
+      "url": "/settings",
+      "steps": ["Navigate to settings", "Look for trial banner"],
+      "screenshot_at": ["trial_banner"],
+      "timeout_seconds": 90
+    }
+  ]
+}
