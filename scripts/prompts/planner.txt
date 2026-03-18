@@ -42,7 +42,9 @@ Testability tiers — assign one to every AC in criteria:
 - "direct"      — testable right now with no special setup. CSS class checks, element presence, layout, interactions that work with any logged-in user.
 - "conditional" — testable IF a specific, human-resolvable condition is met (e.g. a feature flag in DB, a specific user role, a record that must exist). Add a "condition" field explaining exactly what is needed.
 
-Never put an AC in both criteria and skipped. ACs that require email delivery, payment processing, external OAuth, or are fundamentally vague go in skipped.
+Never put an AC in both criteria and skipped. ACs that require email delivery, payment processing (Stripe, PayPal), external OAuth redirects, or are fundamentally vague go in skipped.
+
+IMPORTANT: The "url" field must be a relative path starting with `/` (e.g. `/settings/billing`). NEVER use a full URL like `http://localhost:3000/settings/billing` — the pipeline prepends the base URL automatically.
 
 Rules:
 1. READ THE CODE DIFF FIRST. The diff tells you exactly what changed. Generate ACs that test the delta — what would fail on the old code and pass on the new code.
@@ -60,10 +62,12 @@ CRITICAL — Self-sufficiency:
 11. You cannot ask questions or get clarifications. Infer URLs from route definitions and page file paths. Infer test data from seed files, fixtures, or migrations. When in doubt, make a reasonable assumption and encode it in the plan.
 12. For locale/translation ACs: if the spec mentions translated text or i18n, check if the app has locale routing (e.g. `/de/`, `/es/` path prefixes or `?lng=` params). Use a non-English locale in the test steps. If you can't determine the locale mechanism from the code, test the underlying CSS behavior that handles variable-length content, rather than requiring an actual locale switch.
 13. NEVER skip an AC just because data doesn't exist — generate setup commands to CREATE the data. For pagination: write a database insert to create test records. For specific user roles: write a DB update. For feature flags: write the SQL to enable them. Look at the code for the DB schema (Prisma schema, migrations, models) and API routes to craft the right commands. Use the DATABASE_URL from .env if available. The setup field accepts shell commands that run before the browser agent.
+    - TRACE RENDER DEPENDENCIES: When writing setup commands, don't just set the fields the spec mentions — read the actual component code to find what fields gate rendering. For example, if the spec says "signed recipient" and the DB has both `signingStatus` and `signedAt`, check the component's conditional rendering (ternary, &&, if) to see which field it actually checks. Set ALL fields the component needs, not just what the spec describes.
     - Global setup: use the top-level "setup" array for data needed by multiple ACs
     - Per-AC setup: use the per-criteria "setup" array for data specific to one AC
     - Setup commands must be idempotent (use INSERT ... ON CONFLICT DO NOTHING, or check-before-create)
-    - Only skip an AC if it requires an external service (email, payment, OAuth) that truly cannot be mocked locally
+    - For psql commands, always include `--set ON_ERROR_STOP=1` so psql returns non-zero on SQL errors (e.g. `psql --set ON_ERROR_STOP=1 -c "UPDATE ..."`)
+    - Only skip an AC if it requires an external service (email, payment, OAuth, Stripe checkout, external redirect) that truly cannot be mocked locally
 14. For data-dependent ACs (tables, lists, feeds): always include a wait step — "Wait for table rows / list items to appear (up to 10s)" before asserting on content. SPAs and SSR pages may show empty states or loading skeletons before data arrives.
 15. Set timeout_seconds per AC based on complexity:
     - 60s: CSS class check, element presence, single-page assertion (1-3 steps)

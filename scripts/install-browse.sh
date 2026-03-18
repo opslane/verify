@@ -1,33 +1,60 @@
 #!/usr/bin/env bash
-# Build and cache gstack browse at ~/.cache/verify/gstack
-# The binary must live inside the gstack repo — it resolves server.ts relative to itself.
-# Requires: bun, git
+# Install gstack browse binary — download pre-built or build from source
 set -e
 
 CACHE_DIR="$HOME/.cache/verify"
-GSTACK_DIR="$CACHE_DIR/gstack"
-BROWSE_BIN="$GSTACK_DIR/browse/dist/browse"
+BROWSE_BIN="$CACHE_DIR/browse"
 VERSION_FILE="$CACHE_DIR/browse.version"
-GSTACK_SHA="${GSTACK_SHA:-main}"
+BROWSE_VERSION="${BROWSE_VERSION:-latest}"
 
-# Skip if already built and version matches
-if [ -x "$BROWSE_BIN" ] && [ "$(cat "$VERSION_FILE" 2>/dev/null)" = "$GSTACK_SHA" ]; then
-  CACHED_VERSION=$(cat "$VERSION_FILE" 2>/dev/null || echo "unknown")
-  echo "✓ Browse binary cached ($CACHED_VERSION)"
+# Skip if already installed
+if [ -x "$BROWSE_BIN" ]; then
+  echo "✓ Browse binary cached ($(cat "$VERSION_FILE" 2>/dev/null || echo "unknown"))"
   echo "$BROWSE_BIN"
   exit 0
 fi
 
-# Check prerequisites
+mkdir -p "$CACHE_DIR"
+
+# Detect platform
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64) ARCH="x64" ;;
+  arm64|aarch64) ARCH="arm64" ;;
+esac
+
+echo "→ Installing browse ($OS-$ARCH)..."
+
+# Try pre-built binary from GitHub releases
+REPO="opslane/verify"
+if [ "$BROWSE_VERSION" = "latest" ]; then
+  RELEASE_URL="https://github.com/$REPO/releases/latest/download/browse-$OS-$ARCH"
+else
+  RELEASE_URL="https://github.com/$REPO/releases/download/$BROWSE_VERSION/browse-$OS-$ARCH"
+fi
+
+if curl -fsSL --head "$RELEASE_URL" >/dev/null 2>&1; then
+  curl -fsSL "$RELEASE_URL" -o "$BROWSE_BIN"
+  chmod +x "$BROWSE_BIN"
+  echo "$BROWSE_VERSION" > "$VERSION_FILE"
+  echo "✓ Downloaded pre-built browse binary"
+  echo "$BROWSE_BIN"
+  exit 0
+fi
+
+echo "→ No pre-built binary available. Building from source..."
+
+# Fallback: build from source (requires bun + git)
 if ! command -v bun >/dev/null 2>&1; then
-  echo "✗ Bun is required to build gstack browse."
-  echo "  Install: curl -fsSL https://bun.sh/install | bash"
+  echo "✗ No pre-built binary for $OS-$ARCH and bun not installed."
+  echo "  Install bun: curl -fsSL https://bun.sh/install | bash"
+  echo "  Or download a binary from https://github.com/$REPO/releases"
   exit 1
 fi
 
-mkdir -p "$CACHE_DIR"
-
-echo "→ Building gstack browse from source (one-time)..."
+GSTACK_DIR="$CACHE_DIR/gstack"
+GSTACK_SHA="${GSTACK_SHA:-main}"
 
 if [ -d "$GSTACK_DIR" ]; then
   cd "$GSTACK_DIR" && git pull --ff-only 2>/dev/null || true
@@ -38,12 +65,13 @@ fi
 
 bun install
 bun run build
-
-# Also install Playwright's Chromium if not present
 bunx playwright install chromium 2>/dev/null || true
 
-echo "$GSTACK_SHA" > "$VERSION_FILE"
-chmod +x "$BROWSE_BIN"
+# For source builds, the binary must stay in the gstack tree (it resolves server.ts relative to itself)
+# So we symlink instead of copying
+ln -sf "$GSTACK_DIR/browse/dist/browse" "$BROWSE_BIN"
+git rev-parse --short HEAD > "$VERSION_FILE"
+chmod +x "$GSTACK_DIR/browse/dist/browse"
 
-echo "✓ Built and installed browse binary"
+echo "✓ Built browse binary from source"
 echo "$BROWSE_BIN"

@@ -26,7 +26,7 @@ VERIFY_ENGINE="${VERIFY_ENGINE:-browse}"
 export VERIFY_ENGINE
 
 if [ "$VERIFY_ENGINE" = "browse" ]; then
-  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/gstack/browse/dist/browse}"
+  BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/browse}"
   if [ ! -x "$BROWSE_BIN" ]; then
     echo "→ Browse binary not found. Installing..."
     BROWSE_BIN=$(bash "$(dirname "$0")/install-browse.sh" | tail -1)

@@ -156,47 +156,46 @@ COMPLETE — all 10 WS1 tasks done, typecheck clean, 47 tests passing
 
 ---
 
-## pipeline-v2-ws2 (plan: docs/plans/2026-03-18-pipeline-v2-implementation.md)
+## pipeline-v2-ws3 (plan: docs/plans/2026-03-18-pipeline-v2-implementation.md)
 
 ### Completed
-- [x] Task 2.1: Plan Validator (commit: 78ab7f8)
-  - Files: pipeline/src/stages/plan-validator.ts, pipeline/test/plan-validator.test.ts, pipeline/test/fixtures/plan.json, pipeline/test/fixtures/plan-invalid.json
-  - validatePlan(): template vars, absolute URLs, empty steps, timeout bounds, route checking, 9 tests
+- [x] Task 3.1: Browse daemon management (commit: 8af57fc)
+  - Files: pipeline/src/lib/browse.ts, pipeline/test/browse.test.ts
+  - resolveBrowseBin, startDaemon, healthCheck, stopDaemon, resetPage, loadCookies, 2 tests
 
-- [x] Task 2.2: AC Generator prompt template (commit: 6d516a7)
-  - Files: pipeline/src/prompts/ac-generator.txt
-  - {{specPath}} substitution, grouping rules, tight output format
+- [x] Task 3.2: Setup Writer prompt + stage (commit: 6617fec)
+  - Files: pipeline/src/prompts/setup-writer.txt, pipeline/src/stages/setup-writer.ts, pipeline/test/setup-writer.test.ts
+  - buildSetupWriterPrompt, parseSetupWriterOutput, detectORM, 7 tests
 
-- [x] Task 2.3: AC Generator stage (commit: 9017e50)
-  - Files: pipeline/src/stages/ac-generator.ts, pipeline/test/ac-generator.test.ts
-  - buildACGeneratorPrompt, parseACGeneratorOutput, fanOutPureUIGroups, 9 tests
+- [x] Task 3.3: Browse Agent prompt + stage (commit: be52c04)
+  - Files: pipeline/src/prompts/browse-agent.txt, pipeline/src/stages/browse-agent.ts, pipeline/test/browse-agent.test.ts
+  - buildBrowseAgentPrompt, parseBrowseResult, 4 tests
 
-- [x] Task 2.4: Planner prompt template (commit: 7d9126d)
-  - Files: pipeline/src/prompts/planner.txt
-  - {{acsPath}} substitution, browser step rules, timeout tiers
+- [x] Task 3.4: Execute setup commands (commit: 3a50fdb)
+  - Files: pipeline/src/stages/setup-writer.ts, pipeline/test/setup-writer.test.ts
+  - executeSetupCommands with error capture, 3 tests
 
-- [x] Task 2.5: Planner stage with retry (commit: 79a46c5)
-  - Files: pipeline/src/stages/planner.ts, pipeline/test/planner.test.ts
-  - buildPlannerPrompt, parsePlannerOutput, buildRetryPrompt, filterPlanErrors, 7 tests
+- [x] Task 3.5: Execute teardown commands (commit: 85ba90d)
+  - Files: pipeline/src/stages/setup-writer.ts, pipeline/test/setup-writer.test.ts
+  - executeTeardownCommands (best-effort), 3 tests
 
-- [x] Code review gate (commit: 30b2835)
-  - replaceAll for templates, retry errors before "Output ONLY" line, removed `as const`, hoisted Object.keys
+- [x] Task 3.6: Video file detection (commit: dbfa376)
+  - Files: pipeline/src/lib/video.ts, pipeline/test/video.test.ts
+  - findAndRenameVideo, 3 tests
 
-- [x] Task 2.6: Test fixtures (commit: 8d723be)
-  - Files: pipeline/test/fixtures/acs.json
-  - Realistic AC fixture with groups, conditions, skipped
+- [x] Task 3.7: Auth failure fixture (commit: 72ac0fd)
+  - Files: pipeline/test/fixtures/result-auth-failure.json, pipeline/test/browse-agent.test.ts
+  - parseBrowseResult + isAuthFailure integration, 2 tests
 
-- [x] Task 2.7: CLI subcommand for run-stage (commit: c25c473)
+- [x] Task 3.8: Add setup-writer and browse-agent to CLI (commit: 32af474)
   - Files: pipeline/src/cli.ts
-  - ac-generator, planner, plan-validator stages via `npx tsx src/cli.ts run-stage <stage>`
+  - run-stage subcommand with --group, --condition, --ac options
 
-- [x] Task 2.8: Run all WS2 tests
+- [x] Task 3.9: Full verification pass
   - Typecheck: PASS
-  - Tests: 72/72 passing across 10 test files
+  - Tests: 71/71 passing across 11 test files
 
-- [x] Task 2.9: Manual test on real repo
-  - CLI verified: usage output, unknown stage, missing spec errors all correct
-  - Full LLM-driven test requires running claude CLI (manual step)
+- [x] Task 3.10: Update progress.txt
 
 ### Status
-COMPLETE — all 9 WS2 tasks done, typecheck clean, 72 tests passing
+COMPLETE — all 10 WS3 tasks done, typecheck clean, 71 tests passing

@@ -41,13 +41,31 @@ mkdir -p ".verify/evidence/$AC_ID" ".verify/prompts"
 
 # ── Run per-AC setup commands ──────────────────────────────────────────────────
 AC_SETUP_COUNT=$(echo "$AC_JSON" | jq '.setup // [] | length')
+SETUP_FAILED=false
 if [ "$AC_SETUP_COUNT" -gt 0 ]; then
   echo "  → Running $AC_SETUP_COUNT setup command(s) for $AC_ID..."
-  echo "$AC_JSON" | jq -r '.setup[]' | while IFS= read -r cmd; do
+  # Process substitution (not pipe) so source/export persist in current shell.
+  while IFS= read -r cmd; do
     echo "    → $cmd"
     echo "  ⚡ Running: $cmd"
-    eval "$cmd" 2>&1 | sed 's/^/      /' || echo "    ⚠ Setup failed (continuing)"
-  done
+    set +e
+    SETUP_OUTPUT=$(eval "$cmd" 2>&1)
+    SETUP_EXIT=$?
+    set -e
+    echo "$SETUP_OUTPUT" | sed 's/^/      /'
+    if [ "$SETUP_EXIT" -ne 0 ]; then
+      echo "    ✗ Setup command failed (exit $SETUP_EXIT) — skipping $AC_ID"
+      SETUP_FAILED=true
+      break
+    fi
+  done < <(echo "$AC_JSON" | jq -r '.setup[]')
+fi
+
+if [ "$SETUP_FAILED" = true ]; then
+  mkdir -p ".verify/evidence/$AC_ID"
+  printf "VERDICT: setup_failed\nREASONING: Setup command exited with code %d\nSTEPS_COMPLETED: 0\n" \
+    "$SETUP_EXIT" > ".verify/evidence/$AC_ID/agent.log"
+  exit 0
 fi
 
 if [ "${VERIFY_ENGINE:-browse}" = "browse" ]; then

@@ -1,0 +1,113 @@
+name: Build browse binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      gstack_ref:
+        description: "gstack branch or tag to build from"
+        required: false
+        default: "main"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            os: darwin
+            arch: arm64
+          - runner: ubuntu-latest
+            os: linux
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout opslane/verify
+        uses: actions/checkout@v4
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Clone gstack
+        run: |
+          git clone --depth 1 --branch ${{ inputs.gstack_ref || 'main' }} \
+            https://github.com/garrytan/gstack.git /tmp/gstack
+
+      - name: Build browse binary
+        run: |
+          cd /tmp/gstack
+          bun install
+          bun run build
+
+      - name: Get gstack commit SHA
+        id: sha
+        run: |
+          cd /tmp/gstack
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sha_full=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Rename binary
+        run: |
+          cp /tmp/gstack/browse/dist/browse browse-${{ matrix.os }}-${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: browse-${{ matrix.os }}-${{ matrix.arch }}
+          path: browse-${{ matrix.os }}-${{ matrix.arch }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get gstack commit SHA
+        id: sha
+        run: |
+          git clone --depth 1 --branch ${{ inputs.gstack_ref || 'main' }} \
+            https://github.com/garrytan/gstack.git /tmp/gstack
+          cd /tmp/gstack
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sha_full=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="browse-v$(date +%Y-%m-%d)"
+          SHA="${{ steps.sha.outputs.sha }}"
+          SHA_FULL="${{ steps.sha.outputs.sha_full }}"
+          REF="${{ inputs.gstack_ref || 'main' }}"
+
+          BODY="## Browse binaries
+
+          Built from [garrytan/gstack@${SHA}](https://github.com/garrytan/gstack/commit/${SHA_FULL})
+
+          **gstack ref:** \`${REF}\`
+          **gstack commit:** \`${SHA_FULL}\`
+
+          ### Binaries
+          - \`browse-darwin-arm64\` — macOS Apple Silicon
+          - \`browse-linux-x64\` — Linux x86_64"
+
+          # Move binaries out of per-artifact subdirectories
+          mkdir -p release
+          cp artifacts/browse-darwin-arm64/browse-darwin-arm64 release/
+          cp artifacts/browse-linux-x64/browse-linux-x64 release/
+
+          # Delete existing release with same tag if it exists
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          git tag -d "$TAG" 2>/dev/null || true
+          gh api "repos/${GH_REPO}/git/refs/tags/${TAG}" -X DELETE 2>/dev/null || true
+
+          gh release create "$TAG" \
+            --title "Browse $TAG" \
+            --notes "$BODY" \
+            release/browse-darwin-arm64 \
+            release/browse-linux-x64
