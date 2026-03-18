@@ -21,7 +21,37 @@ const { positionals, values } = parseArgs({
 
 const [command, stageName] = positionals;
 
-if (command === "run-stage" && stageName) {
+if (command === "run") {
+  // Full pipeline run via orchestrator
+  const { runPipeline } = await import("./orchestrator.js");
+  const verifyDir = values["verify-dir"]!;
+  const config = (await import("./lib/config.js")).loadConfig(verifyDir);
+  const specPath = values.spec ?? config.specPath;
+  if (!specPath) { console.error("No --spec provided and no specPath in config"); process.exit(1); }
+
+  const result = await runPipeline(specPath, verifyDir, {
+    onACCheckpoint: async (acs) => {
+      // In CLI mode, auto-approve ACs (no interactive prompt)
+      console.log(`Generated ${acs.groups.length} groups, ${acs.skipped.length} skipped`);
+      return acs;
+    },
+    onLog: (msg) => console.log(msg),
+    onError: (msg) => console.error(msg),
+    onProgress: (evt) => {
+      process.stdout.write(`\r  ${evt.acId}: ${evt.status}${evt.detail ? ` — ${evt.detail}` : ""}   `);
+    },
+  });
+
+  if (!result.verdicts) {
+    console.error("Pipeline failed. Check logs in:", result.runDir);
+    process.exit(1);
+  }
+
+  const passCount = result.verdicts.verdicts.filter(v => v.verdict === "pass").length;
+  const total = result.verdicts.verdicts.length;
+  process.exit(passCount === total ? 0 : 1);
+
+} else if (command === "run-stage" && stageName) {
   const verifyDir = values["verify-dir"]!;
   const runDir = values["run-dir"] ?? join(verifyDir, "runs", `manual-${Date.now()}`);
   mkdirSync(join(runDir, "logs"), { recursive: true });
@@ -159,7 +189,12 @@ if (command === "run-stage" && stageName) {
   }
 } else {
   console.error("Usage:");
+  console.error("  npx tsx src/cli.ts run --spec <path> [--verify-dir .verify]");
   console.error("  npx tsx src/cli.ts run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
+  console.error("");
+  console.error("Commands:");
+  console.error("  run            Full pipeline run (orchestrator)");
+  console.error("  run-stage      Run a single stage for debugging");
   console.error("");
   console.error("Stages:");
   console.error("  ac-generator   --spec <path>");
