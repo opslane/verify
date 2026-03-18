@@ -1,6 +1,6 @@
 // pipeline/test/setup-writer.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { buildSetupWriterPrompt, parseSetupWriterOutput, detectORM, executeSetupCommands, executeTeardownCommands } from "../src/stages/setup-writer.js";
+import { buildSetupWriterPrompt, parseSetupWriterOutput, detectORM, executeSetupCommands, executeTeardownCommands, validateTeardownCommands } from "../src/stages/setup-writer.js";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -92,5 +92,63 @@ describe("executeTeardownCommands", () => {
   it("returns empty array for empty command list", () => {
     const errors = executeTeardownCommands([]);
     expect(errors).toHaveLength(0);
+  });
+});
+
+describe("validateTeardownCommands", () => {
+  const seedIds = ["clseedenvprod000000000", "clseedorg0000000000000"];
+
+  it("blocks DELETE that references a seed ID", () => {
+    const { safe, blocked } = validateTeardownCommands(
+      ['psql -c "DELETE FROM \\"Environment\\" WHERE id = \'clseedenvprod000000000\';"'],
+      seedIds
+    );
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0].reason).toContain("seed data");
+    expect(safe).toHaveLength(0);
+  });
+
+  it("blocks DELETE that doesn't target verify-test data", () => {
+    const { safe, blocked } = validateTeardownCommands(
+      ['psql -c "DELETE FROM \\"User\\" WHERE id = \'some-random-id\';"'],
+      seedIds
+    );
+    expect(blocked).toHaveLength(1);
+    expect(safe).toHaveLength(0);
+  });
+
+  it("allows DELETE of verify-test data", () => {
+    const { safe, blocked } = validateTeardownCommands(
+      ['psql -c "DELETE FROM \\"User\\" WHERE id = \'verify-test-user-001\';"'],
+      seedIds
+    );
+    expect(blocked).toHaveLength(0);
+    expect(safe).toHaveLength(1);
+  });
+
+  it("blocks SET column = NULL", () => {
+    const { safe, blocked } = validateTeardownCommands(
+      ['psql -c "UPDATE \\"OrganizationBilling\\" SET stripe = NULL WHERE organization_id = \'clseedorg0000000000000\';"'],
+      seedIds
+    );
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0].reason).toContain("NULL");
+  });
+
+  it("allows UPDATE that restores to a value", () => {
+    const { safe, blocked } = validateTeardownCommands(
+      ['psql -c "UPDATE \\"OrganizationBilling\\" SET stripe = \'{\\"subscriptionStatus\\":\\"active\\"}\' WHERE organization_id = \'clseedorg0000000000000\';"'],
+      seedIds
+    );
+    expect(blocked).toHaveLength(0);
+    expect(safe).toHaveLength(1);
+  });
+
+  it("blocks DROP and TRUNCATE", () => {
+    const { blocked } = validateTeardownCommands(
+      ['psql -c "DROP TABLE \\"User\\";"', 'psql -c "TRUNCATE \\"Organization\\";"'],
+      seedIds
+    );
+    expect(blocked).toHaveLength(2);
   });
 });

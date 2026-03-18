@@ -140,6 +140,22 @@ export async function runPipeline(
   const abortController = new AbortController();
   const projectEnv = loadProjectEnv(projectRoot);
 
+  // Collect seed IDs from app.json to protect from destructive teardown
+  const seedIds: string[] = [];
+  if (appIndex) {
+    // Route URLs contain environment IDs
+    for (const route of Object.keys(appIndex.routes)) {
+      const match = route.match(/\/environments\/([^/]+)/);
+      if (match) seedIds.push(match[1]);
+    }
+    // Fixture IDs
+    for (const [name, fixture] of Object.entries(appIndex.fixtures)) {
+      if (fixture.source) seedIds.push(name);
+    }
+  }
+  // Also protect well-known seed prefixes
+  seedIds.push("clseed");
+
   // Group ACs by their group id
   const groupMap = new Map<string, typeof plan.criteria>();
   for (const ac of plan.criteria) {
@@ -244,7 +260,8 @@ export async function runPipeline(
       const commandsPath = join(runDir, "setup", groupId, "commands.json");
       if (existsSync(commandsPath)) {
         const commands = JSON.parse(readFileSync(commandsPath, "utf-8"));
-        executeTeardownCommands(commands.teardown_commands ?? [], projectEnv, projectRoot);
+        const teardownErrors = executeTeardownCommands(commands.teardown_commands ?? [], projectEnv, projectRoot, seedIds);
+        for (const err of teardownErrors) callbacks.onLog(`  ⚠ ${err}`);
       }
     }
   }

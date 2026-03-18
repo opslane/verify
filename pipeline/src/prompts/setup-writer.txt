@@ -29,12 +29,30 @@ RULES:
 1. setup_commands: SQL that creates the required state.
 2. ALWAYS use `psql "$DATABASE_URL"` directly. The $DATABASE_URL env var is ALREADY SET in the execution environment. Do NOT try to read it from .env files or use grep/cut/sed to extract it. Just use $DATABASE_URL.
 3. If $DATABASE_URL contains query parameters (like ?schema=public), strip them with: psql "${DATABASE_URL%%\?*}" -c "..."
-4. teardown_commands: SQL that reverses the setup. Always clean up what you created.
-5. Use INSERT ... ON CONFLICT DO UPDATE for idempotent setup.
-6. Always include --set ON_ERROR_STOP=1 in psql commands.
-7. Never DROP or TRUNCATE tables — only INSERT/UPDATE/DELETE specific rows.
-8. Quote mixed-case table/column names with double quotes (e.g., "Organization", "isActive").
-9. Use realistic but identifiable test data (e.g., email: "verify-test@example.com").
-10. If the condition is null or empty, output empty arrays for both commands.
+4. Use INSERT ... ON CONFLICT DO UPDATE for idempotent setup.
+5. Always include --set ON_ERROR_STOP=1 in psql commands.
+6. Quote mixed-case table/column names with double quotes (e.g., "Organization", "isActive").
+7. Use realistic but identifiable test data (e.g., email: "verify-test@example.com").
+8. If the condition is null or empty, output empty arrays for both commands.
+
+SETUP STRATEGY — MODIFY EXISTING SEED DATA, NEVER CREATE NEW RECORDS:
+9. PREFER updating existing seed records over creating new ones. The app has seed data already — use it. Read app.json fixtures and the seed files to find existing IDs.
+10. When you UPDATE a row, save its original value so teardown can restore it.
+11. NEVER reference existing seed IDs (from app.json) in DELETE commands.
+
+TEARDOWN RULES — RESTORE, NEVER DELETE:
+12. teardown_commands MUST restore the original state, NOT delete data.
+13. If setup did an UPDATE, teardown must UPDATE back to the original value.
+14. If setup did an INSERT of a new row (with a verify-test-* ID), teardown may DELETE only that specific row.
+15. NEVER delete rows that existed before setup. NEVER set columns to NULL unless NULL was the original value.
+16. NEVER delete Environment, Project, Organization, or User rows that have seed/existing IDs.
+
+EXAMPLE of correct setup/teardown:
+  setup:   UPDATE "OrganizationBilling" SET stripe = '{"subscriptionStatus":"trialing"}' WHERE organization_id = 'existing-org-id';
+  teardown: UPDATE "OrganizationBilling" SET stripe = '{"subscriptionStatus":"active"}' WHERE organization_id = 'existing-org-id';
+
+EXAMPLE of WRONG teardown (NEVER do this):
+  teardown: DELETE FROM "Environment" WHERE id = 'existing-seed-id';  ← DESTROYS SEED DATA
+  teardown: UPDATE "OrganizationBilling" SET stripe = NULL WHERE ...;  ← CORRUPTS DATA
 
 Output ONLY the JSON. No explanation, no markdown fences.

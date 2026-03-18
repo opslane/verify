@@ -79,10 +79,64 @@ export function executeSetupCommands(commands: string[], env?: Record<string, st
   return { success: true };
 }
 
-export function executeTeardownCommands(commands: string[], env?: Record<string, string>, cwd?: string): string[] {
+/**
+ * Validate that teardown commands don't delete seed data.
+ * Returns list of blocked commands with reasons.
+ */
+export function validateTeardownCommands(commands: string[], seedIds: string[]): { safe: string[]; blocked: Array<{ cmd: string; reason: string }> } {
+  const safe: string[] = [];
+  const blocked: Array<{ cmd: string; reason: string }> = [];
+
+  for (const cmd of commands) {
+    const upper = cmd.toUpperCase();
+
+    // Block DELETE commands that reference seed IDs
+    if (upper.includes("DELETE")) {
+      const matchesSeedId = seedIds.some(id => cmd.includes(id));
+      if (matchesSeedId) {
+        blocked.push({ cmd, reason: "DELETE references a seed data ID — would destroy existing data" });
+        continue;
+      }
+      // Allow DELETE only for verify-test-* IDs
+      if (!cmd.includes("verify-test") && !cmd.includes("groupb-") && !cmd.includes("groupc-") && !cmd.includes("groupa-")) {
+        blocked.push({ cmd, reason: "DELETE does not target verify-test data — may destroy seed data" });
+        continue;
+      }
+    }
+
+    // Block SET column = NULL on core tables
+    if (upper.includes("SET") && /=\s*NULL/i.test(cmd)) {
+      blocked.push({ cmd, reason: "SET column = NULL may corrupt seed data — teardown should restore original values" });
+      continue;
+    }
+
+    // Block DROP/TRUNCATE
+    if (upper.includes("DROP ") || upper.includes("TRUNCATE")) {
+      blocked.push({ cmd, reason: "DROP/TRUNCATE is never allowed in teardown" });
+      continue;
+    }
+
+    safe.push(cmd);
+  }
+
+  return { safe, blocked };
+}
+
+export function executeTeardownCommands(commands: string[], env?: Record<string, string>, cwd?: string, seedIds?: string[]): string[] {
   const errors: string[] = [];
   const execEnv = env ?? (process.env as Record<string, string>);
-  for (const cmd of commands) {
+
+  // Validate teardown safety if seed IDs provided
+  let safeCommands = commands;
+  if (seedIds && seedIds.length > 0) {
+    const validation = validateTeardownCommands(commands, seedIds);
+    for (const b of validation.blocked) {
+      errors.push(`BLOCKED teardown: ${b.reason}\n  Command: ${b.cmd}`);
+    }
+    safeCommands = validation.safe;
+  }
+
+  for (const cmd of safeCommands) {
     try {
       execSync(cmd, { timeout: 30_000, stdio: "pipe", env: execEnv, ...(cwd ? { cwd } : {}) });
     } catch (err: unknown) {
