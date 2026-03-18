@@ -1,7 +1,7 @@
 // pipeline/src/cli.ts — CLI entry point for running pipeline stages
 import { parseArgs } from "node:util";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { loadConfig } from "./lib/config.js";
 import { runClaude } from "./run-claude.js";
 import { STAGE_PERMISSIONS } from "./lib/types.js";
@@ -26,12 +26,19 @@ if (command === "run-stage" && stageName) {
   const runDir = values["run-dir"] ?? join(verifyDir, "runs", `manual-${Date.now()}`);
   mkdirSync(join(runDir, "logs"), { recursive: true });
 
-  // Derive project root from verify-dir (parent of .verify)
-  const { resolve, dirname } = await import("node:path");
-  const projectRoot = verifyDir.endsWith(".verify") ? dirname(resolve(verifyDir)) : resolve(verifyDir, "..");
+  // Derive project root from verify-dir (.verify is always a direct child of project root)
+  const projectRoot = resolve(verifyDir, "..");
+
+  // Parse --timeout with validation
+  let timeoutOverrideMs: number | undefined;
+  if (values.timeout) {
+    const t = parseInt(values.timeout, 10);
+    if (isNaN(t) || t <= 0) { console.error("--timeout must be a positive integer (seconds)"); process.exit(1); }
+    timeoutOverrideMs = t * 1000;
+  }
 
   const config = loadConfig(verifyDir);
-  const permissions: Record<string, unknown> = { ...STAGE_PERMISSIONS[stageName] ?? {}, cwd: projectRoot };
+  const permissions = { ...STAGE_PERMISSIONS[stageName] ?? {}, cwd: projectRoot };
 
   switch (stageName) {
     case "ac-generator": {
@@ -51,8 +58,7 @@ if (command === "run-stage" && stageName) {
       const { buildPlannerPrompt, parsePlannerOutput } = await import("./stages/planner.js");
       const acsPath = join(runDir, "acs.json");
       const prompt = buildPlannerPrompt(acsPath);
-      const plannerTimeout = values.timeout ? parseInt(values.timeout, 10) * 1000 : 120_000;
-      const result = await runClaude({ prompt, model: "opus", timeoutMs: plannerTimeout, stage: "planner", runDir, ...permissions });
+      const result = await runClaude({ prompt, model: "opus", timeoutMs: timeoutOverrideMs ?? 240_000, stage: "planner", runDir, ...permissions });
       const plan = parsePlannerOutput(result.stdout);
       if (!plan) { console.error("Failed to parse plan output. Check logs:", join(runDir, "logs")); process.exit(1); }
       writeFileSync(join(runDir, "plan.json"), JSON.stringify(plan, null, 2));
@@ -80,8 +86,7 @@ if (command === "run-stage" && stageName) {
       if (!groupId) { console.error("--group is required for setup-writer"); process.exit(1); }
       const { buildSetupWriterPrompt, parseSetupWriterOutput } = await import("./stages/setup-writer.js");
       const prompt = buildSetupWriterPrompt(groupId, condition);
-      const setupTimeout = values.timeout ? parseInt(values.timeout, 10) * 1000 : 90_000;
-      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: setupTimeout, stage: "setup-writer", runDir, ...permissions });
+      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: timeoutOverrideMs ?? 240_000, stage: "setup-writer", runDir, ...permissions });
       const parsed = parseSetupWriterOutput(result.stdout);
       if (!parsed) { console.error("Failed to parse setup writer output. Check logs:", join(runDir, "logs")); process.exit(1); }
       writeFileSync(join(runDir, "setup.json"), JSON.stringify(parsed, null, 2));
