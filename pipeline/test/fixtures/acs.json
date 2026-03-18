@@ -1,0 +1,22 @@
+{
+  "groups": [
+    {
+      "id": "group-a",
+      "condition": "Organization must be in trialing state",
+      "acs": [
+        { "id": "ac1", "description": "Trial alert banner appears on dashboard" },
+        { "id": "ac2", "description": "Trial days remaining shows correct count" }
+      ]
+    },
+    {
+      "id": "group-b",
+      "condition": null,
+      "acs": [
+        { "id": "ac3", "description": "Settings page loads without errors" }
+      ]
+    }
+  ],
+  "skipped": [
+    { "id": "ac4", "reason": "Requires Stripe payment method — external service" }
+  ]
+}
