@@ -1,0 +1,5 @@
+{
+  "verdicts": [
+    { "ac_id": "ac1", "verdict": "pass", "confidence": "high", "reasoning": "Banner confirmed in screenshot" }
+  ]
+}

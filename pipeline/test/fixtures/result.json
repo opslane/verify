@@ -1,0 +1,6 @@
+{
+  "ac_id": "ac1",
+  "observed": "Trial banner visible with text 'Your trial ends in 14 days'",
+  "screenshots": ["screenshot-banner.png"],
+  "commands_run": ["goto http://localhost:3000/settings", "snapshot -D"]
+}
