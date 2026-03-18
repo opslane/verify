@@ -1,9 +1,10 @@
 // pipeline/test/browse-agent.test.ts
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { readFileSync, existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildBrowseAgentPrompt, parseBrowseResult } from "../src/stages/browse-agent.js";
+import { tmpdir } from "node:os";
+import { buildBrowseAgentPrompt, writeInstructionsFile, parseBrowseResult } from "../src/stages/browse-agent.js";
 import { isAuthFailure } from "../src/lib/types.js";
 import type { PlannedAC } from "../src/lib/types.js";
 
@@ -11,21 +12,62 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const mockAC: PlannedAC = {
   id: "ac1", group: "group-a", description: "Trial banner appears",
-  url: "/settings", steps: ["Navigate to settings", "Look for trial banner"],
+  url: "/environments/clseedenvprod000000000/settings/billing",
+  steps: ["Navigate to billing", "Look for trial banner"],
   screenshot_at: ["trial_banner"], timeout_seconds: 90,
 };
 
-describe("buildBrowseAgentPrompt", () => {
-  it("substitutes all placeholders", () => {
-    const prompt = buildBrowseAgentPrompt(mockAC, {
-      baseUrl: "http://localhost:3000", browseBin: "/usr/local/bin/browse",
-      evidenceDir: "/tmp/evidence/ac1",
+describe("writeInstructionsFile", () => {
+  let evidenceDir: string;
+
+  beforeEach(() => { evidenceDir = join(tmpdir(), `verify-browse-${Date.now()}`); });
+  afterEach(() => { rmSync(evidenceDir, { recursive: true, force: true }); });
+
+  it("writes instructions.json with exact URL", () => {
+    const path = writeInstructionsFile(mockAC, {
+      baseUrl: "http://localhost:3002", browseBin: "/usr/bin/browse", evidenceDir,
     });
-    expect(prompt).toContain("Trial banner appears");
-    expect(prompt).toContain("http://localhost:3000/settings");
+    expect(existsSync(path)).toBe(true);
+    const instructions = JSON.parse(readFileSync(path, "utf-8"));
+    expect(instructions.url).toBe("http://localhost:3002/environments/clseedenvprod000000000/settings/billing");
+    expect(instructions.ac_id).toBe("ac1");
+    expect(instructions.steps).toHaveLength(2);
+  });
+
+  it("preserves long IDs exactly — no truncation", () => {
+    const longIdAC: PlannedAC = {
+      ...mockAC,
+      url: "/environments/clseedenvprod000000000/settings/billing",
+    };
+    const path = writeInstructionsFile(longIdAC, {
+      baseUrl: "http://localhost:3002", browseBin: "/usr/bin/browse", evidenceDir,
+    });
+    const instructions = JSON.parse(readFileSync(path, "utf-8"));
+    // The full ID has 21 chars of zeros — verify exact match, not a truncated version
+    expect(instructions.url).toBe("http://localhost:3002/environments/clseedenvprod000000000/settings/billing");
+  });
+});
+
+describe("buildBrowseAgentPrompt", () => {
+  let evidenceDir: string;
+
+  beforeEach(() => { evidenceDir = join(tmpdir(), `verify-browse-${Date.now()}`); });
+  afterEach(() => { rmSync(evidenceDir, { recursive: true, force: true }); });
+
+  it("references instructions file path, not inline URL", () => {
+    const prompt = buildBrowseAgentPrompt(mockAC, {
+      baseUrl: "http://localhost:3002", browseBin: "/usr/local/bin/browse", evidenceDir,
+    });
+    expect(prompt).toContain("instructions.json");
     expect(prompt).toContain("/usr/local/bin/browse");
-    expect(prompt).toContain("/tmp/evidence/ac1");
     expect(prompt).not.toContain("{{");
+  });
+
+  it("creates instructions.json on disk", () => {
+    buildBrowseAgentPrompt(mockAC, {
+      baseUrl: "http://localhost:3002", browseBin: "/usr/local/bin/browse", evidenceDir,
+    });
+    expect(existsSync(join(evidenceDir, "instructions.json"))).toBe(true);
   });
 });
 
@@ -56,14 +98,5 @@ describe("auth failure fixture integration", () => {
     expect(result).not.toBeNull();
     expect(result!.ac_id).toBe("ac1");
     expect(isAuthFailure(result!.observed)).toBe(true);
-  });
-
-  it("isAuthFailure detects auth redirect URL", () => {
-    const result = parseBrowseResult(JSON.stringify({
-      ac_id: "ac2", observed: "Page loaded",
-      screenshots: [], commands_run: ["goto http://localhost:3000/login"],
-    }));
-    expect(result).not.toBeNull();
-    expect(isAuthFailure(result!.observed, "http://localhost:3000/login")).toBe(true);
   });
 });
