@@ -1,0 +1,85 @@
+// pipeline/src/cli.ts — CLI entry point for running pipeline stages
+import { parseArgs } from "node:util";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { loadConfig } from "./lib/config.js";
+import { runClaude } from "./run-claude.js";
+import { STAGE_PERMISSIONS } from "./lib/types.js";
+
+const { positionals, values } = parseArgs({
+  allowPositionals: true,
+  options: {
+    "verify-dir": { type: "string", default: ".verify" },
+    "run-dir": { type: "string" },
+    spec: { type: "string" },
+    group: { type: "string" },
+    condition: { type: "string" },
+    ac: { type: "string" },
+  },
+});
+
+const [command, stageName] = positionals;
+
+if (command === "run-stage" && stageName) {
+  const verifyDir = values["verify-dir"]!;
+  const runDir = values["run-dir"] ?? join(verifyDir, "runs", `manual-${Date.now()}`);
+  mkdirSync(join(runDir, "logs"), { recursive: true });
+
+  const config = loadConfig(verifyDir);
+  const permissions = STAGE_PERMISSIONS[stageName] ?? {};
+
+  switch (stageName) {
+    case "setup-writer": {
+      const groupId = values.group;
+      const condition = values.condition ?? "";
+      if (!groupId) { console.error("--group is required for setup-writer"); process.exit(1); }
+      const { buildSetupWriterPrompt, parseSetupWriterOutput } = await import("./stages/setup-writer.js");
+      const prompt = buildSetupWriterPrompt(groupId, condition);
+      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: 60_000, stage: "setup-writer", runDir, ...permissions });
+      const parsed = parseSetupWriterOutput(result.stdout);
+      if (!parsed) { console.error("Failed to parse setup writer output. Check logs:", join(runDir, "logs")); process.exit(1); }
+      writeFileSync(join(runDir, "setup.json"), JSON.stringify(parsed, null, 2));
+      console.log(`✓ Setup writer: ${parsed.setup_commands.length} setup, ${parsed.teardown_commands.length} teardown commands`);
+      break;
+    }
+    case "browse-agent": {
+      const acId = values.ac;
+      if (!acId) { console.error("--ac is required for browse-agent"); process.exit(1); }
+      const { readFileSync } = await import("node:fs");
+      const planPath = join(runDir, "plan.json");
+      const plan = JSON.parse(readFileSync(planPath, "utf-8")) as { criteria: Array<{ id: string; group: string; description: string; url: string; steps: string[]; screenshot_at: string[]; timeout_seconds: number }> };
+      const ac = plan.criteria.find(c => c.id === acId);
+      if (!ac) { console.error(`AC ${acId} not found in plan.json`); process.exit(1); }
+      const { resolveBrowseBin } = await import("./lib/browse.js");
+      const { buildBrowseAgentPrompt, parseBrowseResult } = await import("./stages/browse-agent.js");
+      const evidenceDir = join(runDir, "evidence", acId);
+      mkdirSync(evidenceDir, { recursive: true });
+      const prompt = buildBrowseAgentPrompt(ac, {
+        baseUrl: config.baseUrl,
+        browseBin: resolveBrowseBin(),
+        evidenceDir,
+      });
+      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: (ac.timeout_seconds ?? 90) * 1000, stage: `browse-agent-${acId}`, runDir, ...permissions });
+      const parsed = parseBrowseResult(result.stdout);
+      if (parsed) {
+        writeFileSync(join(evidenceDir, "result.json"), JSON.stringify(parsed, null, 2));
+        console.log(`✓ Browse agent ${acId}: ${parsed.observed.slice(0, 80)}`);
+      } else {
+        console.error(`Failed to parse browse agent output for ${acId}. Check logs:`, join(runDir, "logs"));
+        process.exit(1);
+      }
+      break;
+    }
+    default:
+      console.error(`Unknown stage: ${stageName}. Available: setup-writer, browse-agent`);
+      process.exit(1);
+  }
+} else {
+  console.error("Usage:");
+  console.error("  npx tsx src/cli.ts run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
+  console.error("");
+  console.error("Stages:");
+  console.error("  setup-writer  --group <id> [--condition <text>]");
+  console.error("  browse-agent  --ac <id>");
+  process.exit(1);
+}
