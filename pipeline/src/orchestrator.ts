@@ -191,7 +191,7 @@ export async function runPipeline(
         return;
       }
 
-      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot);
+      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot, seedIds);
       if (!setupExec.success) {
         for (const ac of groupAcs) {
           allVerdicts.push({ ac_id: ac.id, verdict: "setup_failed", confidence: "high", reasoning: `Setup failed: ${setupExec.error}` });

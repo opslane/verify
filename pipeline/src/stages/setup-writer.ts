@@ -65,10 +65,48 @@ export interface ExecOptions {
   cwd?: string;
 }
 
-export function executeSetupCommands(commands: string[], env?: Record<string, string>, cwd?: string): SetupResult {
+/**
+ * Validate that setup commands don't re-parent or corrupt seed records.
+ * Blocks ON CONFLICT ... DO UPDATE that changes FK columns (projectId, organizationId)
+ * on rows with seed IDs.
+ */
+export function validateSetupCommands(commands: string[], seedIds: string[]): { safe: string[]; blocked: Array<{ cmd: string; reason: string }> } {
+  const safe: string[] = [];
+  const blocked: Array<{ cmd: string; reason: string }> = [];
+
+  for (const cmd of commands) {
+    // Check if the command updates FK columns on seed records
+    const referencedSeedId = seedIds.find(id => cmd.includes(id));
+    if (referencedSeedId) {
+      const upper = cmd.toUpperCase();
+      // Block UPDATE that changes projectId or organizationId on seed records
+      if (upper.includes("DO UPDATE") && /\"projectId\"|\"organizationId\"/.test(cmd) && upper.includes("EXCLUDED")) {
+        blocked.push({ cmd, reason: `Would re-parent seed record ${referencedSeedId} — changing FK relationships on seed data` });
+        continue;
+      }
+    }
+    safe.push(cmd);
+  }
+
+  return { safe, blocked };
+}
+
+export function executeSetupCommands(commands: string[], env?: Record<string, string>, cwd?: string, seedIds?: string[]): SetupResult {
   if (commands.length === 0) return { success: true };
   const execEnv = env ?? (process.env as Record<string, string>);
-  for (const cmd of commands) {
+
+  // Validate setup safety if seed IDs provided
+  let safeCommands = commands;
+  if (seedIds && seedIds.length > 0) {
+    const validation = validateSetupCommands(commands, seedIds);
+    if (validation.blocked.length > 0) {
+      const reasons = validation.blocked.map(b => b.reason).join("; ");
+      return { success: false, error: `Setup blocked — would corrupt seed data: ${reasons}` };
+    }
+    safeCommands = validation.safe;
+  }
+
+  for (const cmd of safeCommands) {
     try {
       execSync(cmd, { timeout: 30_000, stdio: "pipe", env: execEnv, ...(cwd ? { cwd } : {}) });
     } catch (err: unknown) {

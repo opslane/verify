@@ -39,6 +39,7 @@ SETUP STRATEGY — MODIFY EXISTING SEED DATA, NEVER CREATE NEW RECORDS:
 9. PREFER updating existing seed records over creating new ones. The app has seed data already — use it. Read app.json fixtures and the seed files to find existing IDs.
 10. When you UPDATE a row, save its original value so teardown can restore it.
 11. NEVER reference existing seed IDs (from app.json) in DELETE commands.
+12. NEVER INSERT INTO Environment, Project, or Organization tables with ON CONFLICT DO UPDATE that changes "projectId" or "organizationId". This re-parents seed records and breaks the app. If you need a different org state, UPDATE the existing OrganizationBilling row — don't create new Environment/Project/Organization records that steal the seed environment.
 
 TEARDOWN RULES — RESTORE, NEVER DELETE:
 12. teardown_commands MUST restore the original state, NOT delete data.
