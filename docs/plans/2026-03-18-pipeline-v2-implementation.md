@@ -187,6 +187,7 @@ export interface RunClaudeOptions {
   timeoutMs: number;
   stage: string;                        // for log file naming
   runDir: string;                       // .verify/runs/{run-id}
+  cwd?: string;                         // working directory — MUST be target project root so tool calls read the right files
   dangerouslySkipPermissions?: boolean;
   allowedTools?: string[];              // e.g. ["Bash", "Read", "Glob", "Grep"]
 }
@@ -2250,7 +2251,7 @@ if (command === "run-stage" && stageName) {
       const { buildPlannerPrompt, parsePlannerOutput } = await import("./stages/planner.js");
       const acsPath = join(runDir, "acs.json");
       const prompt = buildPlannerPrompt(acsPath);
-      const result = await runClaude({ prompt, model: "opus", timeoutMs: 120_000, stage: "planner", runDir, ...permissions });
+      const result = await runClaude({ prompt, model: "opus", timeoutMs: 240_000, stage: "planner", runDir, ...permissions });
       const plan = parsePlannerOutput(result.stdout);
       if (!plan) { console.error("Failed to parse plan output. Check logs:", join(runDir, "logs")); process.exit(1); }
       writeFileSync(join(runDir, "plan.json"), JSON.stringify(plan, null, 2));
@@ -3941,8 +3942,8 @@ Each merge is a meaningful checkpoint. After each merge: `cd pipeline && npx vit
 | Stage | Model | Timeout | Tool Access | Why |
 |-------|-------|---------|-------------|-----|
 | AC Generator | Opus | 120s | dangerouslySkipPermissions | Reads spec, app.json, learnings via tool calls |
-| Planner | Opus | 120s | dangerouslySkipPermissions | Full codebase access — reads components, routes, diff |
-| Setup Writer | Sonnet | 90s | dangerouslySkipPermissions | Reads ORM schema files |
+| Planner | Opus | 240s | dangerouslySkipPermissions | Full codebase access — reads components, routes, diff. 120s timed out on Formbricks eval. |
+| Setup Writer | Sonnet | 240s | dangerouslySkipPermissions | Reads ORM schema files. 90s timed out on Formbricks eval — needs time for tool calls. |
 | Browse Agent | Sonnet | per-AC | dangerouslySkipPermissions | Runs browse CLI via Bash tool |
 | Judge | Opus | 120s | allowedTools: [Read] | Only reads evidence files — no write access |
 | Learner | Sonnet | 60s | dangerouslySkipPermissions | Reads verdicts + writes learnings.md |

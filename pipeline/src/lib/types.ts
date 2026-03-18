@@ -132,6 +132,7 @@ export interface RunClaudeOptions {
   timeoutMs: number;
   stage: string;                        // for log file naming
   runDir: string;                       // .verify/runs/{run-id}
+  cwd?: string;                         // working directory for claude (target project root)
   dangerouslySkipPermissions?: boolean;
   allowedTools?: string[];              // e.g. ["Bash", "Read", "Glob", "Grep"]
 }

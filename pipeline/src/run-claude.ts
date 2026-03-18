@@ -14,7 +14,7 @@ import { appendTimelineEvent } from "./lib/timeline.js";
  * 3. Proper timeout handling via setTimeout + child.kill()
  */
 export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult> {
-  const { prompt, model, timeoutMs, stage, runDir, dangerouslySkipPermissions, allowedTools } = opts;
+  const { prompt, model, timeoutMs, stage, runDir, cwd, dangerouslySkipPermissions, allowedTools } = opts;
   const logsDir = join(runDir, "logs");
   mkdirSync(logsDir, { recursive: true });
 
@@ -40,6 +40,7 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
     const child = spawn(claudeBin, args, {
       env: { ...process.env },
       stdio: ["pipe", "pipe", "pipe"],
+      ...(cwd ? { cwd } : {}),
     });
 
     // Collect stdout and stderr via streams

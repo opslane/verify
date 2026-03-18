@@ -15,6 +15,7 @@ const { positionals, values } = parseArgs({
     group: { type: "string" },
     condition: { type: "string" },
     ac: { type: "string" },
+    timeout: { type: "string" },
   },
 });
 
@@ -25,8 +26,12 @@ if (command === "run-stage" && stageName) {
   const runDir = values["run-dir"] ?? join(verifyDir, "runs", `manual-${Date.now()}`);
   mkdirSync(join(runDir, "logs"), { recursive: true });
 
+  // Derive project root from verify-dir (parent of .verify)
+  const { resolve, dirname } = await import("node:path");
+  const projectRoot = verifyDir.endsWith(".verify") ? dirname(resolve(verifyDir)) : resolve(verifyDir, "..");
+
   const config = loadConfig(verifyDir);
-  const permissions = STAGE_PERMISSIONS[stageName] ?? {};
+  const permissions: Record<string, unknown> = { ...STAGE_PERMISSIONS[stageName] ?? {}, cwd: projectRoot };
 
   switch (stageName) {
     case "ac-generator": {
@@ -46,7 +51,8 @@ if (command === "run-stage" && stageName) {
       const { buildPlannerPrompt, parsePlannerOutput } = await import("./stages/planner.js");
       const acsPath = join(runDir, "acs.json");
       const prompt = buildPlannerPrompt(acsPath);
-      const result = await runClaude({ prompt, model: "opus", timeoutMs: 120_000, stage: "planner", runDir, ...permissions });
+      const plannerTimeout = values.timeout ? parseInt(values.timeout, 10) * 1000 : 120_000;
+      const result = await runClaude({ prompt, model: "opus", timeoutMs: plannerTimeout, stage: "planner", runDir, ...permissions });
       const plan = parsePlannerOutput(result.stdout);
       if (!plan) { console.error("Failed to parse plan output. Check logs:", join(runDir, "logs")); process.exit(1); }
       writeFileSync(join(runDir, "plan.json"), JSON.stringify(plan, null, 2));
@@ -74,7 +80,8 @@ if (command === "run-stage" && stageName) {
       if (!groupId) { console.error("--group is required for setup-writer"); process.exit(1); }
       const { buildSetupWriterPrompt, parseSetupWriterOutput } = await import("./stages/setup-writer.js");
       const prompt = buildSetupWriterPrompt(groupId, condition);
-      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: 60_000, stage: "setup-writer", runDir, ...permissions });
+      const setupTimeout = values.timeout ? parseInt(values.timeout, 10) * 1000 : 90_000;
+      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: setupTimeout, stage: "setup-writer", runDir, ...permissions });
       const parsed = parseSetupWriterOutput(result.stdout);
       if (!parsed) { console.error("Failed to parse setup writer output. Check logs:", join(runDir, "logs")); process.exit(1); }
       writeFileSync(join(runDir, "setup.json"), JSON.stringify(parsed, null, 2));
