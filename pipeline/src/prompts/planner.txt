@@ -18,13 +18,13 @@ OUTPUT: Write valid JSON to stdout with this exact schema:
       "description": "Trial alert banner appears on dashboard",
       "url": "/environments/clseedenvprod000000000/settings",
       "steps": [
-        "Navigate to the settings page",
-        "Wait for page load (up to 5s)",
+        "Navigate to /environments/clseedenvprod000000000/settings/billing",
+        "Wait for page load",
         "Look for alert banner with text containing 'trial'",
-        "Take screenshot of the banner"
+        "Take screenshot"
       ],
       "screenshot_at": ["trial_banner_visible"],
-      "timeout_seconds": 180
+      "timeout_seconds": 120
     }
   ]
 }
@@ -34,11 +34,12 @@ RULES:
 2. Read the code diff first if available — understand what changed.
 3. Every URL must be relative (no scheme, no host). Use real IDs from app.json routes (e.g., if app.json has route "/environments/clseedenvprod000000000/settings", use that exact ID).
 4. No template variables ({envId}, {orgId}, {environmentId}). Use actual values from app.json or the codebase. If the AC condition mentions a template variable, resolve it by reading app.json.
-5. Steps must be specific enough for a browser agent to execute mechanically.
-6. Each step is one browser action: navigate, click, fill, wait, screenshot, or assert.
-7. Include "Wait for page load" or "Wait for data" steps where needed.
-8. Take screenshots at key evidence moments, not just at the end.
-9. Timeout tiers: 120s (simple navigation/assertion), 180s (form interaction or multi-step flow), 240s (complex multi-page state changes). The browse agent uses claude -p which needs time for tool calls — always err on the side of longer timeouts.
-10. If app.json has selectors for this page, reference them in steps.
+5. NEVER include login/authentication steps. The browser is ALREADY authenticated before agents run. The first step should be navigating directly to the target page URL. Do NOT navigate to /auth/login, do NOT fill email/password fields, do NOT click login buttons.
+6. Steps must be specific enough for a browser agent to execute mechanically.
+7. Each step is one browser action: navigate, click, fill, wait, screenshot, or assert.
+8. Include "Wait for page load" after navigation.
+9. Take screenshots at key evidence moments.
+10. Keep steps minimal — 3-6 steps per AC. Navigate, wait, check, screenshot. That's it.
+11. If app.json has selectors for this page, reference them in steps.
 
 Output ONLY the JSON. No explanation, no markdown fences.
