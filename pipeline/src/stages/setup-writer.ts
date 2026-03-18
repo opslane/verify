@@ -1,5 +1,6 @@
 // pipeline/src/stages/setup-writer.ts — Setup Writer stage
 import { readFileSync, existsSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SetupCommands } from "../lib/types.js";
@@ -22,4 +23,22 @@ export function detectORM(projectDir: string): "prisma" | "drizzle" | "unknown" 
   if (existsSync(join(projectDir, "prisma", "schema.prisma"))) return "prisma";
   if (existsSync(join(projectDir, "drizzle.config.ts"))) return "drizzle";
   return "unknown";
+}
+
+export interface SetupResult {
+  success: boolean;
+  error?: string;
+}
+
+export function executeSetupCommands(commands: string[]): SetupResult {
+  if (commands.length === 0) return { success: true };
+  for (const cmd of commands) {
+    try {
+      execSync(cmd, { timeout: 30_000, stdio: "pipe" });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { success: false, error: `Setup command failed: ${cmd}\n${message}` };
+    }
+  }
+  return { success: true };
 }

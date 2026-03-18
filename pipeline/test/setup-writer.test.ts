@@ -1,6 +1,6 @@
 // pipeline/test/setup-writer.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { buildSetupWriterPrompt, parseSetupWriterOutput, detectORM } from "../src/stages/setup-writer.js";
+import { buildSetupWriterPrompt, parseSetupWriterOutput, detectORM, executeSetupCommands } from "../src/stages/setup-writer.js";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -52,5 +52,24 @@ describe("detectORM", () => {
 
   it("returns unknown when no ORM detected", () => {
     expect(detectORM(tempDir)).toBe("unknown");
+  });
+});
+
+describe("executeSetupCommands", () => {
+  it("returns success for valid commands", () => {
+    const result = executeSetupCommands(["echo hello", "echo world"]);
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+  });
+
+  it("returns error message for failing commands without throwing", () => {
+    const result = executeSetupCommands(["exit 1"]);
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+  });
+
+  it("returns success for empty command list", () => {
+    const result = executeSetupCommands([]);
+    expect(result.success).toBe(true);
   });
 });
