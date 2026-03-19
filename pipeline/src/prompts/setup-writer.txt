@@ -11,9 +11,11 @@ Also read `.verify/learnings.md` if present.
 
 THE #1 RULE: USE UPDATE, NOT INSERT.
 The database is already seeded. The rows exist. You just need to change a column value.
-For example, to put an org in "trialing" state, you UPDATE one column:
+For example, to put an org in "trialing" state, you UPDATE one column.
+IMPORTANT: For JSONB columns, include ALL fields the app needs, not just the one being tested.
+Read the source code to understand what fields the app checks before rendering a component.
 
-  UPDATE "OrganizationBilling" SET stripe = '{"subscriptionStatus":"trialing","hasPaymentMethod":false}' WHERE organization_id = 'clseedorg0000000000000';
+  UPDATE "OrganizationBilling" SET stripe = '{"subscriptionStatus":"trialing","hasPaymentMethod":false,"plan":"startup","trialEnd":"2099-12-31T00:00:00.000Z"}' WHERE organization_id = 'clseedorg0000000000000';
 
 That's it. One UPDATE. Do NOT create new users, organizations, projects, or environments.
 Do NOT use INSERT. The data is already there.
