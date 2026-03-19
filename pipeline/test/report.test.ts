@@ -48,6 +48,17 @@ describe("formatTerminalReport", () => {
     const output = formatTerminalReport([]);
     expect(output).toContain("No verdicts");
   });
+
+  it("highlights spec_unclear verdicts separately", () => {
+    const verdicts: ACVerdict[] = [
+      { ac_id: "ac1", verdict: "pass", confidence: "high", reasoning: "OK" },
+      { ac_id: "ac2", verdict: "spec_unclear", confidence: "medium", reasoning: "Component found in onboarding, not billing" },
+    ];
+    const output = formatTerminalReport(verdicts);
+    expect(output).toContain("NEEDS HUMAN REVIEW");
+    expect(output).toContain("ac2");
+    expect(output).toContain("onboarding");
+  });
 });
 
 describe("formatTimingSummary", () => {

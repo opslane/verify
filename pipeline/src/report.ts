@@ -19,6 +19,15 @@ export function formatTerminalReport(verdicts: ACVerdict[]): string {
     lines.push(`  ${icon} ${v.ac_id}: ${v.verdict}${conf} \u2014 ${v.reasoning}`);
   }
 
+  const specUnclear = verdicts.filter(v => v.verdict === "spec_unclear");
+  if (specUnclear.length > 0) {
+    lines.push("");
+    lines.push("  NEEDS HUMAN REVIEW (spec may be inaccurate):");
+    for (const v of specUnclear) {
+      lines.push(`    ? ${v.ac_id}: ${v.reasoning}`);
+    }
+  }
+
   return lines.join("\n");
 }
 
