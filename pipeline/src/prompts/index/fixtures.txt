@@ -1,0 +1,14 @@
+Find test setup helpers, fixture factories, and seed scripts in this project. Look for functions that create test data (users, organizations, documents, etc).
+
+Check: test helper files, fixture directories, beforeEach/beforeAll blocks, factory functions, seed scripts. This may be a monorepo — check under packages/, tests/, e2e/.
+
+For each fixture, identify what state it creates, how to invoke it, and where it's defined.
+
+Write the result as JSON to the file: OUTPUT_FILE
+
+Schema:
+{"fixtures": {"functionName": {"description": "what it creates", "runner": "command to run it or null", "source": "file:line"}}}
+
+The root key MUST be "fixtures". Use the function name as the key. "runner" is a shell command to invoke it (null if only callable from test code). Include source file and line.
+
+If you can't find any fixtures, write: {"fixtures": {}}

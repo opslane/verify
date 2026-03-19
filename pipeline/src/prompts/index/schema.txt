@@ -1,0 +1,12 @@
+Find the database schema in this project. Look for Prisma schema, Drizzle schema, SQL migrations, or ORM model definitions. This may be a monorepo — check under packages/, prisma/, db/, src/.
+
+Extract all models/tables with their columns and any enums.
+
+Write the result as JSON to the file: OUTPUT_FILE
+
+Schema:
+{"data_model": {"ModelName": {"columns": ["id", "name", "email"], "enums": {"RoleName": ["admin", "member"]}, "source": "prisma/schema.prisma:42"}}}
+
+The root key MUST be "data_model". Each key is a model/table name. Columns is an array of column names (use the Prisma field names). Enums maps enum names to their values. Include source file and line.
+
+If you can't find any schema, write: {"data_model": {}}

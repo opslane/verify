@@ -1,0 +1,12 @@
+Find all user-facing pages and routes in this app. Look for route definitions, page components, URL patterns.
+
+Check any framework: Next.js (app/ or pages/), Remix (routes/), React Router configs, Express/Hono route definitions, etc. This may be a monorepo — check under apps/, packages/, src/.
+
+Write the result as JSON to the file: OUTPUT_FILE
+
+Schema:
+{"routes": {"/path": {"component": "file/path.tsx"}}}
+
+The root key MUST be "routes". Each key is a URL path. Each value has a "component" field with the file path. Skip API routes (/api/*). Only include user-facing pages.
+
+If you can't find any routes, write: {"routes": {}}

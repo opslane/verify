@@ -1,0 +1,19 @@
+Find the e2e/integration test suite in this project. For each test file, extract the selectors used and the page URLs they test against.
+
+Look for: Playwright tests (.spec.ts), Cypress tests (.cy.ts), or similar. This may be a monorepo — check under packages/, apps/, tests/, e2e/.
+
+For each test, extract:
+- URLs from page.goto(), cy.visit(), or equivalent navigation calls
+- Selectors from page.locator(), page.getByTestId(), page.getByRole(), cy.get(), etc.
+- If tests use Page Object Models or helper files, follow the imports to resolve actual selectors
+
+Group selectors by the URL/page they're used on. Keep it compact — max 10 selectors per page. Prefer data-testid and role selectors.
+
+Write the result as JSON to the file: OUTPUT_FILE
+
+Schema:
+{"pages": {"/url": {"selectors": {"name": {"value": ".selector", "source": "file:line"}}, "source_tests": ["file.spec.ts"]}}}
+
+The root key MUST be "pages". Selector names should be human-readable keys.
+
+If you can't find any test suite, write: {"pages": {}}
