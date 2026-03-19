@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parsePrismaSchema } from "../src/lib/prisma-parser.js";
+import { parsePrismaSchema, extractModelBody, extractJsonFieldAnnotations } from "../src/lib/prisma-parser.js";
 
 describe("parsePrismaSchema", () => {
   it("extracts column mappings from @map annotations", () => {
@@ -157,5 +157,88 @@ enum Role {
 }`;
     const result = parsePrismaSchema(schema);
     expect(Object.keys(result)).toHaveLength(0);
+  });
+});
+
+describe("extractModelBody", () => {
+  it("extracts body of a named model", () => {
+    const schema = `
+model User {
+  id    String @id
+  name  String
+}
+
+model Org {
+  id String @id
+}`;
+    const body = extractModelBody(schema, "User");
+    expect(body).toContain("id    String @id");
+    expect(body).toContain("name  String");
+    expect(body).not.toContain("model Org");
+  });
+
+  it("returns null for missing model", () => {
+    expect(extractModelBody("model User { id String }", "Missing")).toBeNull();
+  });
+
+  it("handles nested braces in @default", () => {
+    const schema = `
+model Billing {
+  id      String @id
+  limits  Json   @default("{}")
+  data    Json
+}`;
+    const body = extractModelBody(schema, "Billing");
+    expect(body).toContain("limits");
+    expect(body).toContain("data");
+  });
+});
+
+describe("extractJsonFieldAnnotations", () => {
+  it("extracts /// [TypeName] annotations for Json fields", () => {
+    const schema = `
+model OrganizationBilling {
+  organizationId   String  @id @map(name: "organization_id")
+  /// [OrganizationBillingPlanLimits]
+  limits           Json
+  /// [OrganizationStripeBilling]
+  stripe           Json?
+  createdAt        DateTime @default(now())
+}
+`;
+    const result = extractJsonFieldAnnotations(schema);
+    expect(result).toEqual({
+      OrganizationBilling: {
+        limits: "OrganizationBillingPlanLimits",
+        stripe: "OrganizationStripeBilling",
+      },
+    });
+  });
+
+  it("returns empty map when no Json fields have annotations", () => {
+    const schema = `
+model User {
+  id    String @id
+  name  String
+  data  Json
+}
+`;
+    const result = extractJsonFieldAnnotations(schema);
+    expect(result).toEqual({});
+  });
+
+  it("ignores annotations on non-Json fields", () => {
+    const schema = `
+model User {
+  /// [SomeType]
+  name  String
+  /// [JsonType]
+  data  Json
+}
+`;
+    const result = extractJsonFieldAnnotations(schema);
+    expect(result).toEqual({
+      User: { data: "JsonType" },
+    });
   });
 });

@@ -11,6 +11,32 @@ const SCALAR_TYPES = new Set([
 ]);
 
 /**
+ * Extract the body of a named model from a Prisma schema.
+ * Uses balanced-brace matching to handle @default("{}") correctly.
+ * Returns the text between the opening { and closing }, or null if not found.
+ */
+export function extractModelBody(content: string, modelName: string): string | null {
+  const regex = new RegExp(`model\\s+${modelName}\\s*\\{`);
+  const match = regex.exec(content);
+  if (!match) return null;
+
+  const bodyStart = match.index + match[0].length;
+  let depth = 1;
+  let i = bodyStart;
+  let inQuote = false;
+  while (i < content.length && depth > 0) {
+    const ch = content[i];
+    if (ch === '"' && content[i - 1] !== '\\') inQuote = !inQuote;
+    if (!inQuote) {
+      if (ch === '{') depth++;
+      if (ch === '}') depth--;
+    }
+    i++;
+  }
+  return content.slice(bodyStart, i - 1);
+}
+
+/**
  * Parse a Prisma schema file and extract model→table and field→column mappings.
  *
  * - @map("column_name") on a field → that field's Postgres column name
@@ -29,27 +55,14 @@ export function parsePrismaSchema(content: string): Record<string, PrismaModel> 
     enumNames.add(enumMatch[1]);
   }
 
-  // Extract model blocks with balanced braces (handles } inside @default("{}"))
+  // Extract model blocks using shared helper
   const modelHeaderRegex = /model\s+(\w+)\s*\{/g;
   let match: RegExpExecArray | null;
 
   while ((match = modelHeaderRegex.exec(content)) !== null) {
     const modelName = match[1];
-    const bodyStart = match.index + match[0].length;
-    // Find matching closing brace (skip quoted strings)
-    let depth = 1;
-    let i = bodyStart;
-    let inQuote = false;
-    while (i < content.length && depth > 0) {
-      const ch = content[i];
-      if (ch === '"' && content[i - 1] !== '\\') inQuote = !inQuote;
-      if (!inQuote) {
-        if (ch === '{') depth++;
-        if (ch === '}') depth--;
-      }
-      i++;
-    }
-    const body = content.slice(bodyStart, i - 1);
+    const body = extractModelBody(content, modelName);
+    if (!body) continue;
 
     // Check for @@map("table_name") or @@map(name: "table_name")
     const tableMapMatch = body.match(/@@map\(\s*(?:name:\s*)?"([^"]+)"\s*\)/);
@@ -81,4 +94,51 @@ export function parsePrismaSchema(content: string): Record<string, PrismaModel> 
   }
 
   return models;
+}
+
+/**
+ * Extract Prisma /// [TypeName] annotations on Json fields.
+ * Returns: { ModelName: { fieldName: "TypeName" } }
+ * Prisma-specific: these annotations reference TypeScript/Zod types
+ * that define the JSONB field's expected shape.
+ */
+export function extractJsonFieldAnnotations(
+  content: string
+): Record<string, Record<string, string>> {
+  const result: Record<string, Record<string, string>> = {};
+
+  const modelHeaderRegex = /model\s+(\w+)\s*\{/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = modelHeaderRegex.exec(content)) !== null) {
+    const modelName = match[1];
+    const body = extractModelBody(content, modelName);
+    if (!body) continue;
+
+    const lines = body.split("\n");
+    let pendingAnnotation: string | null = null;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // Check for /// [TypeName] annotation
+      const annotationMatch = trimmed.match(/^\/\/\/\s*\[(\w+)\]/);
+      if (annotationMatch) {
+        pendingAnnotation = annotationMatch[1];
+        continue;
+      }
+
+      // Check if this line is a Json field
+      if (pendingAnnotation) {
+        const fieldMatch = trimmed.match(/^(\w+)\s+Json(\?|\[\])?(\s|$)/);
+        if (fieldMatch) {
+          if (!result[modelName]) result[modelName] = {};
+          result[modelName][fieldMatch[1]] = pendingAnnotation;
+        }
+        pendingAnnotation = null;
+      }
+    }
+  }
+
+  return result;
 }
