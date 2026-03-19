@@ -69,8 +69,8 @@ if (command === "run") {
   mkdirSync(join(runDir, "logs"), { recursive: true });
   mkdirSync(dirname(outputPath), { recursive: true });
 
-  const { extractEnvVars, findPrismaSchemaPath, findSeedFiles, mergeIndexResults } = await import("./lib/index-app.js");
-  const { parsePrismaSchema } = await import("./lib/prisma-parser.js");
+  const { extractEnvVars, findPrismaSchemaPath, findSeedFiles, mergeIndexResults, dumpDatabaseSchema } = await import("./lib/index-app.js");
+  const { parsePrismaSchema, extractJsonFieldAnnotations } = await import("./lib/prisma-parser.js");
   const { groupSeedIdsByContext } = await import("./lib/seed-extractor.js");
   const { readFileSync: readFs } = await import("node:fs");
   const { readFileSync: readPrompt } = await import("node:fs");
@@ -87,6 +87,16 @@ if (command === "run") {
     console.log(`  Parsed ${Object.keys(prismaMapping).length} models with column mappings`);
   }
 
+  // Extract JSONB type annotations from Prisma schema (Prisma-specific)
+  let jsonAnnotations: Record<string, Record<string, string>> = {};
+  if (schemaPath) {
+    jsonAnnotations = extractJsonFieldAnnotations(readFs(schemaPath, "utf-8"));
+    const annotatedFields = Object.values(jsonAnnotations).reduce((n, m) => n + Object.keys(m).length, 0);
+    if (annotatedFields > 0) {
+      console.log(`  Found ${annotatedFields} JSONB type annotations`);
+    }
+  }
+
   // Extract seed IDs
   let seedIds: Record<string, string[]> = {};
   const seedFiles = findSeedFiles(projectDir);
@@ -100,6 +110,17 @@ if (command === "run") {
 
   // Extract env vars
   const envVars = extractEnvVars(projectDir);
+
+  // Dump database schema (generic — works for any Postgres project)
+  const { loadProjectEnv } = await import("./stages/setup-writer.js");
+  const projectEnvForDump = loadProjectEnv(projectDir);
+  const schemaDdl = dumpDatabaseSchema(projectEnvForDump);
+  if (schemaDdl) {
+    writeFileSync(join(dirname(outputPath), "schema.sql"), schemaDdl);
+    console.log(`  Dumped database schema: ${Math.round(schemaDdl.length / 1024)}KB`);
+  } else {
+    console.log("  Warning: could not dump database schema (DATABASE_URL missing or pg_dump failed)");
+  }
 
   // Step 2: LLM-based indexing (4 parallel agents)
   console.log("  Running 4 parallel index agents...");
@@ -151,6 +172,7 @@ if (command === "run") {
     envVars,
     prismaMapping,
     seedIds,
+    jsonAnnotations,
   );
 
   writeFileSync(outputPath, JSON.stringify(appIndex, null, 2));

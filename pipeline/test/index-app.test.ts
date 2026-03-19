@@ -81,6 +81,23 @@ describe("mergeIndexResults", () => {
     expect(result.data_model.User.columns.name).toBe("name");
   });
 
+  it("includes json_type_annotations when provided", () => {
+    const annotations = { OrganizationBilling: { stripe: "OrganizationStripeBilling" } };
+    const result = mergeIndexResults(
+      { routes: {} }, { pages: {} }, { data_model: {} }, { fixtures: {} },
+      { db_url_env: null, feature_flags: [] }, {}, {}, annotations,
+    );
+    expect(result.json_type_annotations).toEqual(annotations);
+  });
+
+  it("defaults json_type_annotations to empty when not provided", () => {
+    const result = mergeIndexResults(
+      { routes: {} }, { pages: {} }, { data_model: {} }, { fixtures: {} },
+      { db_url_env: null, feature_flags: [] }, {}, {},
+    );
+    expect(result.json_type_annotations).toEqual({});
+  });
+
   it("cross-references routes into pages", () => {
     const result = mergeIndexResults(
       { routes: { "/settings": { component: "settings.tsx" } } },
