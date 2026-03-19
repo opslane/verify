@@ -3781,12 +3781,65 @@ Inspect all files in `.verify/runs/`. Verify timeline, verdicts, evidence, learn
 
 **Branch:** `ws6/integration`
 **Depends on:** WS5 merged to main
-**Produces:** Updated SKILL.md, ported app indexer, eval infrastructure, deleted bash scripts
-**Estimated tasks:** 9
+**Produces:** Updated SKILL.md, ported app indexer with DB column mapping, eval infrastructure, deleted bash scripts
+**Estimated tasks:** 12
+
+### E2E Findings to Address
+
+These bugs were found during 11 e2e eval runs against Formbricks and must be fixed in WS6:
+
+1. **Setup writer uses Prisma column names instead of Postgres names** — `stripeCustomerId` fails because the actual column is `stripe_customer_id` (via `@map`). Fix: extend app indexer schema to capture `@map` annotations.
+2. **Setup writer creates new records instead of updating seed data** — invents `groupb-org-00000000000001` instead of updating `clseedorg0000000000000`. Fix: index seed record IDs so the setup writer has concrete IDs to UPDATE.
+3. **Setup writer teardown destroyed seed data** — already fixed with DB snapshot/restore in orchestrator, but the setup writer prompt still needs the correct column names and seed IDs to generate correct setup SQL.
 
 ---
 
-### Task 6.1: Port app indexer to TypeScript
+### Task 6.1: Extend AppIndex type with column mappings and seed IDs
+
+**Files:**
+- Modify: `pipeline/src/lib/types.ts`
+- Modify: `pipeline/test/fixtures/app-index.json`
+
+The `AppIndex.data_model` currently stores Prisma field names as a flat array. Extend it to store Prisma→Postgres column mappings and add a `seed_ids` field.
+
+**Step 1: Update the type**
+
+Change `data_model` from:
+```typescript
+data_model: Record<string, {
+  columns: string[];
+  enums: Record<string, string[]>;
+  source: string;
+}>;
+```
+
+To:
+```typescript
+data_model: Record<string, {
+  columns: Record<string, string>;  // prismaName → postgresName (from @map, or same if no @map)
+  table_name: string;               // actual Postgres table name (from @@map, or same as model name)
+  enums: Record<string, string[]>;
+  source: string;
+}>;
+```
+
+Add a new top-level field:
+```typescript
+seed_ids: Record<string, string[]>;  // tableName → array of known seed record IDs
+```
+
+**Step 2: Update the test fixture** to match the new shape.
+
+**Step 3: Commit**
+
+```bash
+git add pipeline/src/lib/types.ts pipeline/test/fixtures/app-index.json
+git commit -m "feat(pipeline): extend AppIndex with column mappings and seed IDs"
+```
+
+---
+
+### Task 6.2: Port app indexer to TypeScript with enhanced schema indexing
 
 **Files:**
 - Create: `pipeline/src/lib/index-app.ts`
@@ -3796,17 +3849,204 @@ Inspect all files in `.verify/runs/`. Verify timeline, verdicts, evidence, learn
 - Create: `pipeline/src/prompts/index/schema.txt`
 - Create: `pipeline/src/prompts/index/fixtures.txt`
 
-Port `scripts/index-app.sh` from the worktree. The logic:
-1. Phase 1: Extract .env vars (pure string parsing, no LLM)
-2. Phase 2: Spawn 4 parallel `runClaude()` calls with index prompts
-3. Phase 3: Validate JSON outputs
-4. Phase 4: Merge + cross-reference routes into pages
+Port `scripts/index-app.sh` from the worktree (at `.worktrees/pipeline-stage-split/scripts/index-app.sh`). The logic:
 
-Test the env extraction and merge logic with unit tests (no LLM calls).
+1. **Phase 1: Extract .env vars** (pure bash/string parsing, no LLM)
+2. **Phase 2: Spawn 4 parallel `runClaude()` calls** with index prompts
+3. **Phase 3: Validate JSON outputs**
+4. **Phase 4: Merge + cross-reference routes into pages**
+5. **Phase 5 (NEW): Extract column mappings from Prisma schema** — deterministic, no LLM needed
+
+**Phase 5 detail — Prisma `@map` extraction:**
+
+This is a deterministic parser, not an LLM call. Read the Prisma schema file and extract:
+
+```typescript
+// For each model block in schema.prisma:
+//   model Organization {
+//     id              String   @id @default(cuid())
+//     stripeCustomerId String? @map("stripe_customer_id")
+//     @@map("organizations")   // <-- table name mapping
+//   }
+//
+// Produces:
+//   "Organization": {
+//     "table_name": "organizations",  // from @@map, or "Organization" if no @@map
+//     "columns": {
+//       "id": "id",
+//       "stripeCustomerId": "stripe_customer_id"  // from @map
+//     }
+//   }
+
+function parsePrismaSchema(schemaContent: string): Record<string, {
+  table_name: string;
+  columns: Record<string, string>;
+}> {
+  // Parse model blocks with regex
+  // For each field, check for @map("actual_name")
+  // For the model, check for @@map("actual_table_name")
+  // If no @map, the Postgres name = the Prisma name
+}
+```
+
+Test this function thoroughly with unit tests — it's pure string parsing, no LLM, no network.
+
+**Step 1: Write tests for parsePrismaSchema**
+
+```typescript
+describe("parsePrismaSchema", () => {
+  it("extracts column mappings from @map annotations", () => {
+    const schema = `
+model OrganizationBilling {
+  organizationId   String @id @map("organization_id")
+  stripeCustomerId String? @map("stripe_customer_id")
+  limits           Json   @default("{}")
+  stripe           Json   @default("{}")
+  @@map("OrganizationBilling")
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.OrganizationBilling.columns.stripeCustomerId).toBe("stripe_customer_id");
+    expect(result.OrganizationBilling.columns.organizationId).toBe("organization_id");
+    expect(result.OrganizationBilling.columns.limits).toBe("limits"); // no @map = same name
+  });
+
+  it("uses model name as table name when no @@map", () => {
+    const schema = `
+model User {
+  id    String @id
+  name  String
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.User.table_name).toBe("User");
+  });
+
+  it("uses @@map value as table name", () => {
+    const schema = `
+model User {
+  id    String @id
+  @@map("users")
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.User.table_name).toBe("users");
+  });
+});
+```
+
+**Step 2: Implement parsePrismaSchema**
+
+**Step 3: Integrate into index-app.ts** — after the 4 LLM agents finish, run `parsePrismaSchema` on the schema file and merge the column mappings into the `data_model` section of `app.json`.
+
+**Step 4: Commit**
+
+```bash
+git add pipeline/src/lib/index-app.ts pipeline/test/index-app.test.ts pipeline/src/prompts/index/
+git commit -m "feat(pipeline): port app indexer with Prisma column mapping extraction"
+```
 
 ---
 
-### Task 6.2: Minimal eval infrastructure
+### Task 6.3: Extract seed record IDs
+
+**Files:**
+- Modify: `pipeline/src/lib/index-app.ts`
+- Add tests to: `pipeline/test/index-app.test.ts`
+
+Add a Phase 6 to the app indexer that extracts seed record IDs. Two approaches (try in order):
+
+1. **Grep seed files for known ID patterns** — look for `cuid()` calls, hardcoded IDs like `clseed*`, UUIDs in seed.ts/seed.sql
+2. **Query the live database** — `SELECT id FROM "Organization" LIMIT 20` etc. (requires DATABASE_URL)
+
+The output goes into `app.json` as:
+```json
+{
+  "seed_ids": {
+    "Organization": ["clseedorg0000000000000"],
+    "Environment": ["clseedenvprod000000000", "clseedenvdev0000000000"],
+    "User": ["clseeduser0000000000000"]
+  }
+}
+```
+
+The setup writer reads these IDs and UPDATEs them instead of creating new records.
+
+**Step 1: Write test for seed ID extraction from seed file content**
+
+```typescript
+describe("extractSeedIds", () => {
+  it("finds hardcoded CUID-like IDs in seed files", () => {
+    const seedContent = `
+      const orgId = "clseedorg0000000000000";
+      const envId = "clseedenvprod000000000";
+      await prisma.organization.create({ data: { id: orgId, name: "Seed Org" } });
+    `;
+    const ids = extractSeedIds(seedContent);
+    expect(ids).toContain("clseedorg0000000000000");
+    expect(ids).toContain("clseedenvprod000000000");
+  });
+});
+```
+
+**Step 2: Implement** — regex for patterns like `clseed*`, quoted strings that look like CUIDs/UUIDs in seed files.
+
+**Step 3: Commit**
+
+```bash
+git add pipeline/src/lib/index-app.ts pipeline/test/index-app.test.ts
+git commit -m "feat(pipeline): extract seed record IDs for setup writer"
+```
+
+---
+
+### Task 6.4: Update setup writer prompt to use app.json column mappings
+
+**Files:**
+- Modify: `pipeline/src/prompts/setup-writer.txt`
+
+Update the prompt to tell the setup writer:
+1. Read `app.json` for **actual Postgres column names** (not Prisma names)
+2. Read `app.json` for **seed record IDs** — UPDATE these, don't create new records
+3. Reference the column mapping: "The `columns` field maps Prisma names to Postgres names. Always use the Postgres name (the value) in SQL, not the Prisma name (the key)."
+
+Add an example:
+```
+EXAMPLE — app.json says:
+  "OrganizationBilling": {
+    "columns": {"stripeCustomerId": "stripe_customer_id", "organizationId": "organization_id"},
+    "table_name": "OrganizationBilling"
+  }
+  "seed_ids": {"Organization": ["clseedorg0000000000000"]}
+
+CORRECT SQL:
+  UPDATE "OrganizationBilling" SET stripe = '{"subscriptionStatus":"trialing"}' WHERE organization_id = 'clseedorg0000000000000';
+
+WRONG SQL (uses Prisma names):
+  UPDATE "OrganizationBilling" SET stripe = '...' WHERE "stripeCustomerId" = '...';
+```
+
+**Step 1: Commit**
+
+```bash
+git add pipeline/src/prompts/setup-writer.txt
+git commit -m "feat(pipeline): setup writer reads column mappings + seed IDs from app.json"
+```
+
+---
+
+### Task 6.5: E2E test: setup writer with column mappings
+
+Before moving to other tasks, verify the setup writer fix works end-to-end:
+
+1. Run `/verify-setup` on the Formbricks eval repo to generate a new `app.json` with column mappings
+2. Inspect `app.json` — verify `OrganizationBilling.columns` has `stripeCustomerId → stripe_customer_id`
+3. Run the setup writer stage against the formbricks spec
+4. Verify the SQL uses `stripe_customer_id` (Postgres name), not `stripeCustomerId` (Prisma name)
+5. Execute the setup SQL — it should succeed without column-not-found errors
+
+This is a manual checkpoint, not automated. If it fails, debug before continuing.
+
+---
+
+### Task 6.6: Minimal eval infrastructure
 
 **Files:**
 - Create: `pipeline/evals/run-evals.sh`
@@ -3853,13 +4093,13 @@ echo "=== Done. Review outputs in $OUTPUT_DIR ==="
 
 ---
 
-### Task 6.3: Update /verify-setup SKILL.md
+### Task 6.7: Update /verify-setup SKILL.md
 
 Add app indexing step (Step 7 from worktree) to the verify-setup skill, calling the TypeScript indexer instead of bash.
 
 ---
 
-### Task 6.4: Rewrite /verify SKILL.md
+### Task 6.8: Rewrite /verify SKILL.md
 
 Update to call the TypeScript pipeline:
 
@@ -3875,13 +4115,13 @@ npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts run --spec "$SPEC_PATH"
 
 ---
 
-### Task 6.5: Update skill sync hook
+### Task 6.9: Update skill sync hook
 
 Update `.claude/hooks/sync-skill.sh` to also sync `pipeline/` to `~/.claude/tools/verify/pipeline/`.
 
 ---
 
-### Task 6.6: Delete old bash scripts
+### Task 6.10: Delete old bash scripts
 
 Remove: `scripts/preflight.sh`, `scripts/orchestrate.sh`, `scripts/agent.sh`, `scripts/planner.sh`, `scripts/judge.sh`, `scripts/report.sh`, `scripts/code-review.sh`, `scripts/prompts/` (all old templates).
 
@@ -3889,19 +4129,19 @@ Keep: `scripts/install-browse.sh` (stays bash per design).
 
 ---
 
-### Task 6.7: Update CLAUDE.md
+### Task 6.11: Update CLAUDE.md
 
 Reflect new `pipeline/` structure, new test commands, new conventions.
 
 ---
 
-### Task 6.8: End-to-end test on eval repo
+### Task 6.12: End-to-end test on eval repo
 
 Full smoke test: `/verify-setup` then `/verify` on eval repo. Verify all outputs.
 
 ---
 
-### Task 6.9: Run eval set
+### Task 6.13: Run eval set
 
 ```bash
 bash pipeline/evals/run-evals.sh
