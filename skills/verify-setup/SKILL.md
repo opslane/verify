@@ -88,7 +88,30 @@ If no:
 Auth may not have imported correctly. Make sure you're logged into DOMAIN in BROWSER, then try again.
 ```
 
-### 7. Legacy MCP setup (fallback)
+### 7. Index the application
+
+After auth is confirmed, build the app index. This gives the pipeline correct column mappings, seed IDs, routes, and selectors.
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts index-app \
+  --project-dir . \
+  --output .verify/app.json
+```
+
+Show the summary to the user:
+
+```bash
+echo "App index built:"
+echo "  Routes: $(jq '.routes | length' .verify/app.json)"
+echo "  Models: $(jq '.data_model | length' .verify/app.json)"
+echo "  Seed IDs: $(jq '[.seed_ids[]] | flatten | length' .verify/app.json)"
+echo "  DB URL env: $(jq -r '.db_url_env // "not found"' .verify/app.json)"
+```
+
+If the model count is 0, warn: "No Prisma schema found. Setup writer will have to discover column names from the codebase — this may cause SQL column name errors."
+
+### 8. Legacy MCP setup (fallback)
 
 If cookie import fails or the user prefers the old approach:
 
