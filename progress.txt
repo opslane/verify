@@ -227,3 +227,53 @@ COMPLETE — all 8 WS4 tasks done, typecheck clean, 65 tests passing
 
 ### Status
 COMPLETE — all WS5 tasks done, typecheck clean, 146 tests passing across 21 files
+
+---
+
+## pipeline-v2-ws6 (plan: docs/plans/2026-03-18-ws6-integration.md)
+
+### Completed
+- [x] Task 1: Extend AppIndex type with column mappings and seed IDs (commit: a6280e6)
+  - Files: pipeline/src/lib/types.ts
+  - columns: Record<string, string>, table_name, seed_ids fields
+
+- [x] Task 2: Update test fixture and app-index tests (commit: b9a9ef6)
+  - Files: pipeline/test/fixtures/app-index.json, pipeline/test/app-index.test.ts
+  - New fixture shape with column mappings and seed_ids
+
+- [x] Task 3: Implement parsePrismaSchema (commit: d85140f)
+  - Files: pipeline/src/lib/prisma-parser.ts, pipeline/test/prisma-parser.test.ts
+  - Balanced-brace parser for @map/@\@map annotations, 9 tests (incl. enum fields)
+  - Fixed: @default("{}") broke naive regex, enum fields silently dropped
+
+- [x] Task 4: Implement seed ID extractor (commit: 75482e4)
+  - Files: pipeline/src/lib/seed-extractor.ts, pipeline/test/seed-extractor.test.ts
+  - CUID + UUID extraction, closest-first context grouping, 6 tests
+
+- [x] Task 5: Implement index-app.ts + prompt templates (commit: 294e9a7)
+  - Files: pipeline/src/lib/index-app.ts, pipeline/test/index-app.test.ts, pipeline/src/prompts/index/*.txt
+  - extractEnvVars, findPrismaSchemaPath, findSeedFiles, mergeIndexResults, 10 tests
+  - 4 prompt templates: routes, selectors, schema, fixtures
+
+- [x] Code review fix: enum columns, merge direction, test coverage (commit: 4caaabe)
+  - Prisma parser now handles enum fields as columns
+  - mergeIndexResults uses union of LLM + deterministic model sets
+  - Added 4 new tests
+
+- [x] Task 6: Update setup writer prompt (commit: ffb0fd1)
+  - Files: pipeline/src/prompts/setup-writer.txt
+  - Column mapping instructions, example correct/wrong SQL, seed ID preference
+
+- [x] Task 7: Add index-app CLI subcommand (commit: d48f230)
+  - Files: pipeline/src/cli.ts
+  - Deterministic parsing (Prisma + seeds) + 4 parallel LLM agents → app.json
+
+### Current
+Task 8: E2E checkpoint — PAUSED for manual validation against Formbricks
+
+### Remaining
+- Task 9: Update /verify-setup SKILL.md
+- Task 10: Rewrite /verify SKILL.md
+- Task 11: Update skill sync hook
+- Task 12: Update CLAUDE.md
+- Task 13: Full end-to-end test
