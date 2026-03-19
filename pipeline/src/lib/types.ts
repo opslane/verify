@@ -155,7 +155,7 @@ export const STAGE_PERMISSIONS: Record<string, Pick<RunClaudeOptions, "dangerous
   "ac-generator":  { dangerouslySkipPermissions: true },   // needs Read, Grep for spec + app.json
   "planner":       { dangerouslySkipPermissions: true },   // needs Read, Grep, Glob for full codebase
   "setup-writer":  { dangerouslySkipPermissions: true },   // needs Read for schema files
-  "browse-agent":  { dangerouslySkipPermissions: true },   // needs Bash for browse CLI commands
+  "browse-agent":  { allowedTools: ["Bash", "Read"] },      // Bash for browse CLI, Read for instructions.json
   "judge":         { allowedTools: ["Read"] },              // only reads evidence files
   "learner":       { dangerouslySkipPermissions: true },   // needs Read + Write for learnings.md
 };
