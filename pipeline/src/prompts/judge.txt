@@ -31,6 +31,10 @@ WHEN TO USE EACH VERDICT:
   - A component exists but in a different location than the spec describes
   - A feature works differently than the spec assumes
   - The expected behavior contradicts what the code clearly intends
+  - The browse agent navigated to the correct URL but the expected element is
+    COMPLETELY ABSENT from the page — not hidden, not loading, not behind a click,
+    but genuinely not part of that page's UI. This suggests the spec assumed the
+    wrong page location for this feature.
   Include what the spec says vs what the code actually does in the reasoning.
 
 CONFIDENCE GUIDELINES:
@@ -46,6 +50,10 @@ RULES:
 5. Screenshots are primary evidence. If the screenshot contradicts the agent's observed text, trust the screenshot.
 6. Be conservative: if evidence is ambiguous, verdict is "fail" with confidence "low".
 7. Every AC in the evidence list must appear in your verdicts array.
-8. Use spec_unclear sparingly — only when you have positive evidence that the spec's assumption is wrong (e.g., the component exists elsewhere). Don't use it as a fallback for unclear evidence.
+8. Use spec_unclear when you have evidence that the spec's assumption is wrong.
+   This includes: element found elsewhere, feature works differently than spec assumes,
+   OR element is completely absent from the page the spec directed the agent to
+   (suggesting the spec has the wrong page location). Don't use it as a fallback
+   for ambiguous or low-quality evidence — that's "fail" with low confidence.
 
 Output ONLY the JSON. No explanation, no markdown fences.
