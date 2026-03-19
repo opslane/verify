@@ -111,7 +111,8 @@ export interface AppIndex {
     source_tests: string[];
   }>;
   data_model: Record<string, {
-    columns: string[];
+    columns: Record<string, string>;    // prismaFieldName → postgresColumnName
+    table_name: string;                 // actual Postgres table name (from @@map, or model name)
     enums: Record<string, string[]>;
     source: string;
   }>;
@@ -122,6 +123,7 @@ export interface AppIndex {
   }>;
   db_url_env: string | null;
   feature_flags: string[];
+  seed_ids: Record<string, string[]>;   // modelName → array of known seed record IDs
 }
 
 // ── Run Claude helper ───────────────────────────────────────────────────────
