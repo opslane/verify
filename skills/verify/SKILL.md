@@ -10,7 +10,7 @@ Verify your frontend changes before pushing.
 ## Prerequisites
 - Dev server running (e.g. `npm run dev`)
 - Auth set up (`/verify-setup`) if app requires login
-- Browse binary installed (auto-installed on first run)
+- App indexed (`/verify-setup` step 7) for column mappings and seed IDs
 
 ## Conversation Flow
 
@@ -45,13 +45,16 @@ mkdir -p .verify
 
 Then write the content to `.verify/spec.md` with the Write tool.
 
-Then run preflight:
+Then run pre-flight checks:
 
 ```bash
-bash ~/.claude/tools/verify/preflight.sh
-```
+# Check dev server
+BASE_URL=$(jq -r '.baseUrl' .verify/config.json 2>/dev/null || echo "http://localhost:3000")
+curl -sf "$BASE_URL" > /dev/null 2>&1 || { echo "⚠ Dev server not running at $BASE_URL"; exit 1; }
 
-Stop if preflight fails. Fix the reported issue and ask the user to re-run.
+# Check app.json exists
+[ -f .verify/app.json ] || echo "⚠ No .verify/app.json — run /verify-setup first for column mappings"
+```
 
 Proceed to Turn 3.
 
@@ -59,7 +62,7 @@ Proceed to Turn 3.
 
 ## Turn 3: Spec Interpreter
 
-**Trigger:** Preflight passed.
+**Trigger:** Pre-flight passed.
 
 Review the spec inline — no subprocess needed. For each AC, check:
 
@@ -88,130 +91,42 @@ When all ambiguities are answered — proceed to Turn 5.
 
 ---
 
-## Turn 5: Write Annotated Spec → Planner
+## Turn 5: Write Annotated Spec → Run Pipeline
 
 **Trigger:** All ambiguities resolved (or there were none).
 
 Write `.verify/spec.md` incorporating all clarifications as inline HTML comments, e.g.:
 `<!-- clarified: expiry date revealed via hover on Pending badge -->`
 
-Then run the planner:
+Then run the pipeline:
 
 ```bash
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/planner.sh .verify/spec.md
+cd "$(git rev-parse --show-toplevel)"
+npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts run \
+  --spec .verify/spec.md \
+  --verify-dir .verify
 ```
 
-**Step 1 — Show extracted ACs (no testability labels):**
+The pipeline runs these stages automatically:
+1. **AC Generator** — extracts testable acceptance criteria from the spec
+2. **Planner** — plans browser steps, URLs, and screenshots for each AC
+3. **Setup Writer** — generates SQL to set up the required DB state (reads column mappings from app.json)
+4. **Browse Agents** — navigates the app and captures evidence (parallel per group)
+5. **Judge** — evaluates evidence against each AC
+6. **Learner** — writes corrections to `.verify/learnings.md` for future runs
 
-```bash
-jq -r '.skipped[]? | "  ⊘ Skipped: \(.)"' .verify/plan.json
-echo ""
-echo "ACs to verify:"
-jq -r '.criteria[] | "  • \(.id): \(.description)"' .verify/plan.json
-```
-
-**Step 2 — Research each AC's setup needs**
-
-For each AC, check its `condition` field in `plan.json` (present only when setup is needed; absent means no setup expected — but still verify). Then use these tools to understand what app state is required:
-
-- Use the **Grep** tool to search `prisma/schema.prisma`, `db/schema.*`, `src/models/**` for relevant data models
-- Use the **Glob** tool to find `**/seed*.ts`, `**/fixtures/**`, `**/factories/**` for seed scripts or factories
-- Use the **Grep** tool to search `src/app/api/**` or `src/routes/**` for API routes that create the required entity
-- Use the **Grep** tool to search `src/config/**`, `.env.example` for feature flags or config values
-
-For each AC, determine what data, auth state, or config must exist — and what setup command (if any) would create it. Use `$VERIFY_BASE_URL` for any URLs, never hardcode them.
-
-**Step 3 — Present unified setup checklist**
-
-Present all ACs together in a single block. **Setup commands are shown here but NOT executed yet — execution happens in Step 5 after confirmation.**
-
-> Here's what I need before running:
->
-> **AC1** — [description]
-> → Needs: [what must exist]
-> → Found: [model/route at path:line]
-> → I'll run: `curl -X POST $VERIFY_BASE_URL/api/... --data-raw '{"field":"value"}'`
->
-> **AC2** — [description]
-> → No setup needed
->
-> **AC3** — [description]
-> → No setup needed
-
-**Step 4 — Single confirmation**
-
-Ask:
-> "Ready to set up and run? (y = set up and run all / s [ac-id] = skip that AC / edit = adjust setup)"
-
-- `y` — proceed to Step 5
-- `s ac1` (or any AC id) — remove that AC from plan.json:
-  ```bash
-  AC_ID="ac1"  # replace with actual id
-  jq --arg id "$AC_ID" 'del(.criteria[] | select(.id == $id))' \
-    .verify/plan.json > .verify/plan.tmp && mv .verify/plan.tmp .verify/plan.json
-  ```
-  Then re-show the updated checklist (Step 3) and re-ask for confirmation (Step 4).
-- `edit` — user provides corrections; update your setup plan, re-show the updated checklist (Step 3), and re-ask for confirmation (Step 4). After 2–3 rounds without resolution, suggest: "Consider refining the spec and re-running `/verify`."
-
-**Step 5 — Execute setup, verify, then proceed**
-
-First, stop if no criteria remain:
-```bash
-COUNT=$(jq '.criteria | length' .verify/plan.json)
-[ "$COUNT" -gt 0 ] || { echo "✗ No testable criteria."; exit 1; }
-```
-
-Now run each proposed setup command. After each, verify it worked (e.g. check the HTTP response code, or query the DB). If a setup command fails, skip that AC, remove it from `plan.json`, and report: `"Setup for [ac-id] failed — skipping."` Then confirm to the user:
-
-> "Setup complete — all ACs ready. Proceeding to Stage 2."
-
----
-
-## Stage 2: Browser Agents
-
-Clear previous evidence:
-```bash
-rm -rf .verify/evidence .verify/prompts
-rm -f /tmp/verify-mcp-*.json
-mkdir -p .verify/evidence
-```
-
-Run agents sequentially in the foreground:
-```bash
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/code-review.sh &
-CR_PID=$!
-
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/orchestrate.sh &
-ORCH_PID=$!
-```
-
-Then poll progress until done:
-```bash
-while kill -0 $ORCH_PID 2>/dev/null; do
-  TOTAL=$(jq '.criteria | length' .verify/plan.json 2>/dev/null || echo "?")
-  DONE=$(ls .verify/evidence/*/agent.log 2>/dev/null | wc -l | tr -d ' ')
-  CURRENT=$(ls -t .verify/evidence/*/claude.log 2>/dev/null | head -1 | cut -d/ -f4)
-  echo "  Progress: $DONE/$TOTAL done${CURRENT:+ — $CURRENT running}"
-  sleep 10
-done
-wait $ORCH_PID
-wait $CR_PID || true  # graceful degradation — don't fail pipeline if code review fails
-```
-
----
-
-## Stage 3: Judge
-
-```bash
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/judge.sh
-```
+Wait for completion, then show results.
 
 ---
 
 ## Report
 
+After the pipeline finishes, show results:
+
 ```bash
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/report.sh
+echo ""
+echo "Results:"
+cat .verify/runs/*/verdicts.json 2>/dev/null | jq -r '.verdicts[] | "  \(if .verdict == "pass" then "✓" else "✗" end) \(.ac_id): \(.verdict) — \(.reasoning[:100])"'
 ```
 
 ---
@@ -220,18 +135,19 @@ VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/report.sh
 
 | Failure | Action |
 |---------|--------|
-| Pre-flight fails | Print error, stop |
-| 0 criteria after human review | Print message, stop |
+| Dev server not running | Print error, stop |
+| No app.json | Warn, suggest `/verify-setup` |
 | All agents timeout/error | Print "Check dev server and auth", suggest `/verify-setup` |
-| Judge returns invalid JSON | Print raw output, tell user to check `.verify/evidence/` manually |
-| `progress.jsonl` missing after orchestrate | Agents never started or all exited instantly — check `.verify/evidence/*/claude.log` |
+| Pipeline exits non-zero | Print "Check logs in .verify/runs/" |
+| Auth redirects on all ACs | Auth cookies expired — re-run `/verify-setup` |
 
 ## Quick Reference
 
 ```bash
-/verify-setup                                          # one-time auth (cookie import)
+/verify-setup                                          # one-time auth + app indexing
 /verify                                                # run pipeline
-cat .verify/evidence/<id>/result.json                  # check evidence
-open .verify/evidence/<id>/screenshot-*.png            # view screenshots
-VERIFY_ENGINE=mcp /verify                              # fallback to Playwright MCP
+/verify path/to/spec.md                                # run with specific spec
+cat .verify/runs/*/verdicts.json | jq                  # check verdicts
+ls .verify/runs/*/evidence/                            # browse evidence
+cat .verify/learnings.md                               # see accumulated learnings
 ```
