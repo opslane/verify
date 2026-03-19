@@ -335,16 +335,24 @@ Task 10 E2E: 5 pass, 1 fail (ac6), 0 timeout. Browse agent execute-only fix ship
 ## setup-writer-orm-dispatch (plan: docs/plans/2026-03-19-setup-writer-orm-dispatch.md)
 
 ### Completed
-(none yet)
+- [x] Task 1: pg_dump --schema-only in index-app (commit: 4556e81)
+  - Files: pipeline/src/lib/index-app.ts, pipeline/test/index-app.test.ts
+- [x] Task 2: extractModelBody shared helper + JSONB annotations (commit: adb1a97)
+  - Files: pipeline/src/lib/prisma-parser.ts, pipeline/test/prisma-parser.test.ts
+  - Decisions: Fixed regex to handle `Json?` at end-of-line
+- [x] Task 3: Store JSONB annotations in AppIndex + wire CLI (commit: 19f2f1d)
+  - Files: types.ts, index-app.ts, cli.ts, test/index-app.test.ts, fixtures/app-index.json
+- [x] Task 4: Restrict setup writer to Bash + Read (commit: f3fc2ec)
+  - Files: pipeline/src/lib/types.ts
+- [x] Task 5: Prisma-specific prompt + ORM dispatch (commit: 912a150)
+  - Files: setup-writer-prisma.txt, setup-writer.txt, setup-writer.ts, orchestrator.ts, cli.ts, test/setup-writer.test.ts, TODOS.md
+  - Decisions: projectRoot required (not optional) per eng review
+- [x] Task 6: Judge absent-element spec_unclear (commit: 2dd03c1)
+  - Files: pipeline/src/prompts/judge.txt
+- [x] Task 7: Full test suite + typecheck (203 tests, 25 files, all pass)
 
 ### Current
-Task 1: Add pg_dump --schema-only to index-app
+Task 8: E2E validation on Formbricks (needs running instance)
 
-### Remaining
-Task 2: Extract shared extractModelBody + JSONB type annotations
-Task 3: Store JSONB annotations in AppIndex + wire into CLI
-Task 4: Restrict setup writer tool access
-Task 5: Prisma-specific setup writer prompt + ORM dispatch
-Task 6: Update judge prompt for absent-element spec_unclear
-Task 7: Full test suite + typecheck
-Task 8: E2E validation on Formbricks
+### Status
+COMPLETE (Tasks 1-7) — 203 tests passing, typecheck clean
