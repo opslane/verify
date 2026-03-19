@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Fix two E2E failures: (1) setup writer times out at 240s exploring codebase for schema knowledge it should already have, (2) judge returns `fail` instead of `spec_unclear` when an element is absent from the expected page. Root cause: LLM stages gather knowledge at runtime instead of consuming pre-gathered data.
+**Goal:** Fix two E2E failures: (1) setup writer times out at 240s exploring codebase for schema knowledge it should already have, (2) judge returns `fail` instead of `spec_unclear` when an element is absent from the expected page.
 
-**Architecture:** Add `pg_dump --schema-only` to index-app (generic). Add Prisma JSONB type extraction to prisma-parser (Prisma-specific). Dispatch ORM-specific setup writer prompts via existing `detectORM()`. Restrict setup writer tool access. Update judge prompt for absent-element spec_unclear.
+**Architecture:** Add `pg_dump --schema-only` to index-app (generic). Extract Prisma JSONB type annotations via shared helper in prisma-parser (Prisma-specific). Dispatch ORM-specific setup writer prompts via existing `detectORM()`. Restrict setup writer tool access. Update judge prompt for absent-element spec_unclear.
 
 **Tech Stack:** TypeScript, vitest. No new dependencies.
 
@@ -20,32 +20,48 @@
 
 **Files:**
 - Modify: `pipeline/src/lib/index-app.ts`
-- Modify: `pipeline/src/cli.ts` (index-app command)
-- Create: `pipeline/test/schema-dump.test.ts`
+- Modify: `pipeline/test/index-app.test.ts`
 
-**Step 1: Write the failing test**
+**Step 1: Write the failing tests**
+
+Add to `pipeline/test/index-app.test.ts`:
 
 ```typescript
-// pipeline/test/schema-dump.test.ts
-import { describe, it, expect, vi } from "vitest";
 import { dumpDatabaseSchema } from "../src/lib/index-app.js";
 
 describe("dumpDatabaseSchema", () => {
-  it("returns null when DATABASE_URL not found", () => {
+  it("returns null when no DATABASE_URL in env", () => {
     const result = dumpDatabaseSchema({});
     expect(result).toBeNull();
   });
 
-  it("returns null when pg_dump fails", () => {
+  it("returns null when pg_dump fails (bad URL)", () => {
     const result = dumpDatabaseSchema({ DATABASE_URL: "postgres://bad:5432/nope" });
     expect(result).toBeNull();
+  });
+
+  it("strips query params from DATABASE_URL", () => {
+    // This will fail too (bad host), but exercises the URL cleaning path
+    const result = dumpDatabaseSchema({ DATABASE_URL: "postgres://bad:5432/nope?sslmode=require" });
+    expect(result).toBeNull();
+  });
+
+  it("returns DDL string on success", () => {
+    // Only runs if DATABASE_URL is set in test env (integration test)
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) return; // skip in CI without DB
+    const result = dumpDatabaseSchema({ DATABASE_URL: dbUrl });
+    if (result) {
+      expect(result).toContain("CREATE TABLE");
+      expect(typeof result).toBe("string");
+    }
   });
 });
 ```
 
-**Step 2: Run test — expect FAIL**
+**Step 2: Run tests — expect FAIL**
 
-Run: `cd pipeline && npx vitest run test/schema-dump.test.ts`
+Run: `cd pipeline && npx vitest run test/index-app.test.ts`
 
 **Step 3: Implement `dumpDatabaseSchema`**
 
@@ -79,51 +95,71 @@ export function dumpDatabaseSchema(env: Record<string, string | undefined>): str
 }
 ```
 
-**Step 4: Run test — expect PASS**
+**Step 4: Run tests — expect PASS**
 
-**Step 5: Wire into index-app CLI command**
+Run: `cd pipeline && npx vitest run test/index-app.test.ts`
 
-In `pipeline/src/cli.ts`, in the `index-app` command, after the deterministic parsing section and before the LLM agents:
+**Step 5: Typecheck**
 
-```typescript
-// Dump database schema (generic — works for any Postgres project)
-const projectEnvForDump = (await import("./stages/setup-writer.js")).loadProjectEnv(projectDir);
-const schemaDdl = dumpDatabaseSchema(projectEnvForDump);
-if (schemaDdl) {
-  writeFileSync(join(dirname(outputPath), "schema.sql"), schemaDdl);
-  console.log(`  Dumped database schema: ${Math.round(schemaDdl.length / 1024)}KB`);
-} else {
-  console.log("  Warning: could not dump database schema (DATABASE_URL missing or pg_dump failed)");
-}
-```
+Run: `cd pipeline && npx tsc --noEmit`
 
-**Step 6: Typecheck + tests**
-
-Run: `cd pipeline && npx tsc --noEmit && npx vitest run`
-
-**Step 7: Commit**
+**Step 6: Commit**
 
 ```bash
-git add pipeline/src/lib/index-app.ts pipeline/src/cli.ts pipeline/test/schema-dump.test.ts
+git add pipeline/src/lib/index-app.ts pipeline/test/index-app.test.ts
 git commit -m "feat(pipeline): add pg_dump --schema-only to index-app — generic schema capture"
 ```
 
 ---
 
-## Task 2: Extract Prisma JSONB type annotations
+## Task 2: Extract shared `extractModelBody` + JSONB type annotations
 
 **Files:**
 - Modify: `pipeline/src/lib/prisma-parser.ts`
 - Modify: `pipeline/test/prisma-parser.test.ts`
 
-Prisma schemas annotate JSONB fields with `/// [TypeName]` comments that reference TypeScript/Zod types. Extract these annotations so the setup writer knows which fields a JSONB column expects.
+The balanced-brace body extraction logic is duplicated between `parsePrismaSchema` and the new `extractJsonFieldAnnotations`. Extract a shared helper.
 
 **Step 1: Write the failing tests**
 
 Add to `pipeline/test/prisma-parser.test.ts`:
 
 ```typescript
-import { parsePrismaSchema, extractJsonFieldAnnotations } from "../src/lib/prisma-parser.js";
+import { parsePrismaSchema, extractModelBody, extractJsonFieldAnnotations } from "../src/lib/prisma-parser.js";
+
+describe("extractModelBody", () => {
+  it("extracts body of a named model", () => {
+    const schema = `
+model User {
+  id    String @id
+  name  String
+}
+
+model Org {
+  id String @id
+}`;
+    const body = extractModelBody(schema, "User");
+    expect(body).toContain("id    String @id");
+    expect(body).toContain("name  String");
+    expect(body).not.toContain("model Org");
+  });
+
+  it("returns null for missing model", () => {
+    expect(extractModelBody("model User { id String }", "Missing")).toBeNull();
+  });
+
+  it("handles nested braces in @default", () => {
+    const schema = `
+model Billing {
+  id      String @id
+  limits  Json   @default("{}")
+  data    Json   @default("{\\"key\\": \\"val\\"}")
+}`;
+    const body = extractModelBody(schema, "Billing");
+    expect(body).toContain("limits");
+    expect(body).toContain("data");
+  });
+});
 
 describe("extractJsonFieldAnnotations", () => {
   it("extracts /// [TypeName] annotations for Json fields", () => {
@@ -177,9 +213,43 @@ model User {
 
 **Step 2: Run tests — expect FAIL**
 
-**Step 3: Implement `extractJsonFieldAnnotations`**
+Run: `cd pipeline && npx vitest run test/prisma-parser.test.ts`
 
-Add to `pipeline/src/lib/prisma-parser.ts`:
+**Step 3: Implement**
+
+In `pipeline/src/lib/prisma-parser.ts`, extract the shared helper and add the new function:
+
+```typescript
+/**
+ * Extract the body of a named model from a Prisma schema.
+ * Uses balanced-brace matching to handle @default("{}") correctly.
+ * Returns the text between the opening { and closing }, or null if not found.
+ */
+export function extractModelBody(content: string, modelName: string): string | null {
+  const regex = new RegExp(`model\\s+${modelName}\\s*\\{`);
+  const match = regex.exec(content);
+  if (!match) return null;
+
+  const bodyStart = match.index + match[0].length;
+  let depth = 1;
+  let i = bodyStart;
+  let inQuote = false;
+  while (i < content.length && depth > 0) {
+    const ch = content[i];
+    if (ch === '"' && content[i - 1] !== '\\') inQuote = !inQuote;
+    if (!inQuote) {
+      if (ch === '{') depth++;
+      if (ch === '}') depth--;
+    }
+    i++;
+  }
+  return content.slice(bodyStart, i - 1);
+}
+```
+
+Then refactor `parsePrismaSchema` to use `extractModelBody` internally (iterate with the modelHeaderRegex, call `extractModelBody(content, modelName)` for each match).
+
+Add the new function:
 
 ```typescript
 /**
@@ -198,24 +268,12 @@ export function extractJsonFieldAnnotations(
 
   while ((match = modelHeaderRegex.exec(content)) !== null) {
     const modelName = match[1];
-    const bodyStart = match.index + match[0].length;
-    // Find matching closing brace (reuse balanced-brace logic)
-    let depth = 1;
-    let i = bodyStart;
-    let inQuote = false;
-    while (i < content.length && depth > 0) {
-      const ch = content[i];
-      if (ch === '"' && content[i - 1] !== '\\') inQuote = !inQuote;
-      if (!inQuote) {
-        if (ch === '{') depth++;
-        if (ch === '}') depth--;
-      }
-      i++;
-    }
-    const body = content.slice(bodyStart, i - 1);
-    const lines = body.split("\n");
+    const body = extractModelBody(content, modelName);
+    if (!body) continue;
 
+    const lines = body.split("\n");
     let pendingAnnotation: string | null = null;
+
     for (const line of lines) {
       const trimmed = line.trim();
 
@@ -230,9 +288,8 @@ export function extractJsonFieldAnnotations(
       if (pendingAnnotation) {
         const fieldMatch = trimmed.match(/^(\w+)\s+Json(\?|\[\])?\s/);
         if (fieldMatch) {
-          const fieldName = fieldMatch[1];
           if (!result[modelName]) result[modelName] = {};
-          result[modelName][fieldName] = pendingAnnotation;
+          result[modelName][fieldMatch[1]] = pendingAnnotation;
         }
         pendingAnnotation = null;
       }
@@ -245,37 +302,41 @@ export function extractJsonFieldAnnotations(
 
 **Step 4: Run tests — expect PASS**
 
-**Step 5: Commit**
+Run: `cd pipeline && npx vitest run test/prisma-parser.test.ts`
+
+**Step 5: Typecheck**
+
+Run: `cd pipeline && npx tsc --noEmit`
+
+**Step 6: Commit**
 
 ```bash
 git add pipeline/src/lib/prisma-parser.ts pipeline/test/prisma-parser.test.ts
-git commit -m "feat(pipeline): extract Prisma JSONB type annotations — ORM-specific schema enrichment"
+git commit -m "feat(pipeline): extract shared extractModelBody + JSONB type annotations in prisma-parser"
 ```
 
 ---
 
-## Task 3: Store JSONB annotations in AppIndex
+## Task 3: Store JSONB annotations in AppIndex + wire into index-app CLI
 
 **Files:**
-- Modify: `pipeline/src/lib/types.ts` (AppIndex type)
-- Modify: `pipeline/src/lib/index-app.ts` (mergeIndexResults)
-- Modify: `pipeline/src/cli.ts` (wire extraction into index-app command)
+- Modify: `pipeline/src/lib/types.ts`
+- Modify: `pipeline/src/lib/index-app.ts` (mergeIndexResults signature)
+- Modify: `pipeline/src/cli.ts` (index-app command: wire pg_dump + JSONB annotations)
 - Modify: `pipeline/test/index-app.test.ts`
+- Modify: `pipeline/test/fixtures/app-index.json`
 
 **Step 1: Extend AppIndex type**
 
-In `pipeline/src/lib/types.ts`, add to the `AppIndex` interface:
+In `pipeline/src/lib/types.ts`, add to the `AppIndex` interface after `seed_ids`:
 
 ```typescript
-export interface AppIndex {
-  // ... existing fields ...
   json_type_annotations: Record<string, Record<string, string>>;  // model → { field → TypeName }
-}
 ```
 
-**Step 2: Update mergeIndexResults**
+**Step 2: Update mergeIndexResults signature**
 
-Add `jsonAnnotations` parameter and include in output:
+In `pipeline/src/lib/index-app.ts`, add `jsonAnnotations` as the last parameter:
 
 ```typescript
 export function mergeIndexResults(
@@ -288,17 +349,22 @@ export function mergeIndexResults(
   seedIds: ...,
   jsonAnnotations?: Record<string, Record<string, string>>,
 ): AppIndex {
-  // ... existing code ...
+```
+
+And in the return value:
+
+```typescript
   return {
     // ... existing fields ...
     json_type_annotations: jsonAnnotations ?? {},
   };
-}
 ```
 
-**Step 3: Wire into CLI**
+**Step 3: Wire into index-app CLI command**
 
-In `pipeline/src/cli.ts` index-app command, after `parsePrismaSchema`:
+In `pipeline/src/cli.ts`, in the `index-app` command:
+
+After the Prisma parsing section, add JSONB annotation extraction:
 
 ```typescript
 const { extractJsonFieldAnnotations } = await import("./lib/prisma-parser.js");
@@ -312,11 +378,54 @@ if (schemaPath) {
 }
 ```
 
-Pass `jsonAnnotations` to `mergeIndexResults`.
+After the deterministic parsing and before the LLM agents, add pg_dump:
+
+```typescript
+// Dump database schema (generic — works for any Postgres project)
+const { loadProjectEnv } = await import("./stages/setup-writer.js");
+const projectEnvForDump = loadProjectEnv(projectDir);
+const schemaDdl = dumpDatabaseSchema(projectEnvForDump);
+if (schemaDdl) {
+  writeFileSync(join(dirname(outputPath), "schema.sql"), schemaDdl);
+  console.log(`  Dumped database schema: ${Math.round(schemaDdl.length / 1024)}KB`);
+} else {
+  console.log("  Warning: could not dump database schema (DATABASE_URL missing or pg_dump failed)");
+}
+```
+
+Pass `jsonAnnotations` to `mergeIndexResults`:
+
+```typescript
+const appIndex = mergeIndexResults(
+  routesResult, selectorsResult, schemaResult, fixturesResult,
+  envVars, prismaMapping, seedIds, jsonAnnotations,
+);
+```
 
 **Step 4: Update test fixture and tests**
 
-Add `json_type_annotations: {}` to existing test fixture and assertions.
+In `pipeline/test/fixtures/app-index.json`, add `"json_type_annotations": {}`.
+
+In `pipeline/test/index-app.test.ts`, update existing `mergeIndexResults` calls to expect `json_type_annotations` in output, and add a test:
+
+```typescript
+it("includes json_type_annotations when provided", () => {
+  const annotations = { OrganizationBilling: { stripe: "OrganizationStripeBilling" } };
+  const result = mergeIndexResults(
+    { routes: {} }, { pages: {} }, { data_model: {} }, { fixtures: {} },
+    { db_url_env: null, feature_flags: [] }, {}, {}, annotations,
+  );
+  expect(result.json_type_annotations).toEqual(annotations);
+});
+
+it("defaults json_type_annotations to empty when not provided", () => {
+  const result = mergeIndexResults(
+    { routes: {} }, { pages: {} }, { data_model: {} }, { fixtures: {} },
+    { db_url_env: null, feature_flags: [] }, {}, {},
+  );
+  expect(result.json_type_annotations).toEqual({});
+});
+```
 
 **Step 5: Typecheck + tests**
 
@@ -325,8 +434,8 @@ Run: `cd pipeline && npx tsc --noEmit && npx vitest run`
 **Step 6: Commit**
 
 ```bash
-git add pipeline/src/lib/types.ts pipeline/src/lib/index-app.ts pipeline/src/cli.ts pipeline/test/index-app.test.ts
-git commit -m "feat(pipeline): store JSONB type annotations in AppIndex"
+git add pipeline/src/lib/types.ts pipeline/src/lib/index-app.ts pipeline/src/cli.ts pipeline/test/index-app.test.ts pipeline/test/fixtures/app-index.json
+git commit -m "feat(pipeline): store JSONB annotations + pg_dump schema in AppIndex"
 ```
 
 ---
@@ -361,14 +470,59 @@ git commit -m "feat(pipeline): restrict setup writer to Bash + Read — no codeb
 
 ---
 
-## Task 5: Create Prisma-specific setup writer prompt
+## Task 5: Create Prisma-specific setup writer prompt + ORM dispatch
 
 **Files:**
 - Create: `pipeline/src/prompts/setup-writer-prisma.txt`
-- Modify: `pipeline/src/prompts/setup-writer.txt` (keep as generic fallback)
-- Modify: `pipeline/src/stages/setup-writer.ts` (dispatch by ORM)
+- Modify: `pipeline/src/prompts/setup-writer.txt` (remove "read source code")
+- Modify: `pipeline/src/stages/setup-writer.ts` (dispatch by ORM, projectRoot required)
+- Modify: `pipeline/src/orchestrator.ts` (pass projectRoot)
+- Modify: `pipeline/src/cli.ts` (pass projectRoot in run-stage)
+- Modify: `pipeline/test/setup-writer.test.ts` (add ORM dispatch tests)
+- Modify: `TODOS.md`
 
-**Step 1: Write the Prisma-specific prompt**
+**Step 1: Write the failing tests**
+
+Add to `pipeline/test/setup-writer.test.ts`:
+
+```typescript
+import { buildSetupWriterPrompt, detectORM } from "../src/stages/setup-writer.js";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
+describe("buildSetupWriterPrompt ORM dispatch", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = join(tmpdir(), `verify-orm-${Date.now()}`);
+    mkdirSync(projectDir, { recursive: true });
+  });
+  afterEach(() => { rmSync(projectDir, { recursive: true, force: true }); });
+
+  it("selects Prisma prompt when prisma/schema.prisma exists", () => {
+    mkdirSync(join(projectDir, "prisma"), { recursive: true });
+    writeFileSync(join(projectDir, "prisma", "schema.prisma"), "model User {}");
+    const prompt = buildSetupWriterPrompt("group-a", "trialing state", projectDir);
+    expect(prompt).toContain("Prisma-backed Postgres");
+    expect(prompt).toContain("group-a");
+  });
+
+  it("selects generic prompt when no ORM detected", () => {
+    const prompt = buildSetupWriterPrompt("group-a", "trialing state", projectDir);
+    expect(prompt).not.toContain("Prisma-backed Postgres");
+    expect(prompt).toContain("group-a");
+  });
+});
+```
+
+**Step 2: Run tests — expect FAIL**
+
+Run: `cd pipeline && npx vitest run test/setup-writer.test.ts`
+
+**Step 3: Create Prisma-specific prompt**
+
+Write `pipeline/src/prompts/setup-writer-prisma.txt`:
 
 ```
 You are a setup writer for a Prisma-backed Postgres application.
@@ -436,54 +590,80 @@ RULES:
 Output ONLY the JSON. No explanation, no markdown fences.
 ```
 
-**Step 2: Update `buildSetupWriterPrompt` to dispatch by ORM**
+**Step 4: Update generic fallback prompt**
 
-In `pipeline/src/stages/setup-writer.ts`:
+In `pipeline/src/prompts/setup-writer.txt`, replace "Read the source code to understand what fields are checked" with:
+
+```
+If `.verify/schema.sql` exists, read it for column types, constraints, and defaults.
+```
+
+And add rule 9:
+
+```
+9. Do NOT explore the application source code. Use only app.json, schema.sql, and learnings.md.
+```
+
+**Step 5: Update `buildSetupWriterPrompt` — make projectRoot required**
+
+In `pipeline/src/stages/setup-writer.ts`, change the function signature:
 
 ```typescript
-export function buildSetupWriterPrompt(groupId: string, condition: string, projectRoot?: string): string {
-  // Select prompt based on detected ORM
+export function buildSetupWriterPrompt(groupId: string, condition: string, projectRoot: string): string {
   let promptFile = "setup-writer.txt";
-  if (projectRoot) {
-    const orm = detectORM(projectRoot);
-    if (orm === "prisma") promptFile = "setup-writer-prisma.txt";
-    // Future: "drizzle" → "setup-writer-drizzle.txt"
-  }
+  const orm = detectORM(projectRoot);
+  if (orm === "prisma") promptFile = "setup-writer-prisma.txt";
+  // Future: "drizzle" → "setup-writer-drizzle.txt"
+
   const template = readFileSync(join(__dirname, "../prompts", promptFile), "utf-8");
   return template.replaceAll("{{groupId}}", groupId).replaceAll("{{condition}}", condition);
 }
 ```
 
-**Step 3: Update generic fallback prompt**
+**Step 6: Update orchestrator call**
 
-Keep `setup-writer.txt` but add "Read `.verify/schema.sql` if present" and remove "Read the source code to understand what fields are checked."
+In `pipeline/src/orchestrator.ts:187`, change:
 
-**Step 4: Update orchestrator call**
+```typescript
+const setupPrompt = buildSetupWriterPrompt(groupId, condition);
+```
 
-In `pipeline/src/orchestrator.ts`, pass `projectRoot` to `buildSetupWriterPrompt`:
+To:
 
 ```typescript
 const setupPrompt = buildSetupWriterPrompt(groupId, condition, projectRoot);
 ```
 
-**Step 5: Update CLI run-stage call**
+**Step 7: Update CLI run-stage call**
 
-In `pipeline/src/cli.ts` setup-writer case, pass `projectRoot`:
+In `pipeline/src/cli.ts`, in the `setup-writer` case (~line 228), change:
+
+```typescript
+const prompt = buildSetupWriterPrompt(groupId, condition);
+```
+
+To:
 
 ```typescript
 const prompt = buildSetupWriterPrompt(groupId, condition, projectRoot);
 ```
 
-**Step 6: Typecheck + tests**
+**Step 8: Run tests — expect PASS**
 
-Run: `cd pipeline && npx tsc --noEmit && npx vitest run`
+Run: `cd pipeline && npx vitest run`
 
-Existing tests mock `buildSetupWriterPrompt` so they won't break. The function signature change (optional `projectRoot`) is backwards-compatible.
+**Step 9: Typecheck**
 
-**Step 7: Commit**
+Run: `cd pipeline && npx tsc --noEmit`
+
+**Step 10: Update TODOS.md**
+
+Update the "P2 — Multi-ORM Setup Writer support" entry to note that Prisma path + dispatch infrastructure is now done. Only Drizzle/TypeORM/raw-SQL prompts remain.
+
+**Step 11: Commit**
 
 ```bash
-git add pipeline/src/prompts/setup-writer-prisma.txt pipeline/src/prompts/setup-writer.txt pipeline/src/stages/setup-writer.ts pipeline/src/orchestrator.ts pipeline/src/cli.ts
+git add pipeline/src/prompts/setup-writer-prisma.txt pipeline/src/prompts/setup-writer.txt pipeline/src/stages/setup-writer.ts pipeline/src/orchestrator.ts pipeline/src/cli.ts pipeline/test/setup-writer.test.ts TODOS.md
 git commit -m "feat(pipeline): ORM-dispatched setup writer — Prisma-specific prompt, no source code exploration"
 ```
 
@@ -494,9 +674,9 @@ git commit -m "feat(pipeline): ORM-dispatched setup writer — Prisma-specific p
 **Files:**
 - Modify: `pipeline/src/prompts/judge.txt`
 
-**Step 1: Add absent-element guidance**
+**Step 1: Update the `WHEN TO USE EACH VERDICT` section**
 
-In the `WHEN TO USE EACH VERDICT` section, update the `spec_unclear` entry:
+Replace the current `spec_unclear` entry with:
 
 ```
 - spec_unclear: Evidence suggests the SPEC is wrong, not the code. Use when:
@@ -510,7 +690,15 @@ In the `WHEN TO USE EACH VERDICT` section, update the `spec_unclear` entry:
   Include what the spec says vs what the code actually does in the reasoning.
 ```
 
-Update rule 8:
+**Step 2: Update rule 8**
+
+Replace:
+
+```
+8. Use spec_unclear sparingly — only when you have positive evidence that the spec's assumption is wrong (e.g., the component exists elsewhere). Don't use it as a fallback for unclear evidence.
+```
+
+With:
 
 ```
 8. Use spec_unclear when you have evidence that the spec's assumption is wrong.
@@ -520,7 +708,7 @@ Update rule 8:
    for ambiguous or low-quality evidence — that's "fail" with low confidence.
 ```
 
-**Step 2: Commit**
+**Step 3: Commit**
 
 ```bash
 git add pipeline/src/prompts/judge.txt
@@ -534,25 +722,50 @@ git commit -m "feat(pipeline): judge treats absent-element-on-expected-page as s
 **Step 1: Typecheck**
 
 Run: `cd pipeline && npx tsc --noEmit`
+Expected: PASS.
 
 **Step 2: Run all tests**
 
 Run: `cd pipeline && npx vitest run`
+Expected: All pass. Count should be ~200+ (189 existing + new tests from Tasks 1-5).
 
-Expected: All pass. Count should be ~195+ (189 existing + new tests).
+**Step 3: Commit any fixes**
 
 ---
 
 ## Task 8: E2E validation on Formbricks
 
-**Prerequisite:** Re-run `/verify-setup` (index-app) on Formbricks to generate `schema.sql` and updated `app.json` with `json_type_annotations`.
+**Prerequisite:** Re-run index-app on Formbricks to generate `schema.sql` and updated `app.json` with `json_type_annotations`.
 
-1. Re-index: `cd pipeline && npx tsx src/cli.ts index-app --project-dir ~/Projects/opslane/evals/formbricks`
-2. Verify `schema.sql` exists: `ls -la ~/Projects/opslane/evals/formbricks/.verify/schema.sql`
-3. Verify `json_type_annotations` in app.json: `python3 -c "import json; d=json.load(open('$HOME/Projects/opslane/evals/formbricks/.verify/app.json')); print(json.dumps(d.get('json_type_annotations', {}), indent=2))"`
-4. Delete learnings: `rm ~/Projects/opslane/evals/formbricks/.verify/learnings.md`
-5. Re-seed: `cd ~/Projects/opslane/evals/formbricks && npx dotenv -e .env -- tsx packages/database/src/seed.ts --clear && npx dotenv -e .env -- tsx packages/database/src/seed.ts`
-6. Run pipeline:
+**Step 1: Re-index**
+
+```bash
+cd pipeline && npx tsx src/cli.ts index-app --project-dir ~/Projects/opslane/evals/formbricks
+```
+
+**Step 2: Verify schema.sql exists**
+
+```bash
+ls -la ~/Projects/opslane/evals/formbricks/.verify/schema.sql
+```
+
+**Step 3: Verify json_type_annotations**
+
+```bash
+python3 -c "import json; d=json.load(open('$HOME/Projects/opslane/evals/formbricks/.verify/app.json')); print(json.dumps(d.get('json_type_annotations', {}), indent=2))"
+```
+
+Expected: Should show `OrganizationBilling.stripe → OrganizationStripeBilling` and `OrganizationBilling.limits → OrganizationBillingPlanLimits`.
+
+**Step 4: Delete learnings + re-seed**
+
+```bash
+rm ~/Projects/opslane/evals/formbricks/.verify/learnings.md
+cd ~/Projects/opslane/evals/formbricks && npx dotenv -e .env -- tsx packages/database/src/seed.ts --clear && npx dotenv -e .env -- tsx packages/database/src/seed.ts
+```
+
+**Step 5: Run pipeline**
+
 ```bash
 cd pipeline && npx tsx src/cli.ts run \
   --spec ~/Projects/opslane/evals/formbricks/.verify/spec.md \
@@ -560,12 +773,16 @@ cd pipeline && npx tsx src/cli.ts run \
 ```
 
 **Expected results:**
-- Setup groups complete in <90s each (no timeout)
-- Setup SQL uses correct JSONB fields (subscriptionStatus, hasPaymentMethod, plan, trialEnd)
+- Setup groups complete in <90s each (no 240s timeout)
+- Setup SQL uses correct JSONB fields from schema.sql + app.json
 - ac1-ac5: pass
 - ac6: `spec_unclear` (not fail, not timeout)
 - Report shows "NEEDS HUMAN REVIEW" section
 - Total pipeline time: <8min (down from 18min)
+
+**If ac6 still shows `fail` instead of `spec_unclear`:**
+- Check the judge logs — does the prompt include the new absent-element guidance?
+- This is an LLM judgment call — the prompt can guide but not guarantee. If it fails consistently, consider adding "element absent" as a keyword pattern in the judge output parser (deterministic override).
 
 ---
 
@@ -574,8 +791,8 @@ cd pipeline && npx tsx src/cli.ts run \
 ```bash
 cd pipeline && npx tsc --noEmit                    # No type errors
 cd pipeline && npx vitest run                       # All tests pass
-ls ~/.verify/schema.sql 2>/dev/null                 # schema.sql generated
-grep "json_type_annotations" pipeline/src/lib/types.ts  # Type exists
-grep "detectORM" pipeline/src/stages/setup-writer.ts    # ORM dispatch wired
-grep "dangerouslySkipPermissions" pipeline/src/lib/types.ts  # Should only appear for ac-generator, planner, learner
+grep "json_type_annotations" pipeline/src/lib/types.ts     # Type exists
+grep "detectORM" pipeline/src/stages/setup-writer.ts       # ORM dispatch wired
+grep "setup-writer-prisma" pipeline/src/stages/setup-writer.ts  # Prisma prompt selected
+grep "dangerouslySkipPermissions" pipeline/src/lib/types.ts     # Only ac-generator, planner, learner
 ```
