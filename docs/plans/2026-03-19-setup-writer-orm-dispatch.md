@@ -8,6 +8,12 @@
 
 **Tech Stack:** TypeScript, vitest. No new dependencies.
 
+**Review findings incorporated:**
+- Extract shared `extractModelBody()` helper in prisma-parser.ts (DRY — used by both parsePrismaSchema and extractJsonFieldAnnotations)
+- `buildSetupWriterPrompt` projectRoot parameter is REQUIRED (not optional) — fails loudly if missing
+- Add unit tests for: extractModelBody, ORM dispatch, dumpDatabaseSchema success path
+- Update TODOS.md Multi-ORM entry to reflect Prisma path + dispatch infra is done
+
 ---
 
 ## Task 1: Add `pg_dump --schema-only` to index-app
