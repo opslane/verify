@@ -51,8 +51,8 @@ export function parsePrismaSchema(content: string): Record<string, PrismaModel> 
     }
     const body = content.slice(bodyStart, i - 1);
 
-    // Check for @@map("table_name")
-    const tableMapMatch = body.match(/@@map\(\s*"([^"]+)"\s*\)/);
+    // Check for @@map("table_name") or @@map(name: "table_name")
+    const tableMapMatch = body.match(/@@map\(\s*(?:name:\s*)?"([^"]+)"\s*\)/);
     const tableName = tableMapMatch ? tableMapMatch[1] : modelName;
 
     const columns: Record<string, string> = {};
@@ -72,8 +72,8 @@ export function parsePrismaSchema(content: string): Record<string, PrismaModel> 
       if (modifier === "[]") continue;
       if (!SCALAR_TYPES.has(fieldType) && !enumNames.has(fieldType)) continue;
 
-      // Check for @map("column_name")
-      const mapMatch = trimmed.match(/@map\(\s*"([^"]+)"\s*\)/);
+      // Check for @map("column_name") or @map(name: "column_name")
+      const mapMatch = trimmed.match(/@map\(\s*(?:name:\s*)?"([^"]+)"\s*\)/);
       columns[fieldName] = mapMatch ? mapMatch[1] : fieldName;
     }
 

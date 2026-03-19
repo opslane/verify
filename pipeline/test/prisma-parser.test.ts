@@ -23,6 +23,26 @@ model OrganizationBilling {
     expect(result.OrganizationBilling.columns.createdAt).toBe("created_at");
   });
 
+  it("extracts column mappings from @map(name: ...) syntax", () => {
+    const schema = `
+model OrganizationBilling {
+  organizationId   String @id @map(name: "organization_id")
+  stripeCustomerId String? @unique @map(name: "stripe_customer_id")
+  limits           Json
+  stripe           Json?
+  createdAt        DateTime @default(now()) @map(name: "created_at")
+  updatedAt        DateTime @updatedAt @map(name: "updated_at")
+
+  @@map(name: "OrganizationBilling")
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.OrganizationBilling.columns.stripeCustomerId).toBe("stripe_customer_id");
+    expect(result.OrganizationBilling.columns.organizationId).toBe("organization_id");
+    expect(result.OrganizationBilling.columns.limits).toBe("limits");
+    expect(result.OrganizationBilling.columns.createdAt).toBe("created_at");
+    expect(result.OrganizationBilling.table_name).toBe("OrganizationBilling");
+  });
+
   it("uses model name as table name when no @@map", () => {
     const schema = `
 model User {

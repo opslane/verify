@@ -54,6 +54,27 @@ describe("groupSeedIdsByContext", () => {
     expect(grouped.Environment ?? grouped.environment).toContain("clseedenvprod000000000");
   });
 
+  it("groups IDs by constant-style keys (ORGANIZATION, USER, ENV)", () => {
+    const content = `
+export const SEED_IDS = {
+  USER_ADMIN: "clseedadmin000000000000",
+  USER_MANAGER: "clseedmanager0000000000",
+  ORGANIZATION: "clseedorg0000000000000",
+  PROJECT: "clseedproject000000000",
+  ENV_DEV: "clseedenvdev0000000000",
+  ENV_PROD: "clseedenvprod000000000",
+  SURVEY_KITCHEN_SINK: "clseedsurveykitchen00",
+} as const;`;
+    const grouped = groupSeedIdsByContext(content);
+    expect(grouped.User).toContain("clseedadmin000000000000");
+    expect(grouped.User).toContain("clseedmanager0000000000");
+    expect(grouped.Organization).toContain("clseedorg0000000000000");
+    expect(grouped.Project).toContain("clseedproject000000000");
+    expect(grouped.Environment).toContain("clseedenvdev0000000000");
+    expect(grouped.Environment).toContain("clseedenvprod000000000");
+    expect(grouped.Survey).toContain("clseedsurveykitchen00");
+  });
+
   it("returns ungrouped IDs under '_unknown'", () => {
     const content = `const id = "clsomerandoid000000000";`;
     const grouped = groupSeedIdsByContext(content);
