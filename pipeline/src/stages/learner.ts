@@ -73,7 +73,7 @@ export function validateLearnings(content: string): string {
       anySectionSeen = true;
       // Only ## (h2) can be an allowed section; h3+ always resets to disallowed
       if (line.startsWith("## ") && !line.startsWith("### ")) {
-        const sectionName = line.replace("## ", "").trim();
+        const sectionName = line.slice(3).trim();
         inAllowedSection = ALLOWED_SECTIONS.has(sectionName);
         if (inAllowedSection) result.push(line);
       } else {

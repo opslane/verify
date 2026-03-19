@@ -58,6 +58,8 @@ describe("formatTerminalReport", () => {
     expect(output).toContain("NEEDS HUMAN REVIEW");
     expect(output).toContain("ac2");
     expect(output).toContain("onboarding");
+    expect(output).toContain("1 spec_unclear");
+    expect(output).toContain("? ac2");
   });
 });
 

@@ -7,14 +7,20 @@ export function formatTerminalReport(verdicts: ACVerdict[]): string {
   const lines: string[] = [];
   const passCount = verdicts.filter(v => v.verdict === "pass").length;
   const failCount = verdicts.filter(v => v.verdict === "fail").length;
-  const otherCount = verdicts.length - passCount - failCount;
+  const specUnclearCount = verdicts.filter(v => v.verdict === "spec_unclear").length;
+  const otherCount = verdicts.length - passCount - failCount - specUnclearCount;
 
-  lines.push(`\nResults: ${passCount} pass, ${failCount} fail, ${otherCount} other (${verdicts.length} total)\n`);
+  let summary = `\nResults: ${passCount} pass, ${failCount} fail`;
+  if (specUnclearCount > 0) summary += `, ${specUnclearCount} spec_unclear`;
+  if (otherCount > 0) summary += `, ${otherCount} other`;
+  summary += ` (${verdicts.length} total)\n`;
+  lines.push(summary);
 
   for (const v of verdicts) {
     let icon = "!";
     if (v.verdict === "pass") icon = "\u2713";
     else if (v.verdict === "fail") icon = "\u2717";
+    else if (v.verdict === "spec_unclear") icon = "?";
     const conf = v.confidence !== "high" ? ` (${v.confidence} confidence)` : "";
     lines.push(`  ${icon} ${v.ac_id}: ${v.verdict}${conf} \u2014 ${v.reasoning}`);
   }
