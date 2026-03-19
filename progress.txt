@@ -296,3 +296,23 @@ Task 13: Full end-to-end test (manual — blocked on browse agent auth)
 ### Status
 COMPLETE (Tasks 1-12) — 181 tests passing, typecheck clean
 Task 13 blocked on pre-existing browse agent cookie injection gap
+
+---
+
+## learner-race-spec (plan: docs/plans/2026-03-19-learner-race-spec-fixes.md)
+
+### Completed
+(none yet)
+
+### Current
+Task 1: Add spec_unclear to Verdict type
+
+### Remaining
+Task 2: Update judge prompt with spec_unclear
+Task 3: Update report to highlight spec_unclear verdicts
+Task 4: Rewrite learner prompt — structured categories only
+Task 5: Add learnings post-validator
+Task 6: Serialize setup groups — prevent race condition
+Task 7: Handle spec_unclear in exit code
+Task 8: Genericize setup writer prompt
+Task 9: Run full test suite + typecheck
