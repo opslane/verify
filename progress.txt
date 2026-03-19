@@ -302,17 +302,30 @@ Task 13 blocked on pre-existing browse agent cookie injection gap
 ## learner-race-spec (plan: docs/plans/2026-03-19-learner-race-spec-fixes.md)
 
 ### Completed
-(none yet)
+- [x] Task 1: Add spec_unclear to Verdict type (commit: c99ddd6)
+  - Files: pipeline/src/lib/types.ts
+- [x] Task 2: Update judge prompt with spec_unclear (commit: 506339c)
+  - Files: pipeline/src/prompts/judge.txt
+- [x] Task 3: Update report to highlight spec_unclear verdicts (commit: a63ccf9)
+  - Files: pipeline/src/report.ts, pipeline/test/report.test.ts
+- [x] Task 4: Rewrite learner prompt — structured categories only (commit: 35e206f)
+  - Files: pipeline/src/prompts/learner.txt
+- [x] Task 5: Add learnings post-validator (commit: 29b2f3d)
+  - Files: pipeline/src/stages/learner.ts, pipeline/test/learner-validator.test.ts, pipeline/src/orchestrator.ts
+  - Decisions: Added preamble blank-line preservation for empty-input edge case
+- [x] Task 6: Serialize setup groups — prevent race condition (commit: 3e97d55)
+  - Files: pipeline/src/orchestrator.ts, pipeline/test/orchestrator.test.ts
+  - Decisions: setup groups serial, pure-UI groups parallel
+- [x] Task 7: Handle spec_unclear in exit code (commit: 1e06af0)
+  - Files: pipeline/src/cli.ts
+  - Decisions: exit 0=pass, 1=fail, 2=spec_unclear
+- [x] Task 8: Genericize setup writer prompt (commit: 87822b3)
+  - Files: pipeline/src/prompts/setup-writer.txt
+- [x] Task 9: Full test suite + typecheck (189 tests, 25 files, all pass)
 
 ### Current
-Task 1: Add spec_unclear to Verdict type
+Task 10: E2E validation on Formbricks (manual — needs running instance)
 
-### Remaining
-Task 2: Update judge prompt with spec_unclear
-Task 3: Update report to highlight spec_unclear verdicts
-Task 4: Rewrite learner prompt — structured categories only
-Task 5: Add learnings post-validator
-Task 6: Serialize setup groups — prevent race condition
-Task 7: Handle spec_unclear in exit code
-Task 8: Genericize setup writer prompt
-Task 9: Run full test suite + typecheck
+### Status
+COMPLETE (Tasks 1-9) — 189 tests passing, typecheck clean
+Task 10 blocked on Formbricks instance
