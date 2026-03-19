@@ -26,4 +26,12 @@ case "$FILE_PATH" in
     cp "$FILE_PATH" ~/.claude/tools/verify/prompts/"$PROMPT_NAME"
     echo "synced prompts/$PROMPT_NAME → ~/.claude/tools/verify/prompts/$PROMPT_NAME" >&2
     ;;
+  *pipeline/src/*|*pipeline/package.json|*pipeline/tsconfig.json|*pipeline/vitest.config.ts)
+    REPO_ROOT=$(cd "$(dirname "$FILE_PATH")" && git rev-parse --show-toplevel 2>/dev/null)
+    if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/pipeline" ]; then
+      mkdir -p ~/.claude/tools/verify/pipeline
+      rsync -a --delete "$REPO_ROOT/pipeline/" ~/.claude/tools/verify/pipeline/
+      echo "synced pipeline/ → ~/.claude/tools/verify/pipeline/" >&2
+    fi
+    ;;
 esac
