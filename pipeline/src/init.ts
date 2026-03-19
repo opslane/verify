@@ -46,7 +46,7 @@ export function loginWithCredentials(config: VerifyConfig): CheckResult {
     // Navigate to login page
     execFileSync(bin, ["goto", loginUrl], { timeout: 10_000, stdio: "ignore" });
     // Wait for page
-    execFileSync(bin, ["wait", "1000"], { timeout: 5_000, stdio: "ignore" }).toString();
+    execFileSync("sleep", ["1"], { timeout: 5_000, stdio: "ignore" });
 
     // Take snapshot to find the form
     let snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
@@ -56,7 +56,7 @@ export function loginWithCredentials(config: VerifyConfig): CheckResult {
       const emailBtnMatch = snapshot.match(/@(e\d+)\s+\[button\]\s+"Login with Email"/);
       if (emailBtnMatch) {
         execFileSync(bin, ["click", `@${emailBtnMatch[1]}`], { timeout: 5_000, stdio: "ignore" });
-        execFileSync(bin, ["wait", "1000"], { timeout: 5_000, stdio: "ignore" });
+        execFileSync("sleep", ["1"], { timeout: 5_000, stdio: "ignore" });
         snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
       }
     }
@@ -82,7 +82,7 @@ export function loginWithCredentials(config: VerifyConfig): CheckResult {
     }
 
     // Wait for redirect
-    execFileSync(bin, ["wait", "3000"], { timeout: 10_000, stdio: "ignore" });
+    execFileSync("sleep", ["3"], { timeout: 10_000, stdio: "ignore" });
 
     // Verify we're logged in
     return verifyAuthState(config.baseUrl, bin);
@@ -98,7 +98,7 @@ export function loginWithCredentials(config: VerifyConfig): CheckResult {
 function verifyAuthState(baseUrl: string, bin: string): CheckResult {
   try {
     execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore" });
-    execFileSync(bin, ["wait", "2000"], { timeout: 5_000, stdio: "ignore" });
+    execFileSync("sleep", ["2"], { timeout: 5_000, stdio: "ignore" });
     const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
     const loginPatterns = /Login to your account|Login with Email|Sign in|log.in.*form/i;
     if (loginPatterns.test(snapshot) && !snapshot.includes("Surveys") && !snapshot.includes("Dashboard")) {
