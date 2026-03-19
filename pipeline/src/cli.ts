@@ -11,6 +11,8 @@ const { positionals, values } = parseArgs({
   options: {
     "verify-dir": { type: "string", default: ".verify" },
     "run-dir": { type: "string" },
+    "project-dir": { type: "string" },
+    output: { type: "string" },
     spec: { type: "string" },
     group: { type: "string" },
     condition: { type: "string" },
@@ -50,6 +52,105 @@ if (command === "run") {
   const passCount = result.verdicts.verdicts.filter(v => v.verdict === "pass").length;
   const total = result.verdicts.verdicts.length;
   process.exit(passCount === total ? 0 : 1);
+
+} else if (command === "index-app") {
+  const projectDir = values["project-dir"] ?? process.cwd();
+  const outputPath = values.output ?? join(projectDir, ".verify", "app.json");
+  const runDir = join(projectDir, ".verify", "runs", `index-${Date.now()}`);
+  mkdirSync(join(runDir, "logs"), { recursive: true });
+  mkdirSync(dirname(outputPath), { recursive: true });
+
+  const { extractEnvVars, findPrismaSchemaPath, findSeedFiles, mergeIndexResults } = await import("./lib/index-app.js");
+  const { parsePrismaSchema } = await import("./lib/prisma-parser.js");
+  const { groupSeedIdsByContext } = await import("./lib/seed-extractor.js");
+  const { readFileSync: readFs } = await import("node:fs");
+  const { readFileSync: readPrompt } = await import("node:fs");
+
+  // Step 1: Deterministic parsing (no LLM needed)
+  console.log("Indexing app...");
+
+  // Parse Prisma schema for column mappings
+  let prismaMapping: Record<string, { table_name: string; columns: Record<string, string> }> = {};
+  const schemaPath = findPrismaSchemaPath(projectDir);
+  if (schemaPath) {
+    console.log(`  Found Prisma schema: ${schemaPath}`);
+    prismaMapping = parsePrismaSchema(readFs(schemaPath, "utf-8"));
+    console.log(`  Parsed ${Object.keys(prismaMapping).length} models with column mappings`);
+  }
+
+  // Extract seed IDs
+  let seedIds: Record<string, string[]> = {};
+  const seedFiles = findSeedFiles(projectDir);
+  if (seedFiles.length > 0) {
+    console.log(`  Found ${seedFiles.length} seed file(s)`);
+    const allContent = seedFiles.map(f => readFs(f, "utf-8")).join("\n");
+    seedIds = groupSeedIdsByContext(allContent);
+    const totalIds = Object.values(seedIds).flat().length;
+    console.log(`  Extracted ${totalIds} seed IDs across ${Object.keys(seedIds).length} models`);
+  }
+
+  // Extract env vars
+  const envVars = extractEnvVars(projectDir);
+
+  // Step 2: LLM-based indexing (4 parallel agents)
+  console.log("  Running 4 parallel index agents...");
+  const promptDir = join(dirname(new URL(import.meta.url).pathname), "prompts", "index");
+
+  const agentConfigs = [
+    { name: "routes", file: "routes.txt", outputFile: join(runDir, "routes.json") },
+    { name: "selectors", file: "selectors.txt", outputFile: join(runDir, "selectors.json") },
+    { name: "schema", file: "schema.txt", outputFile: join(runDir, "schema.json") },
+    { name: "fixtures", file: "fixtures.txt", outputFile: join(runDir, "fixtures.json") },
+  ];
+
+  const agentResults = await Promise.all(
+    agentConfigs.map(async (agent) => {
+      const promptTemplate = readPrompt(join(promptDir, agent.file), "utf-8");
+      const prompt = promptTemplate.replace(/OUTPUT_FILE/g, agent.outputFile);
+      try {
+        await runClaude({
+          prompt,
+          model: "sonnet",
+          timeoutMs: 120_000,
+          stage: `index-${agent.name}`,
+          runDir,
+          cwd: projectDir,
+          ...STAGE_PERMISSIONS["planner"], // needs Read, Grep, Glob
+        });
+        // Read the output file the agent wrote
+        const raw = readFs(agent.outputFile, "utf-8");
+        return JSON.parse(raw);
+      } catch {
+        console.error(`  Warning: ${agent.name} agent failed, using empty result`);
+        const key = agent.name === "routes" ? "routes"
+          : agent.name === "selectors" ? "pages"
+          : agent.name === "schema" ? "data_model"
+          : "fixtures";
+        return { [key]: {} };
+      }
+    })
+  );
+
+  const [routesResult, selectorsResult, schemaResult, fixturesResult] = agentResults;
+
+  // Step 3: Merge all results
+  const appIndex = mergeIndexResults(
+    routesResult,
+    selectorsResult,
+    schemaResult,
+    fixturesResult,
+    envVars,
+    prismaMapping,
+    seedIds,
+  );
+
+  writeFileSync(outputPath, JSON.stringify(appIndex, null, 2));
+  console.log(`\nApp index written to: ${outputPath}`);
+  console.log(`  Routes: ${Object.keys(appIndex.routes).length}`);
+  console.log(`  Pages: ${Object.keys(appIndex.pages).length}`);
+  console.log(`  Models: ${Object.keys(appIndex.data_model).length}`);
+  console.log(`  Seed IDs: ${Object.values(appIndex.seed_ids).flat().length}`);
+  console.log(`  DB URL env: ${appIndex.db_url_env ?? "(not found)"}`);
 
 } else if (command === "run-stage" && stageName) {
   const verifyDir = values["verify-dir"]!;
@@ -190,10 +291,12 @@ if (command === "run") {
 } else {
   console.error("Usage:");
   console.error("  npx tsx src/cli.ts run --spec <path> [--verify-dir .verify]");
+  console.error("  npx tsx src/cli.ts index-app [--project-dir .] [--output .verify/app.json]");
   console.error("  npx tsx src/cli.ts run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
   console.error("");
   console.error("Commands:");
   console.error("  run            Full pipeline run (orchestrator)");
+  console.error("  index-app      Build app.json index (routes, selectors, schema, seed IDs)");
   console.error("  run-stage      Run a single stage for debugging");
   console.error("");
   console.error("Stages:");
