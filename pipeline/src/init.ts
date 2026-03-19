@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { healthCheck, resolveBrowseBin, startDaemon } from "./lib/browse.js";
+import type { VerifyConfig } from "./lib/types.js";
 
 interface CheckResult {
   ok: boolean;
@@ -21,7 +22,7 @@ export async function checkDevServer(baseUrl: string): Promise<CheckResult> {
 export function checkBrowseDaemon(): CheckResult {
   const healthy = healthCheck();
   if (healthy) return { ok: true };
-  return { ok: false, error: "Browse daemon is not running. Run /verify-setup first." };
+  return { ok: false, error: "Browse daemon is not running." };
 }
 
 export function checkSpecFile(specPath: string): CheckResult {
@@ -30,44 +31,91 @@ export function checkSpecFile(specPath: string): CheckResult {
 }
 
 /**
- * Load cookies into the browse daemon and verify auth by navigating to baseUrl.
- * Returns ok:true if the page does NOT show a login form.
+ * Login to the app using credentials from config.json.
+ * This is the reliable auth method — fresh login every pipeline run.
  */
-export function ensureBrowseAuth(verifyDir: string, baseUrl: string): CheckResult {
-  const bin = resolveBrowseBin();
-
-  // Load cookies from cookies.json if present
-  const cookiesPath = join(verifyDir, "cookies.json");
-  if (existsSync(cookiesPath)) {
-    try {
-      const cookies = JSON.parse(readFileSync(cookiesPath, "utf-8")) as Array<{ name: string; value: string }>;
-      for (const cookie of cookies) {
-        try {
-          execFileSync(bin, ["cookie", `${cookie.name}=${cookie.value}`], { timeout: 5000, stdio: "ignore" });
-        } catch { /* best effort */ }
-      }
-    } catch { /* malformed cookies.json */ }
+export function loginWithCredentials(config: VerifyConfig): CheckResult {
+  if (!config.auth || config.auth.method !== "credentials" || !config.auth.email || !config.auth.password) {
+    return { ok: false, error: "No credentials in config.json — run /verify-setup to configure auth" };
   }
 
-  // Navigate to baseUrl and check for login page
+  const bin = resolveBrowseBin();
+  const loginUrl = `${config.baseUrl}${config.auth.loginUrl ?? "/auth/login"}`;
+
   try {
-    execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore" });
-    // Wait for page load
-    const snapshot = execFileSync(bin, ["snapshot", "-D"], { timeout: 5_000, encoding: "utf-8" });
-    const loginPatterns = /login|sign.in|password|log.in|Login to your account/i;
-    if (loginPatterns.test(snapshot)) {
-      return { ok: false, error: `Browse daemon shows a login page at ${baseUrl}. Run /verify-setup to re-authenticate.` };
+    // Navigate to login page
+    execFileSync(bin, ["goto", loginUrl], { timeout: 10_000, stdio: "ignore" });
+    // Wait for page
+    execFileSync(bin, ["wait", "1000"], { timeout: 5_000, stdio: "ignore" }).toString();
+
+    // Take snapshot to find the form
+    let snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
+
+    // If there's a "Login with Email" button, click it first (Formbricks pattern)
+    if (snapshot.includes("Login with Email")) {
+      const emailBtnMatch = snapshot.match(/@(e\d+)\s+\[button\]\s+"Login with Email"/);
+      if (emailBtnMatch) {
+        execFileSync(bin, ["click", `@${emailBtnMatch[1]}`], { timeout: 5_000, stdio: "ignore" });
+        execFileSync(bin, ["wait", "1000"], { timeout: 5_000, stdio: "ignore" });
+        snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
+      }
     }
-    return { ok: true };
+
+    // Find email and password fields
+    const emailRef = snapshot.match(/@(e\d+)\s+\[textbox\].*(?:email|work@)/i);
+    const passRef = snapshot.match(/@(e\d+)\s+\[textbox\].*password/i);
+
+    if (!emailRef || !passRef) {
+      // Maybe we're already logged in — check by navigating to app page
+      return verifyAuthState(config.baseUrl, bin);
+    }
+
+    // Fill credentials
+    execFileSync(bin, ["fill", `@${emailRef[1]}`, config.auth.email], { timeout: 5_000, stdio: "ignore" });
+    execFileSync(bin, ["fill", `@${passRef[1]}`, config.auth.password], { timeout: 5_000, stdio: "ignore" });
+
+    // Find and click submit button — look for the second "Login with Email" or a submit button
+    snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
+    const submitMatch = snapshot.match(/@(e\d+)\s+\[button\]\s+"Login with Email"/);
+    if (submitMatch) {
+      execFileSync(bin, ["click", `@${submitMatch[1]}`], { timeout: 5_000, stdio: "ignore" });
+    }
+
+    // Wait for redirect
+    execFileSync(bin, ["wait", "3000"], { timeout: 10_000, stdio: "ignore" });
+
+    // Verify we're logged in
+    return verifyAuthState(config.baseUrl, bin);
   } catch (err: unknown) {
-    return { ok: false, error: `Failed to verify browse auth: ${err instanceof Error ? err.message : String(err)}` };
+    return { ok: false, error: `Login failed: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
 
-export async function runPreflight(baseUrl: string, specPath: string, verifyDir?: string): Promise<{
-  ok: boolean;
-  errors: string[];
-}> {
+/**
+ * Check if the current browse daemon session is authenticated.
+ * Navigates to an app page and checks if we see content vs login page.
+ */
+function verifyAuthState(baseUrl: string, bin: string): CheckResult {
+  try {
+    execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore" });
+    execFileSync(bin, ["wait", "2000"], { timeout: 5_000, stdio: "ignore" });
+    const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
+    const loginPatterns = /Login to your account|Login with Email|Sign in|log.in.*form/i;
+    if (loginPatterns.test(snapshot) && !snapshot.includes("Surveys") && !snapshot.includes("Dashboard")) {
+      return { ok: false, error: "Auth failed — still on login page after login attempt" };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Failed to verify auth state" };
+  }
+}
+
+export async function runPreflight(
+  baseUrl: string,
+  specPath: string,
+  verifyDir?: string,
+  config?: VerifyConfig
+): Promise<{ ok: boolean; errors: string[] }> {
   const errors: string[] = [];
 
   const spec = checkSpecFile(specPath);
@@ -79,7 +127,6 @@ export async function runPreflight(baseUrl: string, specPath: string, verifyDir?
   // Ensure browse daemon is running
   const daemon = checkBrowseDaemon();
   if (!daemon.ok) {
-    // Try starting it
     try {
       await startDaemon({});
     } catch {
@@ -88,9 +135,9 @@ export async function runPreflight(baseUrl: string, specPath: string, verifyDir?
     }
   }
 
-  // Verify auth if verifyDir provided
-  if (verifyDir) {
-    const auth = ensureBrowseAuth(verifyDir, baseUrl);
+  // Login with credentials (fresh login every run — don't rely on stale cookies)
+  if (config?.auth) {
+    const auth = loginWithCredentials(config);
     if (!auth.ok) errors.push(auth.error!);
   }
 

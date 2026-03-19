@@ -64,7 +64,7 @@ export async function runPipeline(
   callbacks.onLog(`Run: ${runId}`);
 
   // ── Init (preflight) ──────────────────────────────────────────────────
-  const preflight = await runPreflight(config.baseUrl, specPath, verifyDir);
+  const preflight = await runPreflight(config.baseUrl, specPath, verifyDir, config);
   if (!preflight.ok) {
     for (const err of preflight.errors) callbacks.onError(err);
     return { runDir, verdicts: null };
@@ -141,21 +141,24 @@ export async function runPipeline(
   const abortController = new AbortController();
   const projectEnv = loadProjectEnv(projectRoot);
 
-  // Collect seed IDs from app.json to protect from destructive teardown
+  // Collect seed IDs from app.json to protect from destructive setup/teardown
   const seedIds: string[] = [];
   if (appIndex) {
-    // Route URLs contain environment IDs
+    // Primary source: seed_ids from app indexer
+    if (appIndex.seed_ids) {
+      for (const ids of Object.values(appIndex.seed_ids)) {
+        seedIds.push(...ids);
+      }
+    }
+    // Secondary: route URLs contain environment IDs
     for (const route of Object.keys(appIndex.routes)) {
       const match = route.match(/\/environments\/([^/]+)/);
-      if (match) seedIds.push(match[1]);
-    }
-    // Fixture IDs
-    for (const [name, fixture] of Object.entries(appIndex.fixtures)) {
-      if (fixture.source) seedIds.push(name);
+      if (match && !seedIds.includes(match[1])) seedIds.push(match[1]);
     }
   }
   // Also protect well-known seed prefixes
   seedIds.push("clseed");
+  callbacks.onLog(`  Protected seed IDs: ${seedIds.length}`);
 
   // Group ACs by their group id
   const groupMap = new Map<string, typeof plan.criteria>();
