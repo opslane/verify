@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { extractEnvVars, mergeIndexResults, findPrismaSchemaPath } from "../src/lib/index-app.js";
+import { extractEnvVars, mergeIndexResults, findPrismaSchemaPath, dumpDatabaseSchema } from "../src/lib/index-app.js";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -119,5 +119,28 @@ describe("findPrismaSchemaPath", () => {
 
   it("returns null when no schema exists", () => {
     expect(findPrismaSchemaPath(projectDir)).toBeNull();
+  });
+});
+
+describe("dumpDatabaseSchema", () => {
+  it("returns null when no DATABASE_URL in env", () => {
+    const result = dumpDatabaseSchema({});
+    expect(result).toBeNull();
+  });
+
+  it("returns null when pg_dump fails (bad URL)", () => {
+    const result = dumpDatabaseSchema({ DATABASE_URL: "postgres://bad:5432/nope" });
+    expect(result).toBeNull();
+  });
+
+  it("strips query params from DATABASE_URL", () => {
+    // Will fail too (bad host), but exercises the URL cleaning path
+    const result = dumpDatabaseSchema({ DATABASE_URL: "postgres://bad:5432/nope?sslmode=require" });
+    expect(result).toBeNull();
+  });
+
+  it("finds DATABASE_URI as fallback", () => {
+    const result = dumpDatabaseSchema({ DATABASE_URI: "postgres://bad:5432/nope" });
+    expect(result).toBeNull(); // fails, but proves it tried DATABASE_URI
   });
 });

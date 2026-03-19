@@ -1,7 +1,32 @@
 // pipeline/src/lib/index-app.ts — App indexer: merges LLM agent results with deterministic parsing
 import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { join } from "node:path";
 import type { AppIndex } from "./types.js";
+
+/**
+ * Run pg_dump --schema-only against the project's database.
+ * Returns raw DDL string, or null if DATABASE_URL is missing or pg_dump fails.
+ * Generic — works for any Postgres-backed project regardless of ORM.
+ */
+export function dumpDatabaseSchema(env: Record<string, string | undefined>): string | null {
+  const dbUrl = env.DATABASE_URL ?? env.DATABASE_URI ?? env.DB_URL;
+  if (!dbUrl) return null;
+
+  // Strip query params for pg_dump (same pattern as setup-writer psql commands)
+  const cleanUrl = dbUrl.split("?")[0];
+
+  try {
+    const ddl = execSync(`pg_dump --schema-only "${cleanUrl}"`, {
+      timeout: 30_000,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env, ...env },
+    });
+    return ddl.toString("utf-8");
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Extract DATABASE_URL env var name and feature flags from .env files.
