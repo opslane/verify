@@ -26,7 +26,7 @@ export function buildJudgePrompt(evidenceRefs: EvidenceRef[]): string {
   return template.replace("{{evidenceList}}", evidenceList);
 }
 
-const VALID_VERDICTS = new Set(["pass", "fail", "error", "timeout", "skipped", "setup_failed", "setup_unsupported", "plan_error", "auth_expired"]);
+const VALID_VERDICTS = new Set(["pass", "fail", "error", "timeout", "skipped", "setup_failed", "setup_unsupported", "plan_error", "auth_expired", "spec_unclear"]);
 const VALID_CONFIDENCE = new Set(["high", "medium", "low"]);
 
 export function parseJudgeOutput(raw: string): JudgeOutput | null {
