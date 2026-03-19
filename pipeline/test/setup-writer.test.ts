@@ -6,12 +6,34 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 describe("buildSetupWriterPrompt", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = join(tmpdir(), `verify-setup-${Date.now()}`);
+    mkdirSync(projectDir, { recursive: true });
+  });
+  afterEach(() => { rmSync(projectDir, { recursive: true, force: true }); });
+
   it("substitutes group id and condition", () => {
-    const prompt = buildSetupWriterPrompt("group-a", "org in trialing state");
+    const prompt = buildSetupWriterPrompt("group-a", "org in trialing state", projectDir);
     expect(prompt).toContain("group-a");
     expect(prompt).toContain("org in trialing state");
     expect(prompt).not.toContain("{{groupId}}");
     expect(prompt).not.toContain("{{condition}}");
+  });
+
+  it("selects Prisma prompt when prisma/schema.prisma exists", () => {
+    mkdirSync(join(projectDir, "prisma"), { recursive: true });
+    writeFileSync(join(projectDir, "prisma", "schema.prisma"), "model User {}");
+    const prompt = buildSetupWriterPrompt("group-a", "trialing state", projectDir);
+    expect(prompt).toContain("Prisma-backed Postgres");
+    expect(prompt).toContain("group-a");
+  });
+
+  it("selects generic prompt when no ORM detected", () => {
+    const prompt = buildSetupWriterPrompt("group-a", "trialing state", projectDir);
+    expect(prompt).not.toContain("Prisma-backed Postgres");
+    expect(prompt).toContain("group-a");
   });
 });
 

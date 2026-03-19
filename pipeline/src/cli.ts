@@ -247,7 +247,7 @@ if (command === "run") {
       const condition = values.condition ?? "";
       if (!groupId) { console.error("--group is required for setup-writer"); process.exit(1); }
       const { buildSetupWriterPrompt, parseSetupWriterOutput } = await import("./stages/setup-writer.js");
-      const prompt = buildSetupWriterPrompt(groupId, condition);
+      const prompt = buildSetupWriterPrompt(groupId, condition, projectRoot);
       const result = await runClaude({ prompt, model: "sonnet", timeoutMs: timeoutOverrideMs ?? 240_000, stage: "setup-writer", runDir, ...permissions });
       const parsed = parseSetupWriterOutput(result.stdout);
       if (!parsed) { console.error("Failed to parse setup writer output. Check logs:", join(runDir, "logs")); process.exit(1); }

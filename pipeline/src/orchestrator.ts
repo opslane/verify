@@ -184,7 +184,7 @@ export async function runPipeline(
     let snapshotTableList: string[] = [];
 
     if (condition) {
-      const setupPrompt = buildSetupWriterPrompt(groupId, condition);
+      const setupPrompt = buildSetupWriterPrompt(groupId, condition, projectRoot);
       const setupResult = await runClaude({
         prompt: setupPrompt, model: "sonnet", timeoutMs: 240_000,
         stage: `setup-${groupId}`, runDir, ...perms("setup-writer"),

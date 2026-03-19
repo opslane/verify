@@ -62,17 +62,17 @@ Deferred work captured from plan reviews. Each item includes enough context to p
 
 ---
 
-## P2 — Multi-ORM Setup Writer support
+## P2 — Multi-ORM Setup Writer support (Prisma done, Drizzle/TypeORM remaining)
 
-**What:** Add Setup Writer prompt variants for Drizzle, TypeORM, and raw SQL (no ORM) so setup-dependent ACs work beyond Prisma + Postgres.
+**What:** Add Setup Writer prompt variants for Drizzle, TypeORM, and raw SQL (no ORM).
 
-**Why:** v2 pipeline only supports Prisma + Postgres for setup SQL generation. Users with Drizzle or TypeORM will see all setup-dependent ACs marked as `setup_unsupported` with no way to fix it. This silently reduces pipeline coverage for non-Prisma projects.
+**Why:** Pipeline now dispatches ORM-specific setup writer prompts via `detectORM()` in `setup-writer.ts`. Prisma path is complete (`setup-writer-prisma.txt`), including `pg_dump --schema-only` for DDL and JSONB type annotation extraction. Drizzle and TypeORM users still get the generic fallback prompt.
 
-**Context:** ORM detection is deterministic in the orchestrator — check for `prisma/schema.prisma`, `drizzle.config.ts`, `ormconfig.ts`, etc. Each ORM variant needs: (1) a stage prompt that reads the ORM's schema format, (2) SQL generation tuned to that ORM's conventions (e.g., Drizzle uses camelCase columns, Prisma uses PascalCase tables). The `setup-writer.ts` stage already accepts `ormType` — adding a variant means a new prompt template + schema file path.
+**Context:** Infrastructure is in place: `detectORM()` returns `"prisma" | "drizzle" | "unknown"`, `buildSetupWriterPrompt()` selects prompt by ORM, `schema.sql` is generated during index-app. Adding a new ORM means: (1) new prompt file `setup-writer-drizzle.txt`, (2) possibly a schema parser in `drizzle-parser.ts`. The generic prompt + schema.sql handles most cases; ORM-specific prompts add column mapping awareness.
 
-**Depends on:** Pipeline v2 shipping first.
+**Depends on:** Nothing — infrastructure is shipped.
 
-**Effort:** M human → S with CC+gstack
+**Effort:** S human → XS with CC+gstack
 
 ---
 

@@ -8,8 +8,14 @@ import { parseJsonOutput } from "../lib/parse-json.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export function buildSetupWriterPrompt(groupId: string, condition: string): string {
-  const template = readFileSync(join(__dirname, "../prompts/setup-writer.txt"), "utf-8");
+export function buildSetupWriterPrompt(groupId: string, condition: string, projectRoot: string): string {
+  // Select prompt based on detected ORM
+  let promptFile = "setup-writer.txt";
+  const orm = detectORM(projectRoot);
+  if (orm === "prisma") promptFile = "setup-writer-prisma.txt";
+  // Future: "drizzle" → "setup-writer-drizzle.txt"
+
+  const template = readFileSync(join(__dirname, "../prompts", promptFile), "utf-8");
   return template.replaceAll("{{groupId}}", groupId).replaceAll("{{condition}}", condition);
 }
 
