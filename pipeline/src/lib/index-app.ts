@@ -97,18 +97,29 @@ export function mergeIndexResults(
   seedIds: Record<string, string[]>
 ): AppIndex {
   // Merge prisma column mappings into data_model (union of LLM + deterministic sources)
+  // The deterministic parser is authoritative for column mappings; LLM enriches with enums/source
   const dataModel: AppIndex["data_model"] = {};
+  const llmModels = schema.data_model ?? {};
   const allModelNames = new Set([
-    ...Object.keys(schema.data_model ?? {}),
+    ...Object.keys(llmModels),
     ...Object.keys(prismaMapping),
   ]);
   for (const modelName of allModelNames) {
-    const llmData = (schema.data_model ?? {})[modelName];
+    const llmData = llmModels[modelName];
     const mapping = prismaMapping[modelName];
+
+    // Column mapping: prefer deterministic parser, fall back to LLM array→identity, then empty
+    let columns: Record<string, string> = {};
+    if (mapping?.columns) {
+      columns = mapping.columns;
+    } else if (llmData?.columns && Array.isArray(llmData.columns)) {
+      columns = Object.fromEntries(llmData.columns.map(c => [c, c]));
+    }
+
     dataModel[modelName] = {
-      columns: mapping?.columns ?? (llmData ? Object.fromEntries(llmData.columns.map(c => [c, c])) : {}),
+      columns,
       table_name: mapping?.table_name ?? modelName,
-      enums: llmData?.enums ?? {},
+      enums: (llmData && typeof llmData.enums === "object" && !Array.isArray(llmData.enums)) ? llmData.enums : {},
       source: llmData?.source ?? "prisma-parser",
     };
   }
