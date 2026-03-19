@@ -204,7 +204,7 @@ export async function runPipeline(
         callbacks.onLog(`  Snapshotted ${snapshotTableList.length} tables for ${groupId}`);
       }
 
-      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot);
+      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot, seedIds);
       if (!setupExec.success) {
         // Restore snapshot on setup failure
         if (snapshotPath) restoreSnapshot(snapshotPath, snapshotTableList, projectEnv);
