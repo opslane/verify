@@ -84,7 +84,8 @@ export interface BrowseResult {
 // ── Judge output (with confidence scoring) ──────────────────────────────────
 
 export type Verdict = "pass" | "fail" | "error" | "timeout" | "skipped"
-  | "setup_failed" | "setup_unsupported" | "plan_error" | "auth_expired";
+  | "setup_failed" | "setup_unsupported" | "plan_error" | "auth_expired"
+  | "spec_unclear";
 
 export type Confidence = "high" | "medium" | "low";
 
