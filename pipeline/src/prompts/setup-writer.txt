@@ -4,26 +4,23 @@ GROUP: {{groupId}}
 CONDITION: {{condition}}
 
 FIRST: Read `.verify/app.json`. It has:
-- seed_ids: existing record IDs — these rows ALREADY EXIST. Use UPDATE on them.
-- data_model.*.columns: maps Prisma field names → Postgres column names. Use the POSTGRES name.
+- seed_ids: existing record IDs per table — these rows ALREADY EXIST. Use UPDATE.
+- data_model.*.columns: maps Prisma field names → actual Postgres column names.
+- data_model.*.table_name: actual Postgres table name.
 
-Also read `.verify/learnings.md` if present.
+Also read `.verify/learnings.md` if present — it has corrections from past runs
+(column name fixes, required JSONB fields, etc). Apply these corrections.
 
 THE #1 RULE: USE UPDATE, NOT INSERT.
-The database is already seeded. The rows exist. You just need to change a column value.
-For example, to put an org in "trialing" state, you UPDATE one column.
-IMPORTANT: For JSONB columns, include ALL fields the app needs, not just the one being tested.
-Read the source code to understand what fields the app checks before rendering a component.
+The database is already seeded. The rows exist. You only need to change column values.
+Look up the seed record ID from app.json seed_ids, then UPDATE that row.
 
-  UPDATE "OrganizationBilling" SET stripe = '{"subscriptionStatus":"trialing","hasPaymentMethod":false,"plan":"startup","trialEnd":"2099-12-31T00:00:00.000Z"}' WHERE organization_id = 'clseedorg0000000000000';
+IMPORTANT: For JSONB columns, include ALL fields the app needs, not just the one
+being tested. Read the source code to understand what fields are checked.
+If learnings.md has a "Required Fields" entry for a table, include those fields.
 
-That's it. One UPDATE. Do NOT create new users, organizations, projects, or environments.
-Do NOT use INSERT. The data is already there.
-
-COLUMN NAMES: app.json "columns" maps Prisma→Postgres. Use the Postgres name (the value).
-  Example: app.json has {"stripeCustomerId": "stripe_customer_id"}
-  CORRECT: WHERE stripe_customer_id = '...'
-  WRONG:   WHERE "stripeCustomerId" = '...'
+COLUMN NAMES:
+app.json "columns" maps Prisma→Postgres. ALWAYS use the Postgres name (the value).
 
 OUTPUT: Valid JSON to stdout:
 
@@ -38,10 +35,12 @@ OUTPUT: Valid JSON to stdout:
 
 RULES:
 1. Use `psql "${DATABASE_URL%%\?*}" --set ON_ERROR_STOP=1 -c "..."`.
-2. Use UPDATE on seed records. Read seed_ids from app.json for the WHERE clause.
-3. Minimal changes — only SET the columns needed for the condition. Don't touch other columns.
-4. If the condition is null or empty, output empty arrays.
-5. teardown_commands must be empty — orchestrator handles DB restoration.
-6. Keep it to 1-3 commands. If you need more, you're overcomplicating it.
+2. Use UPDATE on seed records. Get IDs from app.json seed_ids.
+3. Look up column names in app.json — use the Postgres column name.
+4. Minimal changes — only SET columns needed for the condition.
+5. For JSONB columns, include all required fields from learnings.md.
+6. If the condition is null or empty, output empty arrays.
+7. teardown_commands must be empty — orchestrator handles DB restoration.
+8. Keep it to 1-3 commands max.
 
 Output ONLY the JSON. No explanation, no markdown fences.
