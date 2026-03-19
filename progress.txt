@@ -268,12 +268,31 @@ COMPLETE — all WS5 tasks done, typecheck clean, 146 tests passing across 21 fi
   - Files: pipeline/src/cli.ts
   - Deterministic parsing (Prisma + seeds) + 4 parallel LLM agents → app.json
 
-### Current
-Task 8: E2E checkpoint — PAUSED for manual validation against Formbricks
+- [x] Task 8: E2E checkpoint (commits: 6272728, 7ef5527)
+  - Indexer: 33 models with correct column mappings, 11 seed IDs across 5 models
+  - Fixed: @map(name: "...") syntax, constant-key seed grouping, defensive LLM merge
+  - Setup writer: correct Postgres column names in SQL, setup executed successfully
+  - Browse agents: auth redirect (pre-existing cookie injection gap, not WS6 regression)
 
-### Remaining
-- Task 9: Update /verify-setup SKILL.md
-- Task 10: Rewrite /verify SKILL.md
-- Task 11: Update skill sync hook
-- Task 12: Update CLAUDE.md
-- Task 13: Full end-to-end test
+- [x] Task 9: Update /verify-setup SKILL.md (commit: 6240584)
+  - Files: skills/verify-setup/SKILL.md
+  - Added Step 7: app indexing via `npx tsx ... index-app`
+
+- [x] Task 10: Rewrite /verify SKILL.md (commit: a28839f)
+  - Files: skills/verify/SKILL.md
+  - Replaced bash scripts with `npx tsx ... run --spec`
+
+- [x] Task 11: Update skill sync hook (commit: 6385b83)
+  - Files: .claude/hooks/sync-skill.sh
+  - Added pipeline/ rsync case
+
+- [x] Task 12: Update CLAUDE.md (commit: b497646)
+  - Files: CLAUDE.md
+  - Pipeline section, commands, structure, verification all updated for v2
+
+### Current
+Task 13: Full end-to-end test (manual — blocked on browse agent auth)
+
+### Status
+COMPLETE (Tasks 1-12) — 181 tests passing, typecheck clean
+Task 13 blocked on pre-existing browse agent cookie injection gap
