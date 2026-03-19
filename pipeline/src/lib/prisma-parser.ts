@@ -21,6 +21,14 @@ const SCALAR_TYPES = new Set([
 export function parsePrismaSchema(content: string): Record<string, PrismaModel> {
   const models: Record<string, PrismaModel> = {};
 
+  // First pass: collect all enum names so we can treat enum fields as columns
+  const enumNames = new Set<string>();
+  const enumRegex = /enum\s+(\w+)\s*\{/g;
+  let enumMatch: RegExpExecArray | null;
+  while ((enumMatch = enumRegex.exec(content)) !== null) {
+    enumNames.add(enumMatch[1]);
+  }
+
   // Extract model blocks with balanced braces (handles } inside @default("{}"))
   const modelHeaderRegex = /model\s+(\w+)\s*\{/g;
   let match: RegExpExecArray | null;
@@ -60,9 +68,9 @@ export function parsePrismaSchema(content: string): Record<string, PrismaModel> 
 
       const [, fieldName, fieldType, modifier] = fieldMatch;
 
-      // Skip relation fields: type[] or type that's not a scalar
+      // Skip relation fields: type[] or type that's not a scalar/enum
       if (modifier === "[]") continue;
-      if (!SCALAR_TYPES.has(fieldType)) continue;
+      if (!SCALAR_TYPES.has(fieldType) && !enumNames.has(fieldType)) continue;
 
       // Check for @map("column_name")
       const mapMatch = trimmed.match(/@map\(\s*"([^"]+)"\s*\)/);

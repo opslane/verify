@@ -85,6 +85,39 @@ model User {
     expect(result.User.columns.organization).toBeUndefined();
   });
 
+  it("includes enum fields as columns", () => {
+    const schema = `
+enum Role {
+  owner
+  admin
+  member
+}
+
+model User {
+  id    String @id
+  name  String
+  role  Role   @default(member)
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.User.columns.role).toBe("role");
+  });
+
+  it("handles enum fields with @map", () => {
+    const schema = `
+enum BillingPlan {
+  free
+  pro
+  enterprise
+}
+
+model Organization {
+  id          String      @id
+  billingPlan BillingPlan @default(free) @map("billing_plan")
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.Organization.columns.billingPlan).toBe("billing_plan");
+  });
+
   it("handles empty schema", () => {
     const result = parsePrismaSchema("");
     expect(Object.keys(result)).toHaveLength(0);

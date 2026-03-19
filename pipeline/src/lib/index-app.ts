@@ -96,15 +96,20 @@ export function mergeIndexResults(
   prismaMapping: Record<string, { table_name: string; columns: Record<string, string> }>,
   seedIds: Record<string, string[]>
 ): AppIndex {
-  // Merge prisma column mappings into data_model
+  // Merge prisma column mappings into data_model (union of LLM + deterministic sources)
   const dataModel: AppIndex["data_model"] = {};
-  for (const [modelName, modelData] of Object.entries(schema.data_model ?? {})) {
+  const allModelNames = new Set([
+    ...Object.keys(schema.data_model ?? {}),
+    ...Object.keys(prismaMapping),
+  ]);
+  for (const modelName of allModelNames) {
+    const llmData = (schema.data_model ?? {})[modelName];
     const mapping = prismaMapping[modelName];
     dataModel[modelName] = {
-      columns: mapping?.columns ?? Object.fromEntries(modelData.columns.map(c => [c, c])),
+      columns: mapping?.columns ?? (llmData ? Object.fromEntries(llmData.columns.map(c => [c, c])) : {}),
       table_name: mapping?.table_name ?? modelName,
-      enums: modelData.enums,
-      source: modelData.source,
+      enums: llmData?.enums ?? {},
+      source: llmData?.source ?? "prisma-parser",
     };
   }
 

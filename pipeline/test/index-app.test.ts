@@ -51,6 +51,36 @@ describe("mergeIndexResults", () => {
     expect(result.indexed_at).toBeDefined();
   });
 
+  it("includes models from prismaMapping even if LLM missed them", () => {
+    const result = mergeIndexResults(
+      { routes: {} },
+      { pages: {} },
+      { data_model: {} },
+      { fixtures: {} },
+      { db_url_env: null, feature_flags: [] },
+      { ApiKey: { table_name: "api_keys", columns: { id: "id", label: "label" } } },
+      {}
+    );
+    expect(result.data_model.ApiKey).toBeDefined();
+    expect(result.data_model.ApiKey.table_name).toBe("api_keys");
+    expect(result.data_model.ApiKey.columns.id).toBe("id");
+    expect(result.data_model.ApiKey.source).toBe("prisma-parser");
+  });
+
+  it("falls back to identity mapping when no prismaMapping", () => {
+    const result = mergeIndexResults(
+      { routes: {} },
+      { pages: {} },
+      { data_model: { User: { columns: ["id", "name"], enums: {}, source: "schema.prisma:1" } } },
+      { fixtures: {} },
+      { db_url_env: null, feature_flags: [] },
+      {},
+      {}
+    );
+    expect(result.data_model.User.columns.id).toBe("id");
+    expect(result.data_model.User.columns.name).toBe("name");
+  });
+
   it("cross-references routes into pages", () => {
     const result = mergeIndexResults(
       { routes: { "/settings": { component: "settings.tsx" } } },
