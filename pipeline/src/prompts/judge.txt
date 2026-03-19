@@ -20,8 +20,18 @@ OUTPUT: Write valid JSON to stdout with this exact schema:
   ]
 }
 
-VERDICT VALUES: pass, fail, error
+VERDICT VALUES: pass, fail, error, spec_unclear
 CONFIDENCE VALUES: high, medium, low
+
+WHEN TO USE EACH VERDICT:
+- pass: Evidence confirms the AC is satisfied.
+- fail: Evidence shows the AC is NOT satisfied, and the code appears to be the cause.
+- error: No evidence was collected (timeout, crash, no output).
+- spec_unclear: Evidence suggests the SPEC is wrong, not the code. Use when:
+  - A component exists but in a different location than the spec describes
+  - A feature works differently than the spec assumes
+  - The expected behavior contradicts what the code clearly intends
+  Include what the spec says vs what the code actually does in the reasoning.
 
 CONFIDENCE GUIDELINES:
 - high: screenshot directly confirms/refutes the AC. Clear, unambiguous evidence.
@@ -36,5 +46,6 @@ RULES:
 5. Screenshots are primary evidence. If the screenshot contradicts the agent's observed text, trust the screenshot.
 6. Be conservative: if evidence is ambiguous, verdict is "fail" with confidence "low".
 7. Every AC in the evidence list must appear in your verdicts array.
+8. Use spec_unclear sparingly — only when you have positive evidence that the spec's assumption is wrong (e.g., the component exists elsewhere). Don't use it as a fallback for unclear evidence.
 
 Output ONLY the JSON. No explanation, no markdown fences.
