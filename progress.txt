@@ -328,4 +328,23 @@ Task 10: E2E validation on Formbricks (manual — needs running instance)
 
 ### Status
 COMPLETE (Tasks 1-9) — 189 tests passing, typecheck clean
-Task 10 blocked on Formbricks instance
+Task 10 E2E: 5 pass, 1 fail (ac6), 0 timeout. Browse agent execute-only fix shipped.
+
+---
+
+## setup-writer-orm-dispatch (plan: docs/plans/2026-03-19-setup-writer-orm-dispatch.md)
+
+### Completed
+(none yet)
+
+### Current
+Task 1: Add pg_dump --schema-only to index-app
+
+### Remaining
+Task 2: Extract shared extractModelBody + JSONB type annotations
+Task 3: Store JSONB annotations in AppIndex + wire into CLI
+Task 4: Restrict setup writer tool access
+Task 5: Prisma-specific setup writer prompt + ORM dispatch
+Task 6: Update judge prompt for absent-element spec_unclear
+Task 7: Full test suite + typecheck
+Task 8: E2E validation on Formbricks
