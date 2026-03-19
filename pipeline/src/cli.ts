@@ -49,9 +49,18 @@ if (command === "run") {
     process.exit(1);
   }
 
-  const passCount = result.verdicts.verdicts.filter(v => v.verdict === "pass").length;
-  const total = result.verdicts.verdicts.length;
-  process.exit(passCount === total ? 0 : 1);
+  const verdicts = result.verdicts.verdicts;
+  const passCount = verdicts.filter(v => v.verdict === "pass").length;
+  const specUnclearCount = verdicts.filter(v => v.verdict === "spec_unclear").length;
+  const failCount = verdicts.length - passCount - specUnclearCount;
+
+  if (failCount > 0) {
+    process.exit(1);     // real failures
+  } else if (specUnclearCount > 0) {
+    process.exit(2);     // needs human review, but code may be correct
+  } else {
+    process.exit(0);     // all pass
+  }
 
 } else if (command === "index-app") {
   const projectDir = values["project-dir"] ?? process.cwd();
