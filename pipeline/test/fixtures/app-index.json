@@ -13,7 +13,8 @@
   },
   "data_model": {
     "Organization": {
-      "columns": ["id", "name", "billing"],
+      "columns": { "id": "id", "name": "name", "billingStatus": "billing_status" },
+      "table_name": "Organization",
       "enums": { "BillingStatus": ["active", "trialing", "canceled"] },
       "source": "prisma/schema.prisma:42"
     }
@@ -26,5 +27,9 @@
     }
   },
   "db_url_env": "DATABASE_URL",
-  "feature_flags": ["FF_BILLING_V2"]
+  "feature_flags": ["FF_BILLING_V2"],
+  "seed_ids": {
+    "Organization": ["clseedorg0000000000000"],
+    "Environment": ["clseedenvprod000000000"]
+  }
 }
