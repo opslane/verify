@@ -20,7 +20,7 @@ import { validatePlan } from "./stages/plan-validator.js";
 import { buildSetupWriterPrompt, parseSetupWriterOutput, executeSetupCommands, executeTeardownCommands, loadProjectEnv } from "./stages/setup-writer.js";
 import { buildBrowseAgentPrompt, parseBrowseResult } from "./stages/browse-agent.js";
 import { collectEvidencePaths, buildJudgePrompt, parseJudgeOutput } from "./stages/judge.js";
-import { buildLearnerPrompt, backupAndRestore } from "./stages/learner.js";
+import { buildLearnerPrompt, backupAndRestore, validateLearnings } from "./stages/learner.js";
 import { resolveBrowseBin, resetPage } from "./lib/browse.js";
 import { extractTableNames, snapshotTables, restoreSnapshot } from "./lib/db-snapshot.js";
 import { findAndRenameVideo } from "./lib/video.js";
@@ -354,6 +354,16 @@ export async function runPipeline(
     stage: "learner", runDir, ...perms("learner"),
   });
   restore(); // Safety: restore backup if learner corrupted the file
+
+  // Validate learnings — strip unauthorized content
+  if (existsSync(learningsPath)) {
+    const raw = readFileSync(learningsPath, "utf-8");
+    const validated = validateLearnings(raw);
+    if (validated !== raw) {
+      writeFileSync(learningsPath, validated);
+      callbacks.onLog("  Validated learnings.md — stripped unauthorized content");
+    }
+  }
 
   // ── Report ────────────────────────────────────────────────────────────
   const timeline = readTimeline(runDir);
