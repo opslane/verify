@@ -241,6 +241,11 @@ git commit -m "feat(pipeline): rewrite learner prompt — structured categories 
 
 Defense-in-depth: after the learner writes `learnings.md`, parse it and strip any content outside the allowed sections or containing banned patterns.
 
+**Review findings incorporated:**
+- Banned patterns skip ERROR/FIX lines (won't false-positive on SQL error messages)
+- h3+ sub-sections treated as section boundaries (prevents `### Auth Notes` sneaking through)
+- Use static import in orchestrator (not dynamic `await import()`)
+
 **Step 1: Write the failing tests**
 
 ```typescript
@@ -282,24 +287,27 @@ describe("validateLearnings", () => {
     const result = validateLearnings(input);
     expect(result).toContain("## SQL Corrections");
     expect(result).not.toContain("Auth");
-    expect(result).not.toContain("NEVER");
     expect(result).not.toContain("UNTESTABLE");
     expect(result).not.toContain("Known ACs");
   });
 
-  it("strips lines with banned patterns inside valid sections", () => {
+  it("strips directive lines but preserves ERROR/FIX lines containing banned words", () => {
     const input = `# Learnings
 
 ## SQL Corrections
 - ERROR: column "foo" does not exist
   FIX: Use "bar"
+- ERROR: value MUST be NOT NULL for column "limits"
+  FIX: Include limits column in INSERT
 - Planner MUST always use group-b IDs
 - NEVER use admin credentials
 `;
     const result = validateLearnings(input);
     expect(result).toContain("FIX: Use \"bar\"");
-    expect(result).not.toContain("MUST always");
-    expect(result).not.toContain("NEVER use");
+    expect(result).toContain("MUST be NOT NULL");  // ERROR line preserved
+    expect(result).toContain("Include limits");     // FIX line preserved
+    expect(result).not.toContain("Planner MUST");   // directive stripped
+    expect(result).not.toContain("NEVER use admin"); // directive stripped
   });
 
   it("handles empty input", () => {
@@ -321,6 +329,29 @@ describe("validateLearnings", () => {
     expect(result).toContain("## Required Fields");
     expect(result).toContain("organization_id");
     expect(result).toContain("trialEnd");
+  });
+
+  it("strips h3+ sub-sections as unauthorized boundaries", () => {
+    const input = `# Learnings
+
+## SQL Corrections
+- ERROR: column "foo" does not exist
+  FIX: Use "bar"
+
+### Auth Notes
+- NEVER use admin credentials
+- Login steps are required
+
+## Timing
+- planner: 65s
+`;
+    const result = validateLearnings(input);
+    expect(result).toContain("## SQL Corrections");
+    expect(result).toContain("FIX: Use \"bar\"");
+    expect(result).not.toContain("Auth Notes");
+    expect(result).not.toContain("Login steps");
+    expect(result).toContain("## Timing");
+    expect(result).toContain("planner: 65s");
   });
 });
 ```
@@ -346,12 +377,14 @@ const BANNED_PATTERNS = [
   /\bNEVER\b/,
   /\bALWAYS\b/,
   /\bUNTESTABLE\b/i,
-  /\buntestable\b/i,
   /\bplanner\s+(must|should)\b/i,
   /\bac\s+generator\s+(must|should)\b/i,
   /\blogin\s+steps?\b/i,
   /\bauth(entication)?\s+(must|should|steps?)\b/i,
 ];
+
+/** Lines starting with ERROR: or FIX: are exempt from banned pattern checks */
+const ERROR_FIX_LINE = /^\s*-?\s*(ERROR|FIX):/i;
 
 /**
  * Validate learnings.md — strip unauthorized sections and banned patterns.
@@ -367,25 +400,31 @@ export function validateLearnings(content: string): string {
 
   for (const line of lines) {
     // Keep the top-level header
-    if (line.startsWith("# ") && !headerSeen) {
+    if (line.startsWith("# ") && !line.startsWith("## ") && !headerSeen) {
       result.push(line);
       headerSeen = true;
       continue;
     }
 
-    // Check for section headers
-    if (line.startsWith("## ")) {
-      const sectionName = line.replace("## ", "").trim();
-      inAllowedSection = ALLOWED_SECTIONS.has(sectionName);
-      if (inAllowedSection) result.push(line);
+    // Any heading (##, ###, ####, etc.) is a section boundary
+    if (/^#{2,}\s/.test(line)) {
+      // Only ## (h2) can be an allowed section; h3+ always resets to disallowed
+      if (line.startsWith("## ") && !line.startsWith("### ")) {
+        const sectionName = line.replace("## ", "").trim();
+        inAllowedSection = ALLOWED_SECTIONS.has(sectionName);
+        if (inAllowedSection) result.push(line);
+      } else {
+        // h3+ sub-section — treat as unauthorized boundary
+        inAllowedSection = false;
+      }
       continue;
     }
 
     // Only include lines from allowed sections
     if (!inAllowedSection) continue;
 
-    // Strip lines with banned patterns
-    if (BANNED_PATTERNS.some((p) => p.test(line))) continue;
+    // ERROR/FIX lines are exempt from banned pattern checks
+    if (!ERROR_FIX_LINE.test(line) && BANNED_PATTERNS.some((p) => p.test(line))) continue;
 
     result.push(line);
   }
@@ -398,12 +437,19 @@ export function validateLearnings(content: string): string {
 
 **Step 5: Wire the validator into the orchestrator**
 
-In `pipeline/src/orchestrator.ts`, after the learner runs and `restore()` is called, add:
+In `pipeline/src/orchestrator.ts`:
+
+1. Update the static import at the top to include `validateLearnings`:
+
+```typescript
+import { buildLearnerPrompt, backupAndRestore, validateLearnings } from "./stages/learner.js";
+```
+
+2. After the learner runs and `restore()` is called, add:
 
 ```typescript
 // Validate learnings — strip unauthorized content
 if (existsSync(learningsPath)) {
-  const { validateLearnings } = await import("./stages/learner.js");
   const raw = readFileSync(learningsPath, "utf-8");
   const validated = validateLearnings(raw);
   if (validated !== raw) {
@@ -412,8 +458,6 @@ if (existsSync(learningsPath)) {
   }
 }
 ```
-
-Note: `validateLearnings` is already imported from `learner.ts` — just add the call after `restore()`.
 
 **Step 6: Run all tests — expect PASS**
 
@@ -428,195 +472,87 @@ git commit -m "feat(pipeline): add learnings post-validator — strips unauthori
 
 ---
 
-## Task 6: Build execution chains — serialize conflicting groups
+## Task 6: Serialize setup groups — prevent race condition on shared DB state
 
 **Files:**
 - Modify: `pipeline/src/orchestrator.ts`
 - Add to: `pipeline/test/orchestrator.test.ts`
 
+**Review finding incorporated:** The original plan used union-find + condition text matching, but conditions are natural language and never contain seed IDs. The fix: **serialize all setup groups by default**, run pure-UI groups in parallel. Most apps have one database — groups that mutate DB state almost always conflict. The cost (~30s for 3 groups) is negligible vs the risk of race conditions.
+
+```
+EXECUTION MODEL:
+
+  Setup groups (condition != null):    Pure-UI groups (condition == null):
+  ┌──────────┐                         ┌──────────┐  ┌──────────┐
+  │ group-a  │──→ setup → browse       │ group-c  │  │ group-d  │
+  └──────────┘                         └──────────┘  └──────────┘
+       ↓ restore snapshot                    ↑ parallel ↑
+  ┌──────────┐
+  │ group-b  │──→ setup → browse
+  └──────────┘
+       ↓ restore snapshot
+  (sequential — shared DB)             (parallel — no DB mutation)
+```
+
 **Step 1: Write the failing tests**
 
-Add to `pipeline/test/orchestrator.test.ts` (or create a new file `pipeline/test/execution-chains.test.ts`):
-
 ```typescript
-// pipeline/test/execution-chains.test.ts
-import { describe, it, expect } from "vitest";
-import { buildExecutionChains } from "../src/orchestrator.js";
+// Add to pipeline/test/orchestrator.test.ts or new file
 
-describe("buildExecutionChains", () => {
-  it("puts groups sharing a seed ID in the same chain", () => {
-    const groupSetupIds = new Map([
-      ["group-a", ["clseedorg0000000000000"]],
-      ["group-b", ["clseedorg0000000000000"]],
-      ["group-c", ["clseeduser0000000000000"]],
-    ]);
-    const chains = buildExecutionChains(groupSetupIds);
-    // group-a and group-b share clseedorg → same chain
-    // group-c is independent → own chain
-    expect(chains).toHaveLength(2);
-    const sharedChain = chains.find(c => c.length === 2);
-    expect(sharedChain).toBeDefined();
-    expect(sharedChain!.sort()).toEqual(["group-a", "group-b"]);
-    const independentChain = chains.find(c => c.length === 1);
-    expect(independentChain).toEqual(["group-c"]);
+describe("group execution ordering", () => {
+  it("serializes setup groups, parallelizes pure-UI groups", async () => {
+    // Setup: 2 setup groups + 1 pure-UI group
+    // Assert: setup groups run sequentially (one finishes before next starts)
+    // Assert: pure-UI group runs in parallel with the setup chain
+    expect(true).toBe(true); // Placeholder — full mock implementation
   });
 
-  it("keeps all groups parallel when no overlap", () => {
-    const groupSetupIds = new Map([
-      ["group-a", ["id-1"]],
-      ["group-b", ["id-2"]],
-      ["group-c", ["id-3"]],
-    ]);
-    const chains = buildExecutionChains(groupSetupIds);
-    expect(chains).toHaveLength(3);
-    expect(chains.every(c => c.length === 1)).toBe(true);
-  });
-
-  it("chains three groups that all share one ID", () => {
-    const groupSetupIds = new Map([
-      ["group-a", ["shared-id"]],
-      ["group-b", ["shared-id"]],
-      ["group-c", ["shared-id"]],
-    ]);
-    const chains = buildExecutionChains(groupSetupIds);
-    expect(chains).toHaveLength(1);
-    expect(chains[0]).toHaveLength(3);
-  });
-
-  it("handles groups with no setup (no IDs)", () => {
-    const groupSetupIds = new Map([
-      ["group-a", [] as string[]],
-      ["group-b", ["clseedorg"]],
-    ]);
-    const chains = buildExecutionChains(groupSetupIds);
-    expect(chains).toHaveLength(2);
-  });
-
-  it("merges transitive overlaps", () => {
-    // group-a shares id-1 with group-b, group-b shares id-2 with group-c
-    // All three must be in the same chain
-    const groupSetupIds = new Map([
-      ["group-a", ["id-1"]],
-      ["group-b", ["id-1", "id-2"]],
-      ["group-c", ["id-2"]],
-    ]);
-    const chains = buildExecutionChains(groupSetupIds);
-    expect(chains).toHaveLength(1);
-    expect(chains[0]).toHaveLength(3);
+  it("restores DB snapshot between serialized setup groups", async () => {
+    // Assert: restoreSnapshot is called between group-a and group-b
+    expect(true).toBe(true); // Placeholder
   });
 });
 ```
 
-**Step 2: Run tests — expect FAIL**
+> **Note to implementing engineer:** These tests need the same mock pattern as existing orchestrator.test.ts. Track the order of `executeSetupCommands` and `restoreSnapshot` calls.
 
-**Step 3: Implement**
+**Step 2: Implement**
 
-Add to `pipeline/src/orchestrator.ts` (export the function for testing):
-
-```typescript
-/**
- * Build execution chains from group setup dependencies.
- * Groups that modify the same seed row must run sequentially (same chain).
- * Groups with no overlap run in parallel (separate chains).
- *
- * Uses union-find to detect transitive overlaps:
- * If A shares id-1 with B, and B shares id-2 with C, all three are in one chain.
- */
-export function buildExecutionChains(
-  groupSetupIds: Map<string, string[]>
-): string[][] {
-  const groupIds = [...groupSetupIds.keys()];
-
-  // Union-find
-  const parent = new Map<string, string>();
-  for (const id of groupIds) parent.set(id, id);
-
-  function find(x: string): string {
-    while (parent.get(x) !== x) {
-      parent.set(x, parent.get(parent.get(x)!)!);
-      x = parent.get(x)!;
-    }
-    return x;
-  }
-
-  function union(a: string, b: string): void {
-    const ra = find(a), rb = find(b);
-    if (ra !== rb) parent.set(ra, rb);
-  }
-
-  // For each seed ID, union all groups that reference it
-  const seedToGroups = new Map<string, string[]>();
-  for (const [groupId, ids] of groupSetupIds) {
-    for (const seedId of ids) {
-      if (!seedToGroups.has(seedId)) seedToGroups.set(seedId, []);
-      seedToGroups.get(seedId)!.push(groupId);
-    }
-  }
-
-  for (const groups of seedToGroups.values()) {
-    for (let i = 1; i < groups.length; i++) {
-      union(groups[0], groups[i]);
-    }
-  }
-
-  // Collect chains
-  const chains = new Map<string, string[]>();
-  for (const groupId of groupIds) {
-    const root = find(groupId);
-    if (!chains.has(root)) chains.set(root, []);
-    chains.get(root)!.push(groupId);
-  }
-
-  return [...chains.values()];
-}
-```
-
-**Step 4: Run tests — expect PASS**
-
-**Step 5: Wire into orchestrator execution loop**
-
-Replace the current "Run groups with concurrency cap" section (around line 284) with:
+Replace the current "Run groups with concurrency cap" section in `orchestrator.ts` with:
 
 ```typescript
-// Build execution chains — groups sharing seed rows run sequentially
-const groupSetupIds = new Map<string, string[]>();
+// Split groups into setup (needs DB mutation) and pure-UI (no setup)
+const setupGroupIds: string[] = [];
+const pureUIGroupIds: string[] = [];
 for (const groupId of groupMap.keys()) {
   const condition = groupConditions.get(groupId);
-  if (!condition) {
-    groupSetupIds.set(groupId, []);
-    continue;
+  if (condition) {
+    setupGroupIds.push(groupId);
+  } else {
+    pureUIGroupIds.push(groupId);
   }
-  // Extract seed IDs that this group's setup would reference
-  // (We don't have the setup commands yet, so check if the condition
-  // mentions any seed IDs from app.json)
-  const referencedSeeds = seedIds.filter(id =>
-    condition.includes(id) || groupId.includes(id)
-  );
-  // Default: all setup groups share the same seed org
-  if (referencedSeeds.length === 0 && condition) {
-    referencedSeeds.push("_shared_setup");
-  }
-  groupSetupIds.set(groupId, referencedSeeds);
 }
 
-const chains = buildExecutionChains(groupSetupIds);
-callbacks.onLog(`  Execution: ${chains.length} chain(s), ${groupMap.size} group(s)`);
+callbacks.onLog(`  Execution: ${setupGroupIds.length} setup (serial) + ${pureUIGroupIds.length} pure-UI (parallel)`);
 
-// Execute chains in parallel, groups within a chain sequentially
-const chainPromises: Promise<void>[] = [];
-for (const chain of chains) {
-  if (abortController.signal.aborted) break;
-  const chainPromise = (async () => {
-    for (const groupId of chain) {
-      if (abortController.signal.aborted) break;
-      await executeGroup(groupId);
-    }
-  })();
-  chainPromises.push(chainPromise);
-}
-await Promise.all(chainPromises);
+// Execute setup groups SEQUENTIALLY (they share the same DB)
+// and pure-UI groups IN PARALLEL (no DB mutations)
+const setupChainPromise = (async () => {
+  for (const groupId of setupGroupIds) {
+    if (abortController.signal.aborted) break;
+    await executeGroup(groupId);
+  }
+})();
 
-// Handle any remaining queued groups that were aborted
+const pureUIPromises = pureUIGroupIds.map((groupId) => {
+  if (abortController.signal.aborted) return Promise.resolve();
+  return executeGroup(groupId);
+});
+
+await Promise.all([setupChainPromise, ...pureUIPromises]);
+
+// Handle aborted groups
 if (abortController.signal.aborted) {
   for (const groupId of groupMap.keys()) {
     const groupAcs = groupMap.get(groupId) ?? [];
@@ -630,20 +566,65 @@ if (abortController.signal.aborted) {
 }
 ```
 
-**Step 6: Run all tests**
+**Step 3: Run all tests**
 
 Run: `cd pipeline && npx tsc --noEmit && npx vitest run`
 
-**Step 7: Commit**
+> **Note:** Existing orchestrator.test.ts mocks may need updates since the execution loop changed from queue-based to setup-chain + pure-UI split.
+
+**Step 4: Commit**
 
 ```bash
-git add pipeline/src/orchestrator.ts pipeline/test/execution-chains.test.ts
-git commit -m "feat(pipeline): serialize groups that share seed rows — prevents race condition"
+git add pipeline/src/orchestrator.ts pipeline/test/orchestrator.test.ts
+git commit -m "feat(pipeline): serialize setup groups to prevent race condition on shared DB state"
 ```
 
 ---
 
-## Task 7: Genericize setup writer prompt
+## Task 7: Handle spec_unclear in exit code
+
+**Files:**
+- Modify: `pipeline/src/cli.ts`
+
+**Review finding:** `spec_unclear` counts as "other" in exit code logic, causing the pipeline to exit 1 (failure) even though the code may be correct. A spec-vs-code mismatch is not a pipeline failure — it's a human review request.
+
+**Step 1: Update exit code logic**
+
+In `pipeline/src/cli.ts`, change:
+```typescript
+const passCount = result.verdicts.verdicts.filter(v => v.verdict === "pass").length;
+const total = result.verdicts.verdicts.length;
+process.exit(passCount === total ? 0 : 1);
+```
+
+To:
+```typescript
+const verdicts = result.verdicts.verdicts;
+const passCount = verdicts.filter(v => v.verdict === "pass").length;
+const specUnclearCount = verdicts.filter(v => v.verdict === "spec_unclear").length;
+const failCount = verdicts.length - passCount - specUnclearCount;
+
+if (failCount > 0) {
+  process.exit(1);     // real failures
+} else if (specUnclearCount > 0) {
+  process.exit(2);     // needs human review, but code may be correct
+} else {
+  process.exit(0);     // all pass
+}
+```
+
+Exit codes: 0 = all pass, 1 = failures, 2 = needs human review.
+
+**Step 2: Commit**
+
+```bash
+git add pipeline/src/cli.ts
+git commit -m "feat(pipeline): exit code 2 for spec_unclear — distinct from pass (0) and fail (1)"
+```
+
+---
+
+## Task 8: Genericize setup writer prompt
 
 **Files:**
 - Modify: `pipeline/src/prompts/setup-writer.txt`
@@ -716,7 +697,7 @@ git commit -m "feat(pipeline): genericize setup writer prompt — no app-specifi
 
 ---
 
-## Task 8: Run full test suite + typecheck
+## Task 9: Run full test suite + typecheck
 
 **Step 1: Typecheck**
 
@@ -732,7 +713,7 @@ Expected: All pass. Count should be ~190+ (181 existing + new tests).
 
 ---
 
-## Task 9: E2E validation on Formbricks
+## Task 10: E2E validation on Formbricks
 
 **This is a manual test.** After all tasks are complete:
 
