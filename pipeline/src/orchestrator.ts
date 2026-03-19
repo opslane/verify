@@ -281,31 +281,46 @@ export async function runPipeline(
     }
   }
 
-  // Run groups with concurrency cap
-  const queue = [...groupMap.keys()];
-  const active: Promise<void>[] = [];
-
-  while (queue.length > 0 || active.length > 0) {
-    while (queue.length > 0 && active.length < maxParallel && !abortController.signal.aborted) {
-      const groupId = queue.shift()!;
-      const promise = executeGroup(groupId).then(() => {
-        const idx = active.indexOf(promise);
-        if (idx >= 0) active.splice(idx, 1);
-      });
-      active.push(promise);
+  // Split groups into setup (needs DB mutation) and pure-UI (no setup)
+  const setupGroupIds: string[] = [];
+  const pureUIGroupIds: string[] = [];
+  for (const groupId of groupMap.keys()) {
+    const condition = groupConditions.get(groupId);
+    if (condition) {
+      setupGroupIds.push(groupId);
+    } else {
+      pureUIGroupIds.push(groupId);
     }
-    if (active.length > 0) await Promise.race(active);
-    if (abortController.signal.aborted) {
-      // Skip remaining queued groups
-      for (const groupId of queue) {
-        const groupAcs = groupMap.get(groupId) ?? [];
-        for (const ac of groupAcs) {
+  }
+
+  callbacks.onLog(`  Execution: ${setupGroupIds.length} setup (serial) + ${pureUIGroupIds.length} pure-UI (parallel)`);
+
+  // Execute setup groups SEQUENTIALLY (they share the same DB)
+  // and pure-UI groups IN PARALLEL (no DB mutations)
+  const setupChainPromise = (async () => {
+    for (const groupId of setupGroupIds) {
+      if (abortController.signal.aborted) break;
+      await executeGroup(groupId);
+    }
+  })();
+
+  const pureUIPromises = pureUIGroupIds.map((groupId) => {
+    if (abortController.signal.aborted) return Promise.resolve();
+    return executeGroup(groupId);
+  });
+
+  await Promise.all([setupChainPromise, ...pureUIPromises]);
+
+  // Handle aborted groups
+  if (abortController.signal.aborted) {
+    for (const groupId of groupMap.keys()) {
+      const groupAcs = groupMap.get(groupId) ?? [];
+      for (const ac of groupAcs) {
+        if (!allVerdicts.some(v => v.ac_id === ac.id)) {
           allVerdicts.push({ ac_id: ac.id, verdict: "auth_expired", confidence: "high", reasoning: "Skipped: auth session expired" });
           progress.update(ac.id, "skipped", "auth_expired");
         }
       }
-      queue.length = 0;
-      break;
     }
   }
 

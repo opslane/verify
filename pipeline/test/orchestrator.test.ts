@@ -412,6 +412,51 @@ describe("orchestrator", () => {
     });
   });
 
+  describe("group execution ordering", () => {
+    it("logs setup vs pure-UI group split", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      // 2 setup groups + 1 pure-UI group
+      const threeGroupAcs: ACGeneratorOutput = {
+        groups: [
+          { id: "group-a", condition: "billing state A", acs: [{ id: "ac1", description: "Check A" }] },
+          { id: "group-b", condition: "billing state B", acs: [{ id: "ac2", description: "Check B" }] },
+          { id: "group-c", condition: null, acs: [{ id: "ac3", description: "Check C" }] },
+        ],
+        skipped: [],
+      };
+      const threeGroupPlan: PlannerOutput = {
+        criteria: [
+          { id: "ac1", group: "group-a", description: "Check A", url: "/a", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 },
+          { id: "ac2", group: "group-b", description: "Check B", url: "/b", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 },
+          { id: "ac3", group: "group-c", description: "Check C", url: "/c", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 },
+        ],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(threeGroupAcs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(threeGroupPlan) });
+      mockRunClaudeResult("setup-group-a", { stdout: JSON.stringify({ group_id: "group-a", condition: "billing state A", setup_commands: [], teardown_commands: [] }) });
+      mockRunClaudeResult("setup-group-b", { stdout: JSON.stringify({ group_id: "group-b", condition: "billing state B", setup_commands: [], teardown_commands: [] }) });
+      mockRunClaudeResult("browse-agent-ac1", { stdout: JSON.stringify({ ac_id: "ac1", observed: "OK", screenshots: [], commands_run: [] }) });
+      mockRunClaudeResult("browse-agent-ac2", { stdout: JSON.stringify({ ac_id: "ac2", observed: "OK", screenshots: [], commands_run: [] }) });
+      mockRunClaudeResult("browse-agent-ac3", { stdout: JSON.stringify({ ac_id: "ac3", observed: "OK", screenshots: [], commands_run: [] }) });
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [
+        { ac_id: "ac1", verdict: "pass", confidence: "high", reasoning: "OK" },
+        { ac_id: "ac2", verdict: "pass", confidence: "high", reasoning: "OK" },
+        { ac_id: "ac3", verdict: "pass", confidence: "high", reasoning: "OK" },
+      ] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks, logs } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      await runPipeline(specPath, verifyDir, callbacks);
+
+      // Should log the setup vs pure-UI split
+      expect(logs.some(l => l.includes("2 setup (serial)") && l.includes("1 pure-UI (parallel)"))).toBe(true);
+    });
+  });
+
   describe("output artifacts", () => {
     it("writes verdicts.json and report.json to run dir", async () => {
       const specPath = join(verifyDir, "spec.md");
