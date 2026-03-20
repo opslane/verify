@@ -7,8 +7,12 @@
   - Files: pipeline/src/lib/types.ts, pipeline/src/init.ts, pipeline/test/config.test.ts
   - LoginStep discriminated union, auth.method/loginUrl removed, loginWithCredentials stubbed
 
+- [x] Task 2: Rewrite loginWithCredentials as mechanical step replayer (commit: 1ca6b9f)
+  - Files: pipeline/src/init.ts, pipeline/test/init.test.ts
+  - restart → goto/fill/click/sleep replay → verifyAuthState, 8 new tests
+
 ## Current
-Task 2: Rewrite loginWithCredentials as a step replayer
+Task 3: Create the login agent prompt
 
 ## Remaining
 Task 2: Rewrite loginWithCredentials as a step replayer
