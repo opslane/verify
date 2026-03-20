@@ -184,6 +184,7 @@ export const STAGE_PERMISSIONS: Record<string, Pick<RunClaudeOptions, "dangerous
   "browse-replan": { allowedTools: ["Read"] },              // reads replan-input.json only — DOM content is attacker-controllable
   "judge":         { allowedTools: ["Read"] },              // only reads evidence files
   "learner":       { dangerouslySkipPermissions: true },   // needs Read + Write for learnings.md
+  "login-agent":   { allowedTools: ["Bash"] },              // Bash for browse CLI only — used during /verify-setup
 };
 
 // ── Timeline event ──────────────────────────────────────────────────────────
