@@ -72,34 +72,45 @@ export function loginWithCredentials(config: VerifyConfig, projectRoot?: string)
       }
     }
 
-    // Wait for the final action (usually a click/submit) to complete auth + redirect
-    execFileSync("sleep", ["3"], { timeout: 5_000, stdio: "ignore" });
-
-    return verifyAuthState(config.baseUrl, bin, opts);
+    return waitForAuth(config.baseUrl, bin, opts);
   } catch (err: unknown) {
     return { ok: false, error: `Login replay failed: ${err instanceof Error ? err.message : String(err)}. Re-run /verify-setup.` };
   }
 }
 
 /**
- * Verify we're NOT on a login page by checking for password input fields.
- * A password field in the snapshot = still on login form.
+ * Poll until authenticated: navigate to baseUrl, take snapshot, check for password field.
+ * Returns as soon as password field is gone (auth succeeded) or after maxWait ms (auth failed).
  */
-function verifyAuthState(baseUrl: string, bin: string, opts: { cwd?: string } = {}): CheckResult {
-  try {
-    execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore", ...opts });
-    execFileSync("sleep", ["2"], { timeout: 5_000, stdio: "ignore" });
-    const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8", ...opts });
+function waitForAuth(
+  baseUrl: string,
+  bin: string,
+  opts: { cwd?: string } = {},
+  maxWait = 10_000,
+  interval = 500,
+): CheckResult {
+  const deadline = Date.now() + maxWait;
 
-    // Generic detection: if snapshot has a password-type input, we're on a login page
-    const hasPasswordField = /\[textbox\].*password|\[text\].*password/i.test(snapshot);
-    if (hasPasswordField) {
-      return { ok: false, error: "Login steps did not authenticate — still on login page. Re-run /verify-setup." };
+  while (Date.now() < deadline) {
+    try {
+      execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore", ...opts });
+      const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8", ...opts });
+
+      const hasPasswordField = /\[textbox\].*password|\[text\].*password/i.test(snapshot);
+      if (!hasPasswordField) {
+        return { ok: true };
+      }
+    } catch {
+      // Browse command failed — retry on next iteration
     }
-    return { ok: true };
-  } catch {
-    return { ok: false, error: "Failed to verify auth state after login" };
+
+    // Sleep between polls
+    if (Date.now() < deadline) {
+      execFileSync("sleep", [String(interval / 1000)], { timeout: 2_000, stdio: "ignore" });
+    }
   }
+
+  return { ok: false, error: "Login steps did not authenticate — still on login page after 10s. Re-run /verify-setup." };
 }
 
 export async function runPreflight(
