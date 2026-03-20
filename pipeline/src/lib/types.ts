@@ -2,6 +2,12 @@
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
+export type LoginStep =
+  | { action: "goto"; url: string }
+  | { action: "fill"; selector: string; value: string }
+  | { action: "click"; selector: string }
+  | { action: "sleep"; ms: number };
+
 export interface VerifyConfig {
   baseUrl: string;
   authCheckUrl?: string;
@@ -9,10 +15,9 @@ export interface VerifyConfig {
   diffBase?: string;
   maxParallelGroups?: number;           // default 5
   auth?: {
-    method: "credentials" | "cookies";
-    loginUrl?: string;
-    email?: string;
-    password?: string;
+    email: string;
+    password: string;
+    loginSteps: LoginStep[];
   };
 }
 

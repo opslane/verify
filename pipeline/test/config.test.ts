@@ -54,4 +54,24 @@ describe("loadConfig", () => {
     const config = loadConfig(join(tempDir, ".verify"));
     expect(config.baseUrl).toBe("http://localhost:3000");
   });
+
+  it("loads config with loginSteps auth", () => {
+    writeFileSync(join(tempDir, ".verify", "config.json"), JSON.stringify({
+      baseUrl: "http://localhost:3000",
+      auth: {
+        email: "admin@example.com",
+        password: "secret",
+        loginSteps: [
+          { action: "goto", url: "/auth/login" },
+          { action: "fill", selector: "[name='email']", value: "{{email}}" },
+          { action: "fill", selector: "[name='password']", value: "{{password}}" },
+          { action: "click", selector: "button:has-text('Sign in')" },
+        ],
+      },
+    }));
+    const config = loadConfig(join(tempDir, ".verify"));
+    expect(config.auth?.loginSteps).toHaveLength(4);
+    expect(config.auth?.loginSteps?.[0]).toEqual({ action: "goto", url: "/auth/login" });
+    expect(config.auth?.email).toBe("admin@example.com");
+  });
 });
