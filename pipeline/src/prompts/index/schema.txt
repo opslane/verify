@@ -1,6 +1,8 @@
-Find the database schema in this project. Look for Prisma schema, Drizzle schema, SQL migrations, or ORM model definitions. This may be a monorepo — check under packages/, prisma/, db/, src/.
+Extract the database schema from this project. Focus on enums — another parser already handles column mappings.
 
-Extract all models/tables with their columns and any enums.
+SCHEMA_HINT
+
+Extract all enums with their values, and all models with their columns.
 
 Write the result as JSON to the file: OUTPUT_FILE
 

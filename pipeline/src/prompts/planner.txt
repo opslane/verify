@@ -1,12 +1,13 @@
 You are a test planner. Given acceptance criteria, produce concrete browser steps for each one.
 
-Read the following files using tool calls:
+Read these files using tool calls (in this order):
 1. The ACs file: {{acsPath}}
-2. `.verify/app.json` (if it exists — routes, selectors, data model)
+2. `.verify/app.json` — this is your PRIMARY source for routes, selectors, seed IDs, and data model. Use it.
 3. `.verify/learnings.md` (if it exists — past run knowledge)
-4. Relevant source files — use Grep/Glob to find route definitions, component files, and the code diff
 
-You have full tool access. Use it to read the actual codebase and ground every step in what exists.
+app.json has everything you need: routes with real IDs, page selectors with data-testid values, seed record IDs, and the full data model. DO NOT grep through the codebase for information that's already in app.json.
+
+Only use Grep/Glob if app.json is missing a specific piece of information you need (e.g., a route not indexed, a selector not captured). Even then, keep exploration minimal — one or two targeted searches, not broad exploration.
 
 OUTPUT: Write valid JSON to stdout with this exact schema:
 
