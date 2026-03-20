@@ -377,7 +377,9 @@ if (command === "run") {
       break;
     }
     case "verify-login": {
+      const { startDaemon } = await import("./lib/browse.js");
       const { loginWithCredentials } = await import("./init.js");
+      startDaemon({});
       const loginResult = loginWithCredentials(config, projectRoot);
       if (loginResult.ok) {
         console.log("Login recipe verified — authentication succeeded.");
