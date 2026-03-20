@@ -42,6 +42,11 @@ if (command === "run") {
     onProgress: (evt) => {
       process.stdout.write(`\r  ${evt.acId}: ${evt.status}${evt.detail ? ` — ${evt.detail}` : ""}   `);
     },
+    onStageProgress: (evt) => {
+      if (evt.event === "tool_call") {
+        process.stdout.write(`\r  ${evt.stage}: ${evt.detail ?? ""}   `);
+      }
+    },
   });
 
   if (!result.verdicts) {
@@ -69,7 +74,7 @@ if (command === "run") {
   mkdirSync(join(runDir, "logs"), { recursive: true });
   mkdirSync(dirname(outputPath), { recursive: true });
 
-  const { extractEnvVars, findPrismaSchemaPath, findSeedFiles, mergeIndexResults, dumpDatabaseSchema } = await import("./lib/index-app.js");
+  const { extractEnvVars, findPrismaSchemaPath, findSeedFiles, mergeIndexResults, dumpDatabaseSchema, dumpSeedData } = await import("./lib/index-app.js");
   const { parsePrismaSchema, extractJsonFieldAnnotations } = await import("./lib/prisma-parser.js");
   const { groupSeedIdsByContext } = await import("./lib/seed-extractor.js");
   const { readFileSync: readFs } = await import("node:fs");
@@ -79,7 +84,7 @@ if (command === "run") {
   console.log("Indexing app...");
 
   // Parse Prisma schema for column mappings
-  let prismaMapping: Record<string, { table_name: string; columns: Record<string, string> }> = {};
+  let prismaMapping: ReturnType<typeof parsePrismaSchema> = {};
   const schemaPath = findPrismaSchemaPath(projectDir);
   if (schemaPath) {
     console.log(`  Found Prisma schema: ${schemaPath}`);
@@ -114,7 +119,7 @@ if (command === "run") {
   // Dump database schema (generic — works for any Postgres project)
   const { loadProjectEnv } = await import("./stages/setup-writer.js");
   const projectEnvForDump = loadProjectEnv(projectDir);
-  const schemaDdl = dumpDatabaseSchema(projectEnvForDump);
+  const schemaDdl = dumpDatabaseSchema(projectEnvForDump, envVars.db_url_env);
   if (schemaDdl) {
     writeFileSync(join(dirname(outputPath), "schema.sql"), schemaDdl);
     console.log(`  Dumped database schema: ${Math.round(schemaDdl.length / 1024)}KB`);
@@ -133,19 +138,27 @@ if (command === "run") {
     { name: "fixtures", file: "fixtures.txt", outputFile: join(runDir, "fixtures.json") },
   ];
 
+  // Build schema hint for the schema agent (avoids wasting time searching)
+  const schemaHint = schemaPath
+    ? `The schema file is at: ${schemaPath}\nRead that file directly. Do NOT search the codebase for schema files.`
+    : "No schema file was pre-detected. Search for Prisma schema, Drizzle schema, SQL migrations, or ORM definitions under packages/, prisma/, db/, src/.";
+
   const agentResults = await Promise.all(
     agentConfigs.map(async (agent) => {
       const promptTemplate = readPrompt(join(promptDir, agent.file), "utf-8");
-      const prompt = promptTemplate.replace(/OUTPUT_FILE/g, agent.outputFile);
+      let prompt = promptTemplate.replace(/OUTPUT_FILE/g, agent.outputFile);
+      if (agent.name === "schema") {
+        prompt = prompt.replace(/SCHEMA_HINT/g, schemaHint);
+      }
       try {
         await runClaude({
           prompt,
           model: "sonnet",
-          timeoutMs: 120_000,
+          timeoutMs: 300_000,
           stage: `index-${agent.name}`,
           runDir,
           cwd: projectDir,
-          ...STAGE_PERMISSIONS["planner"], // needs Read, Grep, Glob
+                   ...STAGE_PERMISSIONS["planner"], // needs Read, Grep, Glob
         });
         // Read the output file the agent wrote
         const raw = readFs(agent.outputFile, "utf-8");
@@ -174,6 +187,15 @@ if (command === "run") {
     seedIds,
     jsonAnnotations,
   );
+
+  // Dump seed data — sample actual rows from all data_model tables
+  const seedDataDump = dumpSeedData(appIndex.data_model, projectEnvForDump, appIndex.db_url_env);
+  if (seedDataDump) {
+    writeFileSync(join(dirname(outputPath), "seed-data.txt"), seedDataDump);
+    console.log(`  Dumped seed data: ${Math.round(seedDataDump.length / 1024)}KB`);
+  } else {
+    console.log("  Warning: could not dump seed data (no tables or DB unreachable)");
+  }
 
   writeFileSync(outputPath, JSON.stringify(appIndex, null, 2));
   console.log(`\nApp index written to: ${outputPath}`);
@@ -208,7 +230,7 @@ if (command === "run") {
       const specPath = values.spec ?? config.specPath;
       if (!specPath) { console.error("No --spec provided and no specPath in config"); process.exit(1); }
       const prompt = buildACGeneratorPrompt(specPath);
-      const result = await runClaude({ prompt, model: "opus", timeoutMs: 120_000, stage: "ac-generator", runDir, ...permissions });
+      const result = await runClaude({ prompt, model: "opus", timeoutMs: 120_000, stage: "ac-generator", runDir, settingSources: "", ...permissions });
       const acs = parseACGeneratorOutput(result.stdout);
       if (!acs) { console.error("Failed to parse AC output. Check logs:", join(runDir, "logs")); process.exit(1); }
       const fanned = fanOutPureUIGroups(acs);
@@ -220,7 +242,7 @@ if (command === "run") {
       const { buildPlannerPrompt, parsePlannerOutput } = await import("./stages/planner.js");
       const acsPath = join(runDir, "acs.json");
       const prompt = buildPlannerPrompt(acsPath);
-      const result = await runClaude({ prompt, model: "opus", timeoutMs: timeoutOverrideMs ?? 240_000, stage: "planner", runDir, ...permissions });
+      const result = await runClaude({ prompt, model: "opus", timeoutMs: timeoutOverrideMs ?? 240_000, stage: "planner", runDir, settingSources: "", ...permissions });
       const plan = parsePlannerOutput(result.stdout);
       if (!plan) { console.error("Failed to parse plan output. Check logs:", join(runDir, "logs")); process.exit(1); }
       writeFileSync(join(runDir, "plan.json"), JSON.stringify(plan, null, 2));
@@ -248,7 +270,7 @@ if (command === "run") {
       if (!groupId) { console.error("--group is required for setup-writer"); process.exit(1); }
       const { buildSetupWriterPrompt, parseSetupWriterOutput } = await import("./stages/setup-writer.js");
       const prompt = buildSetupWriterPrompt(groupId, condition, projectRoot);
-      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: timeoutOverrideMs ?? 240_000, stage: "setup-writer", runDir, ...permissions });
+      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: timeoutOverrideMs ?? 90_000, stage: "setup-writer", runDir, settingSources: "", ...permissions });
       const parsed = parseSetupWriterOutput(result.stdout);
       if (!parsed) { console.error("Failed to parse setup writer output. Check logs:", join(runDir, "logs")); process.exit(1); }
       writeFileSync(join(runDir, "setup.json"), JSON.stringify(parsed, null, 2));
@@ -271,7 +293,7 @@ if (command === "run") {
         browseBin: resolveBrowseBin(),
         evidenceDir,
       });
-      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: (ac.timeout_seconds ?? 90) * 1000, stage: `browse-agent-${acId}`, runDir, ...permissions });
+      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: (ac.timeout_seconds ?? 90) * 1000, stage: `browse-agent-${acId}`, runDir, settingSources: "", ...permissions });
       const parsed = parseBrowseResult(result.stdout);
       if (parsed) {
         writeFileSync(join(evidenceDir, "result.json"), JSON.stringify(parsed, null, 2));
@@ -290,7 +312,7 @@ if (command === "run") {
         break;
       }
       const prompt = buildJudgePrompt(evidenceRefs);
-      const result = await runClaude({ prompt, model: "opus", timeoutMs: 120_000, stage: "judge", runDir, ...permissions });
+      const result = await runClaude({ prompt, model: "opus", timeoutMs: 120_000, stage: "judge", runDir, settingSources: "", ...permissions });
       const verdicts = parseJudgeOutput(result.stdout);
       if (verdicts) {
         writeFileSync(join(runDir, "verdicts.json"), JSON.stringify(verdicts, null, 2));
@@ -310,7 +332,7 @@ if (command === "run") {
         timelinePath: join(runDir, "logs", "timeline.jsonl"),
         learningsPath,
       });
-      await runClaude({ prompt, model: "sonnet", timeoutMs: 60_000, stage: "learner", runDir, ...permissions });
+      await runClaude({ prompt, model: "sonnet", timeoutMs: 60_000, stage: "learner", runDir, settingSources: "", ...permissions });
       restore();
       console.log("Learner complete. Learnings at:", learningsPath);
       break;

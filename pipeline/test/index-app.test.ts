@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { extractEnvVars, mergeIndexResults, findPrismaSchemaPath, dumpDatabaseSchema } from "../src/lib/index-app.js";
+import { extractEnvVars, mergeIndexResults, findPrismaSchemaPath, dumpDatabaseSchema, dumpSeedData } from "../src/lib/index-app.js";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -41,7 +41,7 @@ describe("mergeIndexResults", () => {
       { data_model: { User: { columns: ["id", "name"], enums: {}, source: "schema.prisma:1" } } },
       { fixtures: {} },
       { db_url_env: "DATABASE_URL", feature_flags: [] },
-      { User: { table_name: "User", columns: { id: "id", name: "name" } } },
+      { User: { table_name: "User", columns: { id: "id", name: "name" }, manual_id_columns: [] } },
       { User: ["clseeduser0000000000000"] }
     );
     expect(result.routes["/dashboard"]).toBeDefined();
@@ -58,13 +58,14 @@ describe("mergeIndexResults", () => {
       { data_model: {} },
       { fixtures: {} },
       { db_url_env: null, feature_flags: [] },
-      { ApiKey: { table_name: "api_keys", columns: { id: "id", label: "label" } } },
+      { ApiKey: { table_name: "api_keys", columns: { id: "id", label: "label" }, manual_id_columns: ["id"] } },
       {}
     );
     expect(result.data_model.ApiKey).toBeDefined();
     expect(result.data_model.ApiKey.table_name).toBe("api_keys");
     expect(result.data_model.ApiKey.columns.id).toBe("id");
     expect(result.data_model.ApiKey.source).toBe("prisma-parser");
+    expect(result.data_model.ApiKey.manual_id_columns).toEqual(["id"]);
   });
 
   it("falls back to identity mapping when no prismaMapping", () => {
@@ -96,6 +97,32 @@ describe("mergeIndexResults", () => {
       { db_url_env: null, feature_flags: [] }, {}, {},
     );
     expect(result.json_type_annotations).toEqual({});
+  });
+
+  it("passes manual_id_columns from prismaMapping to data_model", () => {
+    const result = mergeIndexResults(
+      { routes: {} },
+      { pages: {} },
+      { data_model: {} },
+      { fixtures: {} },
+      { db_url_env: null, feature_flags: [] },
+      { Document: { table_name: "Document", columns: { id: "id", title: "title" }, manual_id_columns: ["id"] } },
+      {}
+    );
+    expect(result.data_model.Document.manual_id_columns).toEqual(["id"]);
+  });
+
+  it("defaults manual_id_columns to empty when no prismaMapping", () => {
+    const result = mergeIndexResults(
+      { routes: {} },
+      { pages: {} },
+      { data_model: { User: { columns: ["id"], enums: {}, source: "s" } } },
+      { fixtures: {} },
+      { db_url_env: null, feature_flags: [] },
+      {},
+      {}
+    );
+    expect(result.data_model.User.manual_id_columns).toEqual([]);
   });
 
   it("cross-references routes into pages", () => {
@@ -159,5 +186,25 @@ describe("dumpDatabaseSchema", () => {
   it("finds DATABASE_URI as fallback", () => {
     const result = dumpDatabaseSchema({ DATABASE_URI: "postgres://bad:5432/nope" });
     expect(result).toBeNull(); // fails, but proves it tried DATABASE_URI
+  });
+});
+
+describe("dumpSeedData", () => {
+  it("returns null when no DATABASE_URL in env", () => {
+    const result = dumpSeedData({}, {});
+    expect(result).toBeNull();
+  });
+
+  it("returns null when data_model is empty", () => {
+    const result = dumpSeedData({}, { DATABASE_URL: "postgres://bad:5432/nope" });
+    expect(result).toBeNull();
+  });
+
+  it("returns null when pg query fails (bad URL)", () => {
+    const result = dumpSeedData(
+      { User: { table_name: "User", columns: {}, enums: {}, source: "", manual_id_columns: [] } },
+      { DATABASE_URL: "postgres://bad:5432/nope" },
+    );
+    expect(result).toBeNull();
   });
 });

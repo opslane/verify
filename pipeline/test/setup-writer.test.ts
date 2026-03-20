@@ -1,6 +1,6 @@
 // pipeline/test/setup-writer.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { buildSetupWriterPrompt, parseSetupWriterOutput, detectORM, executeSetupCommands, executeTeardownCommands, validateTeardownCommands } from "../src/stages/setup-writer.js";
+import { buildSetupWriterPrompt, buildSetupWriterRetryPrompt, parseSetupWriterOutput, detectORM, executeSetupCommands, executeTeardownCommands, validateTeardownCommands } from "../src/stages/setup-writer.js";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,26 +14,67 @@ describe("buildSetupWriterPrompt", () => {
   });
   afterEach(() => { rmSync(projectDir, { recursive: true, force: true }); });
 
-  it("substitutes group id and condition", () => {
+  it("includes group id and condition in prompt", () => {
     const prompt = buildSetupWriterPrompt("group-a", "org in trialing state", projectDir);
     expect(prompt).toContain("group-a");
     expect(prompt).toContain("org in trialing state");
-    expect(prompt).not.toContain("{{groupId}}");
-    expect(prompt).not.toContain("{{condition}}");
   });
 
-  it("selects Prisma prompt when prisma/schema.prisma exists", () => {
-    mkdirSync(join(projectDir, "prisma"), { recursive: true });
-    writeFileSync(join(projectDir, "prisma", "schema.prisma"), "model User {}");
+  it("includes psql connection command", () => {
     const prompt = buildSetupWriterPrompt("group-a", "trialing state", projectDir);
-    expect(prompt).toContain("Prisma-backed Postgres");
-    expect(prompt).toContain("group-a");
+    expect(prompt).toContain("psql");
+    expect(prompt).toContain("DATABASE_URL");
   });
 
-  it("selects generic prompt when no ORM detected", () => {
+  it("includes schema from app.json when available", () => {
+    mkdirSync(join(projectDir, ".verify"), { recursive: true });
+    writeFileSync(join(projectDir, ".verify", "app.json"), JSON.stringify({
+      indexed_at: "", routes: {}, pages: {}, fixtures: {},
+      db_url_env: "MY_DB_URL", feature_flags: [], seed_ids: {},
+      json_type_annotations: {},
+      data_model: {
+        User: { table_name: "users", columns: { id: "id", email: "email" }, enums: {}, source: "", manual_id_columns: [] },
+      },
+    }));
     const prompt = buildSetupWriterPrompt("group-a", "trialing state", projectDir);
-    expect(prompt).not.toContain("Prisma-backed Postgres");
+    expect(prompt).toContain('User ("users")');
+    expect(prompt).toContain("MY_DB_URL");
+  });
+});
+
+describe("buildSetupWriterRetryPrompt", () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = join(tmpdir(), `verify-setup-retry-${Date.now()}`);
+    mkdirSync(projectDir, { recursive: true });
+  });
+  afterEach(() => { rmSync(projectDir, { recursive: true, force: true }); });
+
+  it("includes psql error and failed commands for exec_error", () => {
+    const prompt = buildSetupWriterRetryPrompt("group-a", "trialing state", projectDir, {
+      type: "exec_error",
+      failedCommands: ["psql -c 'UPDATE \"User\" SET LIMIT 1'"],
+      error: "ERROR: syntax error at or near \"LIMIT\"",
+    });
     expect(prompt).toContain("group-a");
+    expect(prompt).toContain("trialing state");
+    expect(prompt).toContain("YOUR PREVIOUS SQL FAILED");
+    expect(prompt).toContain("LIMIT");
+    expect(prompt).toContain("syntax error");
+    // Error block should appear BEFORE the final "Output ONLY" marker
+    const errorIdx = prompt.indexOf("YOUR PREVIOUS SQL FAILED");
+    const outputIdx = prompt.lastIndexOf("Output ONLY the JSON");
+    expect(errorIdx).toBeLessThan(outputIdx);
+  });
+
+  it("includes parse error message for parse_error", () => {
+    const prompt = buildSetupWriterRetryPrompt("group-b", "org with members", projectDir, {
+      type: "parse_error",
+    });
+    expect(prompt).toContain("group-b");
+    expect(prompt).toContain("YOUR PREVIOUS OUTPUT WAS NOT VALID JSON");
+    expect(prompt).toContain("Output ONLY the JSON");
   });
 });
 

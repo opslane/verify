@@ -5,18 +5,138 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SetupCommands } from "../lib/types.js";
 import { parseJsonOutput } from "../lib/parse-json.js";
+import { loadAppIndex } from "../lib/app-index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function buildSetupWriterPrompt(groupId: string, condition: string, projectRoot: string): string {
-  // Select prompt based on detected ORM
-  let promptFile = "setup-writer.txt";
-  const orm = detectORM(projectRoot);
-  if (orm === "prisma") promptFile = "setup-writer-prisma.txt";
-  // Future: "drizzle" → "setup-writer-drizzle.txt"
+  const verifyDir = join(projectRoot, ".verify");
+  const appIndex = loadAppIndex(verifyDir);
+  const dbUrlEnv = appIndex?.db_url_env ?? "DATABASE_URL";
 
-  const template = readFileSync(join(__dirname, "../prompts", promptFile), "utf-8");
-  return template.replaceAll("{{groupId}}", groupId).replaceAll("{{condition}}", condition);
+  // Build compact schema reference: model → table_name + columns
+  const schemaLines: string[] = [];
+  if (appIndex) {
+    for (const [model, info] of Object.entries(appIndex.data_model)) {
+      const cols = Object.entries(info.columns).map(([prisma, pg]) => prisma === pg ? pg : `${prisma}->${pg}`);
+      const manualIds = info.manual_id_columns.length > 0 ? ` [manual IDs: ${info.manual_id_columns.join(", ")}]` : "";
+      schemaLines.push(`${model} ("${info.table_name}"): ${cols.join(", ")}${manualIds}`);
+    }
+  }
+
+  // Resolve the actual DB URL so the LLM doesn't need env var expansion
+  const projectEnv = loadProjectEnv(projectRoot);
+  const dbUrl = projectEnv[dbUrlEnv] ?? projectEnv.DATABASE_URL ?? projectEnv.DATABASE_URI ?? "";
+  const cleanDbUrl = dbUrl.split("?")[0];
+  const psqlCmd = cleanDbUrl ? `psql "${cleanDbUrl}"` : `psql "\${${dbUrlEnv}%%\\?*}"`;
+
+  // Load learnings if present
+  const learningsPath = join(verifyDir, "learnings.md");
+  const learnings = existsSync(learningsPath) ? readFileSync(learningsPath, "utf-8").trim() : "";
+  const learningsBlock = learnings
+    ? `\nLEARNINGS FROM PAST RUNS (apply these corrections):\n${learnings}\n`
+    : "";
+
+  return `You are a setup writer. Generate MINIMAL SQL to put the database into the required state.
+
+GROUP: ${groupId}
+CONDITION: ${condition}
+
+DATABASE ACCESS:
+Use Bash to run psql commands to query the database and understand current state.
+Connection: ${psqlCmd} -c "SELECT ..."
+
+SCHEMA (model -> table, columns):
+${schemaLines.join("\n")}
+${learningsBlock}
+PROCESS:
+1. Run 2-3 psql SELECT queries to understand current data relevant to the CONDITION
+2. Write the minimal SQL (1-5 commands) to achieve the condition
+3. Output ONLY the JSON below — nothing else
+
+IMPORTANT: You have a strict time limit. Do NOT explore extensively.
+Run at most 3-4 SELECT queries, then output the JSON immediately.
+Do NOT read files, grep, or explore the codebase.
+
+COLUMN NAMES: Schema shows "prismaName->pgName" for mapped columns. Always use the Postgres name in SQL.
+
+MANUAL ID COLUMNS: If a model shows [manual IDs: ...], provide an explicit value for those columns in INSERTs (e.g., gen_random_uuid() or 'verify-test-${groupId}-001').
+
+OUTPUT: Valid JSON to stdout:
+
+{
+  "group_id": "${groupId}",
+  "condition": "${condition}",
+  "setup_commands": [
+    "${psqlCmd} --set ON_ERROR_STOP=1 -c \\"UPDATE ...\\""
+  ],
+  "teardown_commands": []
+}
+
+RULES:
+1. Use \`${psqlCmd} --set ON_ERROR_STOP=1 -c "..."\` for setup commands.
+2. Prefer UPDATE on existing rows. Use INSERT only when new rows are needed.
+3. Use Postgres column names (not Prisma field names) in all SQL.
+4. Minimal changes — only what's needed for the condition.
+5. teardown_commands must be empty — orchestrator handles DB restoration.
+6. Keep it to 1-5 commands max.
+7. Do NOT read files or explore the codebase. Only use psql.
+8. If the condition is null or empty, output empty arrays.
+
+Output ONLY the JSON. No explanation, no markdown fences.`;
+}
+
+export type SetupRetryContext =
+  | { type: "parse_error" }
+  | { type: "exec_error"; failedCommands: string[]; error: string };
+
+/**
+ * Build a retry prompt that includes the original prompt + error context.
+ * For exec_error: appends the failed SQL commands and psql error message.
+ * For parse_error: tells the LLM its output was not valid JSON.
+ */
+export function buildSetupWriterRetryPrompt(
+  groupId: string, condition: string, projectRoot: string,
+  retryContext: SetupRetryContext,
+): string {
+  const base = buildSetupWriterPrompt(groupId, condition, projectRoot);
+
+  let retryBlock: string;
+  if (retryContext.type === "exec_error") {
+    const failedBlock = retryContext.failedCommands
+      .map((c, i) => `  Command ${i + 1}: ${c}`)
+      .join("\n");
+    retryBlock = [
+      "",
+      "YOUR PREVIOUS SQL FAILED. Fix the error and try again.",
+      "",
+      "Failed commands:",
+      failedBlock,
+      "",
+      `Error: ${retryContext.error}`,
+      "",
+      "Analyze the error, fix the SQL, and output corrected JSON.",
+      "Common fixes: use Postgres syntax (not MySQL), provide explicit IDs for columns",
+      "without defaults, use correct column names from app.json, ensure JSONB values are valid.",
+    ].join("\n");
+  } else {
+    retryBlock = [
+      "",
+      "YOUR PREVIOUS OUTPUT WAS NOT VALID JSON.",
+      "You must output ONLY a JSON object with group_id, condition, setup_commands, and teardown_commands.",
+      "No markdown fences, no explanation, no extra text.",
+    ].join("\n");
+  }
+
+  // Insert before the LAST "Output ONLY" marker so the JSON-only instruction stays last
+  const marker = "Output ONLY the JSON.";
+  const markerIdx = base.lastIndexOf(marker);
+  if (markerIdx === -1) {
+    return `${base}\n${retryBlock}`;
+  }
+  const before = base.slice(0, markerIdx);
+  const after = base.slice(markerIdx);
+  return `${before}${retryBlock}\n\n${after}`;
 }
 
 export function parseSetupWriterOutput(raw: string): SetupCommands | null {
@@ -58,7 +178,10 @@ export function loadProjectEnv(projectRoot: string): Record<string, string> {
         if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
           value = value.slice(1, -1);
         }
-        env[key] = value;
+        // Skip empty values — tools like psql reject empty PGSSLMODE=""
+        if (value !== "") {
+          env[key] = value;
+        }
       }
       break; // Use first found
     }

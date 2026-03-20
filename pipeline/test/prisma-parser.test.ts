@@ -160,6 +160,60 @@ enum Role {
   });
 });
 
+describe("parsePrismaSchema manual ID detection", () => {
+  it("flags @id field with no @default as manual", () => {
+    const schema = `
+model Document {
+  id        String   @id
+  title     String
+  createdAt DateTime @default(now())
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.Document.manual_id_columns).toEqual(["id"]);
+  });
+
+  it("does not flag @id with @default(cuid())", () => {
+    const schema = `
+model User {
+  id    String @id @default(cuid())
+  name  String
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.User.manual_id_columns).toEqual([]);
+  });
+
+  it("does not flag @id with @default(autoincrement())", () => {
+    const schema = `
+model Post {
+  id    Int    @id @default(autoincrement())
+  title String
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.Post.manual_id_columns).toEqual([]);
+  });
+
+  it("handles @id with @map but no @default", () => {
+    const schema = `
+model ApiKey {
+  id        String @id @map("api_key_id")
+  label     String
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.ApiKey.manual_id_columns).toEqual(["api_key_id"]);
+  });
+
+  it("handles compound @@id (no manual_id_columns)", () => {
+    const schema = `
+model UserRole {
+  userId String
+  roleId String
+  @@id([userId, roleId])
+}`;
+    const result = parsePrismaSchema(schema);
+    expect(result.UserRole.manual_id_columns).toEqual([]);
+  });
+});
+
 describe("extractModelBody", () => {
   it("extracts body of a named model", () => {
     const schema = `

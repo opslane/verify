@@ -1,8 +1,9 @@
 // pipeline/src/lib/prisma-parser.ts — Deterministic Prisma @map parser
 
-interface PrismaModel {
+export interface PrismaModel {
   table_name: string;
-  columns: Record<string, string>; // prismaFieldName → postgresColumnName
+  columns: Record<string, string>;   // prismaFieldName → postgresColumnName
+  manual_id_columns: string[];       // Postgres column names that are @id with no @default
 }
 
 // Scalar types that represent actual DB columns (not relations)
@@ -69,6 +70,7 @@ export function parsePrismaSchema(content: string): Record<string, PrismaModel> 
     const tableName = tableMapMatch ? tableMapMatch[1] : modelName;
 
     const columns: Record<string, string> = {};
+    const manualIdColumns: string[] = [];
 
     // Parse each line in the model body
     for (const line of body.split("\n")) {
@@ -87,10 +89,16 @@ export function parsePrismaSchema(content: string): Record<string, PrismaModel> 
 
       // Check for @map("column_name") or @map(name: "column_name")
       const mapMatch = trimmed.match(/@map\(\s*(?:name:\s*)?"([^"]+)"\s*\)/);
-      columns[fieldName] = mapMatch ? mapMatch[1] : fieldName;
+      const pgColumnName = mapMatch ? mapMatch[1] : fieldName;
+      columns[fieldName] = pgColumnName;
+
+      // Detect @id fields with no @default — these need explicit IDs in SQL
+      if (/@id(?:\s|$)/.test(trimmed) && !/@default\(/.test(trimmed)) {
+        manualIdColumns.push(pgColumnName);
+      }
     }
 
-    models[modelName] = { table_name: tableName, columns };
+    models[modelName] = { table_name: tableName, columns, manual_id_columns: manualIdColumns };
   }
 
   return models;

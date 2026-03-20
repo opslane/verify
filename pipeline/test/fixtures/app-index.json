@@ -16,7 +16,8 @@
       "columns": { "id": "id", "name": "name", "billingStatus": "billing_status" },
       "table_name": "Organization",
       "enums": { "BillingStatus": ["active", "trialing", "canceled"] },
-      "source": "prisma/schema.prisma:42"
+      "source": "prisma/schema.prisma:42",
+      "manual_id_columns": []
     }
   },
   "fixtures": {
