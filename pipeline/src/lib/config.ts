@@ -21,7 +21,6 @@ export function loadConfig(verifyDir: string): VerifyConfig {
 
   const envOverrides: Partial<VerifyConfig> = {};
   if (process.env.VERIFY_BASE_URL) envOverrides.baseUrl = process.env.VERIFY_BASE_URL;
-  if (process.env.VERIFY_AUTH_CHECK_URL) envOverrides.authCheckUrl = process.env.VERIFY_AUTH_CHECK_URL;
   if (process.env.VERIFY_SPEC_PATH) envOverrides.specPath = process.env.VERIFY_SPEC_PATH;
   if (process.env.VERIFY_DIFF_BASE) envOverrides.diffBase = process.env.VERIFY_DIFF_BASE;
 

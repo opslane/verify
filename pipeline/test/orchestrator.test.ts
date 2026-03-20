@@ -39,7 +39,6 @@ vi.mock("../src/lib/browse.js", () => ({
   healthCheck: vi.fn(() => true),
   stopDaemon: vi.fn(),
   resetPage: vi.fn(),
-  loadCookies: vi.fn(),
 }));
 
 // ── Mock video helper ───────────────────────────────────────────────────────

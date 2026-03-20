@@ -10,7 +10,6 @@ export type LoginStep =
 
 export interface VerifyConfig {
   baseUrl: string;
-  authCheckUrl?: string;
   specPath?: string;
   diffBase?: string;
   maxParallelGroups?: number;           // default 5

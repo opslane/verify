@@ -1,6 +1,6 @@
 // pipeline/src/lib/browse.ts — Browse daemon lifecycle management
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -41,16 +41,3 @@ export function resetPage(): void {
   try { execFileSync(resolveBrowseBin(), ["goto", "about:blank"], { timeout: 10_000, stdio: "ignore" }); } catch { /* best effort */ }
 }
 
-export function loadCookies(cookiesPath: string): void {
-  if (!existsSync(cookiesPath)) {
-    throw new Error(`Cookies file not found: ${cookiesPath}`);
-  }
-  const cookies = JSON.parse(readFileSync(cookiesPath, "utf-8")) as unknown[];
-  const bin = resolveBrowseBin();
-  for (const cookie of cookies) {
-    if (typeof cookie !== "object" || cookie === null) continue;
-    const { name, value } = cookie as Record<string, unknown>;
-    if (typeof name !== "string" || typeof value !== "string") continue;
-    try { execFileSync(bin, ["cookie", `${name}=${value}`], { timeout: 5000, stdio: "ignore" }); } catch { /* best effort */ }
-  }
-}

@@ -15,7 +15,6 @@ describe("loadConfig", () => {
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.VERIFY_BASE_URL;
-    delete process.env.VERIFY_AUTH_CHECK_URL;
     delete process.env.VERIFY_SPEC_PATH;
     delete process.env.VERIFY_DIFF_BASE;
   });
