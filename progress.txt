@@ -21,15 +21,19 @@
   - Files: pipeline/src/lib/types.ts
   - login-agent: Bash only
 
-## Current
-Task 6: Update /verify-setup skill to use login agent
+- [x] Task 6: Update /verify-setup skill to use login agent (commit: f67a02a)
+  - Files: skills/verify-setup/SKILL.md
+  - Cookie import replaced with seed credentials + login agent + replay verification
+- [x] Task 7: Wire login-agent and verify-login into CLI (commit: 08459ea)
+  - Files: pipeline/src/cli.ts, pipeline/test/cli.test.ts
+  - New CLI args (--base-url, --email, --password, --browse-bin), 2 new tests
+- [x] Task 8: Clean up dead code (commit: 31cd6d4)
+  - Files: types.ts, config.ts, browse.ts, orchestrator.test.ts, config.test.ts
+  - Removed: authCheckUrl, VERIFY_AUTH_CHECK_URL, loadCookies
 
-## Remaining
-Task 2: Rewrite loginWithCredentials as a step replayer
-Task 3: Create the login agent prompt
-Task 4: Add login agent stage functions
-Task 5: Add STAGE_PERMISSIONS entry for login-agent
-Task 6: Update /verify-setup skill to use login agent
-Task 7: Wire login-agent and verify-login into the CLI
-Task 8: Clean up dead code
+## Current
 Task 9: Update calcom config to new shape (manual — requires running app)
+
+## Status
+COMPLETE (Tasks 1-8) — 254 tests passing, typecheck clean
+Task 9 is manual E2E validation requiring a running app instance
