@@ -1,6 +1,6 @@
 // pipeline/test/orchestrator.test.ts — Orchestrator integration tests with mocked stages
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { RunClaudeOptions, RunClaudeResult, ACGeneratorOutput, PlannerOutput, JudgeOutput } from "../src/lib/types.js";
@@ -741,7 +741,7 @@ describe("orchestrator", () => {
       // The instructions.json is written by buildBrowseAgentPrompt into evidenceDir
       // Find ac2's evidence dir from the run dir
       const runsDir = join(verifyDir, "runs");
-      const runDirs = require("node:fs").readdirSync(runsDir);
+      const runDirs = readdirSync(runsDir);
       const runDir = join(runsDir, runDirs[0]);
       const ac2Instructions = JSON.parse(readFileSync(join(runDir, "evidence", "ac2", "instructions.json"), "utf-8"));
       // The enriched steps should include the nav hint "Click the 'Seeded Team' tab"
@@ -794,7 +794,7 @@ describe("orchestrator", () => {
       // Both should pass — no cross-contamination
       // Verify ac2's instructions.json does NOT contain Seeded Team hint
       const runsDir = join(verifyDir, "runs");
-      const runDirs = require("node:fs").readdirSync(runsDir);
+      const runDirs = readdirSync(runsDir);
       const runDir = join(runsDir, runDirs[0]);
       const ac2Instructions = JSON.parse(readFileSync(join(runDir, "evidence", "ac2", "instructions.json"), "utf-8"));
       expect(ac2Instructions.steps.some((s: string) => s.includes("Seeded Team"))).toBe(false);
@@ -849,7 +849,7 @@ describe("orchestrator", () => {
 
       // ac2's instructions.json should NOT contain Seeded Team hint
       const runsDir = join(verifyDir, "runs");
-      const runDirs = require("node:fs").readdirSync(runsDir);
+      const runDirs = readdirSync(runsDir);
       const runDir = join(runsDir, runDirs[0]);
       const ac2Instructions = JSON.parse(readFileSync(join(runDir, "evidence", "ac2", "instructions.json"), "utf-8"));
       expect(ac2Instructions.steps.some((s: string) => s.includes("Seeded Team"))).toBe(false);
