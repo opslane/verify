@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 
 vi.mock("node:child_process", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:child_process")>();
-  return { ...original, execFileSync: vi.fn() };
+  return { ...original, execFileSync: vi.fn(), execSync: vi.fn() };
 });
 
 vi.mock("../src/lib/browse.js", () => ({
@@ -97,9 +97,10 @@ describe("loginWithCredentials", () => {
       },
     };
     loginWithCredentials(config, "/tmp/project");
-    // First call is the first login step — no daemon lifecycle
-    expect(mockExec.mock.calls[0][0]).toBe("/mock/browse");
-    expect(mockExec.mock.calls[0][1]).toEqual(["goto", "http://localhost:3000/login"]);
+    // First browse call is the first login step — no daemon lifecycle
+    const browseCalls = mockExec.mock.calls.filter(c => c[0] === "/mock/browse");
+    expect(browseCalls[0][0]).toBe("/mock/browse");
+    expect(browseCalls[0][1]).toEqual(["goto", "http://localhost:3000/login"]);
   });
 
   it("replays goto, fill, click steps in order", async () => {
@@ -120,12 +121,12 @@ describe("loginWithCredentials", () => {
     const result = loginWithCredentials(config, "/tmp/project");
     expect(result.ok).toBe(true);
 
-    // Verify step order: goto, fill email, fill password, click, then poll
-    const calls = mockExec.mock.calls.map(c => c[1]);
-    expect(calls[0]).toEqual(["goto", "http://localhost:3000/auth/login"]);
-    expect(calls[1]).toEqual(["fill", "[name='email']", "admin@test.com"]);
-    expect(calls[2]).toEqual(["fill", "[name='password']", "secret"]);
-    expect(calls[3]).toEqual(["click", "button:has-text('Sign in')"]);
+    // Verify step order: goto, fill email, fill password, click, then poll (filter out sleep calls)
+    const browseCalls = mockExec.mock.calls.filter(c => c[0] === "/mock/browse").map(c => c[1]);
+    expect(browseCalls[0]).toEqual(["goto", "http://localhost:3000/auth/login"]);
+    expect(browseCalls[1]).toEqual(["fill", "[name='email']", "admin@test.com"]);
+    expect(browseCalls[2]).toEqual(["fill", "[name='password']", "secret"]);
+    expect(browseCalls[3]).toEqual(["click", "button:has-text('Sign in')"]);
   });
 
   it("passes through absolute URLs without prepending baseUrl", async () => {
@@ -243,7 +244,8 @@ describe("loginWithCredentials", () => {
     };
     const result = loginWithCredentials(config, "/tmp");
     expect(result.ok).toBe(true);
-    const sleepCall = mockExec.mock.calls.find(c => c[0] === "sleep");
+    // Find the login step's sleep (arg "2"), not the port-release sleep (arg "1")
+    const sleepCall = mockExec.mock.calls.find(c => c[0] === "sleep" && c[1]?.[0] === "2");
     expect(sleepCall?.[1]).toEqual(["2"]);
   });
 

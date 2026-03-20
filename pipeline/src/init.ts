@@ -1,7 +1,7 @@
 // pipeline/src/init.ts — Preflight checks (run before any LLM call)
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { healthCheck, resolveBrowseBin, startDaemon } from "./lib/browse.js";
 import type { VerifyConfig } from "./lib/types.js";
 
@@ -43,6 +43,13 @@ export function loginWithCredentials(config: VerifyConfig, _projectRoot?: string
 
   const bin = resolveBrowseBin();
   const { email, password, loginSteps } = config.auth;
+
+  // Kill zombie browse daemons that hold the port but don't respond.
+  // browse stop hangs ~30s, so we use pkill. This targets only verify's browse daemons
+  // (the .cache/verify path), not gstack skill daemons at other paths.
+  try { execSync("pkill -f 'bun run.*/\\.cache/verify/.*browse/src/server\\.ts'", { timeout: 3_000, stdio: "ignore" }); } catch { /* none running */ }
+  // Brief pause for port release after kill
+  try { execFileSync("sleep", ["1"], { timeout: 3_000, stdio: "ignore" }); } catch { /* ignore */ }
 
   try {
     for (const step of loginSteps) {
