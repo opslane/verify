@@ -498,3 +498,27 @@ export async function runPipeline(
 
   return { runDir, verdicts: finalVerdicts };
 }
+
+// ── Nav hints (cross-AC navigation context within a group) ──────────────────
+
+interface NavHint {
+  url: string;
+  steps: string[];
+}
+
+function spliceNavHints(acSteps: string[], url: string, hints: NavHint[]): string[] {
+  const matching = hints.filter(h => h.url === url);
+  if (matching.length === 0) return acSteps;
+
+  // Collect all nav steps from matching hints
+  const allNavSteps = matching.flatMap(h => h.steps);
+  if (allNavSteps.length === 0) return acSteps;
+
+  // Find the first "Wait for page load" step (case-insensitive)
+  const waitIdx = acSteps.findIndex(s => /wait\s+for\s+page\s+load/i.test(s));
+  const insertAfter = waitIdx >= 0 ? waitIdx : 0;
+
+  const result = [...acSteps];
+  result.splice(insertAfter + 1, 0, ...allNavSteps);
+  return result;
+}
