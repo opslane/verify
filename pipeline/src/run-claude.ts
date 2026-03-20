@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, createWriteStream, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { RunClaudeOptions, RunClaudeResult } from "./lib/types.js";
 import { appendTimelineEvent } from "./lib/timeline.js";
@@ -7,22 +7,22 @@ import { appendTimelineEvent } from "./lib/timeline.js";
 /**
  * Run `claude -p` with the given prompt.
  *
- * Uses `spawn` (not `execFile`) because:
- * 1. Correct stdin piping — prompt is written to stdin, not passed as argument
- * 2. Stream-based stdout/stderr collection — handles arbitrarily large output
- *    (the Planner stage can produce megabytes of tool call transcripts)
- * 3. Proper timeout handling via setTimeout + child.kill()
+ * Uses `--output-format stream-json --verbose` so JSONL events stream in
+ * real time (tool calls, assistant chunks, system events). This means:
+ *  - Raw JSONL → {stage}-stream.jsonl (real-time debug log)
+ *  - Extracted final text → {stage}-output.txt (backward compat with parsers)
+ *  - Progress callbacks fire on each tool_use event
  */
 export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult> {
-  const { prompt, model, timeoutMs, stage, runDir, cwd, dangerouslySkipPermissions, allowedTools } = opts;
+  const { prompt, model, timeoutMs, stage, runDir, cwd, dangerouslySkipPermissions, allowedTools, effort, settingSources, onProgress } = opts;
   const logsDir = join(runDir, "logs");
   mkdirSync(logsDir, { recursive: true });
 
   // Write prompt to disk before calling claude
   writeFileSync(join(logsDir, `${stage}-prompt.txt`), prompt);
 
-  // Build args
-  const args = ["-p", "--model", model];
+  // Build args — stream-json gives us real-time JSONL events
+  const args = ["-p", "--model", model, "--output-format", "stream-json", "--verbose"];
   if (dangerouslySkipPermissions) {
     args.push("--dangerously-skip-permissions");
   }
@@ -31,6 +31,11 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
       args.push("--allowedTools", tool);
     }
   }
+  if (effort) {
+    args.push("--effort", effort);
+  }
+  // Default to empty string — pipeline subprocesses should not load user hooks/skills
+  args.push("--setting-sources", settingSources ?? "");
 
   appendTimelineEvent(runDir, { stage, event: "start" });
   const startMs = Date.now();
@@ -43,14 +48,78 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
       ...(cwd ? { cwd } : {}),
     });
 
-    // Collect stdout and stderr via streams
+    const pid = child.pid;
+
+    // Collect stdout and stderr via streams, streaming to disk incrementally
+    // so partial output is preserved even on timeout/kill
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
+    const stdoutPath = join(logsDir, `${stage}-output.txt`);
+    const streamPath = join(logsDir, `${stage}-stream.jsonl`);
+    const stderrPath = join(logsDir, `${stage}-stderr.txt`);
+    const diagPath = join(logsDir, `${stage}-diag.txt`);
+    const streamFile = createWriteStream(streamPath);
+    const stderrStream = createWriteStream(stderrPath);
+    const diagLines: string[] = [];
 
-    child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    const diag = (msg: string) => {
+      const ts = new Date().toISOString();
+      diagLines.push(`[${ts}] ${msg}`);
+    };
+
+    diag(`spawn: ${claudeBin} ${args.join(" ")}`);
+    diag(`pid: ${pid ?? "undefined"}`);
+    diag(`cwd: ${cwd ?? process.cwd()}`);
+    diag(`timeout: ${timeoutMs}ms`);
+
+    // Track stream events for diagnostics
+    let eventCount = 0;
+    let lastEventType = "";
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdoutChunks.push(chunk);
+      streamFile.write(chunk);  // raw JSONL to {stage}-stream.jsonl
+
+      // Parse events for progress reporting
+      const lines = chunk.toString("utf-8").split("\n").filter(Boolean);
+      for (const line of lines) {
+        try {
+          const evt = JSON.parse(line) as {
+            type?: string;
+            message?: { content?: Array<{ type: string; name?: string }> };
+          };
+          eventCount++;
+          lastEventType = evt.type ?? "";
+
+          // Report tool use activity
+          if (onProgress && evt.type === "assistant" && evt.message?.content) {
+            for (const block of evt.message.content) {
+              if (block.type === "tool_use" && block.name) {
+                onProgress({ stage, event: "tool_call", detail: block.name });
+              }
+            }
+          }
+        } catch {
+          // partial line or non-JSON — ignore
+        }
+      }
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderrChunks.push(chunk);
+      stderrStream.write(chunk);
+    });
+
+    // Handle spawn errors (e.g., binary not found, permission denied)
+    let spawnError: Error | null = null;
+    child.on("error", (err: Error) => {
+      spawnError = err;
+      diag(`error event: ${err.message}`);
+    });
 
     // Write prompt to stdin
+    child.stdin.on("error", (err: Error) => {
+      diag(`stdin error: ${err.message}`);
+    });
     child.stdin.write(prompt);
     child.stdin.end();
 
@@ -58,32 +127,80 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
+      diag(`timeout fired at ${timeoutMs}ms — sending SIGTERM`);
       child.kill("SIGTERM");
+      // Give the process 5s to flush and exit, then SIGKILL
+      setTimeout(() => {
+        if (!child.killed || child.exitCode === null) {
+          diag("SIGTERM grace period expired — sending SIGKILL");
+          child.kill("SIGKILL");
+        }
+      }, 5_000);
     }, timeoutMs);
 
-    child.on("close", (code, _signal) => {
+    child.on("close", (code, signal) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startMs;
 
       // If child was killed but we didn't set timedOut, it was killed externally
       if (!timedOut && child.killed) timedOut = true;
 
-      const stdoutStr = Buffer.concat(stdoutChunks).toString("utf-8");
+      const rawStream = Buffer.concat(stdoutChunks).toString("utf-8");
       const stderrStr = Buffer.concat(stderrChunks).toString("utf-8");
       const exitCode = timedOut ? 124 : (code ?? 1);
 
-      // Always write output files
-      writeFileSync(join(logsDir, `${stage}-output.txt`), stdoutStr);
-      writeFileSync(join(logsDir, `${stage}-stderr.txt`), stderrStr);
+      // Extract final result text from stream-json events
+      let finalText = "";
+      for (const line of rawStream.split("\n")) {
+        if (!line) continue;
+        try {
+          const evt = JSON.parse(line) as { type?: string; result?: string };
+          if (evt.type === "result" && typeof evt.result === "string") {
+            finalText = evt.result;
+          }
+        } catch {
+          // skip non-JSON lines
+        }
+      }
 
+      diag(`close: code=${code} signal=${signal} killed=${child.killed} timedOut=${timedOut}`);
+      diag(`duration: ${durationMs}ms`);
+      diag(`stream events: ${eventCount}, last type: ${lastEventType}`);
+      diag(`raw stream: ${rawStream.length} bytes`);
+      diag(`extracted text: ${finalText.length} bytes`);
+      diag(`stderr: ${stderrStr.length} bytes`);
+      if (spawnError) diag(`spawnError: ${spawnError.message}`);
+      if (exitCode !== 0 && !timedOut) {
+        diag(`NON-ZERO EXIT: ${exitCode}`);
+        if (stderrStr.length > 0) {
+          diag(`stderr preview: ${stderrStr.slice(0, 500)}`);
+        }
+        if (finalText.length === 0) {
+          diag("WARNING: zero extracted text — claude may have crashed or failed to start");
+        }
+      }
+
+      // Close incremental streams, then write final files synchronously
+      streamFile.end();
+      stderrStream.end();
+      writeFileSync(stdoutPath, finalText);           // {stage}-output.txt = extracted final answer
+      writeFileSync(streamPath, rawStream);            // {stage}-stream.jsonl = full event stream
+      writeFileSync(stderrPath, stderrStr);
+      writeFileSync(diagPath, diagLines.join("\n") + "\n");
+
+      const event = timedOut ? "timeout" : (exitCode === 0 ? "end" : "error");
       appendTimelineEvent(runDir, {
         stage,
-        event: timedOut ? "timeout" : (exitCode === 0 ? "end" : "error"),
+        event,
         durationMs,
-        detail: timedOut ? `Timed out after ${timeoutMs}ms` : undefined,
+        detail: timedOut
+          ? `Timed out after ${timeoutMs}ms`
+          : exitCode !== 0
+            ? `Exit code ${exitCode}${signal ? ` (signal: ${signal})` : ""}${spawnError ? ` spawn error: ${spawnError.message}` : ""}`
+            : undefined,
       });
 
-      resolve({ stdout: stdoutStr, stderr: stderrStr, exitCode, durationMs, timedOut });
+      resolve({ stdout: finalText, stderr: stderrStr, exitCode, durationMs, timedOut });
     });
   });
 }

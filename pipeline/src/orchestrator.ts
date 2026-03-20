@@ -310,7 +310,7 @@ export async function runPipeline(
         // Call replan prompt (lightweight, 30s timeout, minimal permissions)
         const replanResult = await runClaude({
           prompt: buildReplanPrompt(replanInputPath),
-          model: "sonnet", timeoutMs: 30_000,
+          model: "sonnet", timeoutMs: 45_000, effort: "low",
           stage: `replan-${ac.id}`, runDir, ...perms("browse-replan"),
         });
         const replanOutput = parseReplanOutput(replanResult.stdout);

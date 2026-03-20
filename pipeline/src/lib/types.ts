@@ -155,6 +155,8 @@ export interface RunClaudeOptions {
   cwd?: string;                         // working directory for claude (target project root)
   dangerouslySkipPermissions?: boolean;
   allowedTools?: string[];              // e.g. ["Bash", "Read", "Glob", "Grep"]
+  effort?: "low" | "medium" | "high" | "max";
+  settingSources?: string;              // defaults to "" (no hooks/skills); set "user,project" to opt in
   onProgress?: (event: StageProgressEvent) => void;
 }
 

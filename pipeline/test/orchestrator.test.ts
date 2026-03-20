@@ -624,7 +624,8 @@ describe("orchestrator", () => {
 
       const replanCalls = runClaudeCalls.filter(c => c.stage === "replan-ac1");
       expect(replanCalls.length).toBe(1);
-      expect(replanCalls[0].timeoutMs).toBe(30_000);
+      expect(replanCalls[0].timeoutMs).toBe(45_000);
+      expect(replanCalls[0].effort).toBe("low");
 
       const retryCalls = runClaudeCalls.filter(c => c.stage === "browse-agent-ac1-retry");
       expect(retryCalls.length).toBe(1);

@@ -76,6 +76,8 @@ describe("runClaude", () => {
   });
 
   it("saves stdout and stderr to log files", async () => {
+    // stream-json mode: stdout is JSONL with a result event containing the final text
+    const streamJsonl = JSON.stringify({ type: "result", result: "the output" }) + "\n";
     const promise = runClaude({
       prompt: "test",
       model: "opus",
@@ -83,7 +85,7 @@ describe("runClaude", () => {
       stage: "my-stage",
       runDir,
     });
-    emitSuccess(mockSpawn, "the output", "some warnings");
+    emitSuccess(mockSpawn, streamJsonl, "some warnings");
     const result = await promise;
 
     expect(result.stdout).toBe("the output");
@@ -92,6 +94,7 @@ describe("runClaude", () => {
     expect(result.timedOut).toBe(false);
 
     expect(readFileSync(join(runDir, "logs", "my-stage-output.txt"), "utf-8")).toBe("the output");
+    expect(readFileSync(join(runDir, "logs", "my-stage-stream.jsonl"), "utf-8")).toBe(streamJsonl);
     expect(readFileSync(join(runDir, "logs", "my-stage-stderr.txt"), "utf-8")).toBe("some warnings");
   });
 
@@ -143,6 +146,76 @@ describe("runClaude", () => {
     const args = mockSpawn.mock.calls[0][1] as string[];
     expect(args).toContain("--allowedTools");
     expect(args).toContain("Read");
+  });
+
+  it("passes --effort flag when set", async () => {
+    const promise = runClaude({
+      prompt: "test",
+      model: "sonnet",
+      timeoutMs: 5000,
+      stage: "s",
+      runDir,
+      effort: "low",
+    });
+    emitSuccess(mockSpawn);
+    await promise;
+
+    const args = mockSpawn.mock.calls[0][1] as string[];
+    expect(args).toContain("--effort");
+    expect(args).toContain("low");
+  });
+
+  it("passes --setting-sources flag when set", async () => {
+    const promise = runClaude({
+      prompt: "test",
+      model: "sonnet",
+      timeoutMs: 5000,
+      stage: "s",
+      runDir,
+      settingSources: "",
+    });
+    emitSuccess(mockSpawn);
+    await promise;
+
+    const args = mockSpawn.mock.calls[0][1] as string[];
+    const idx = args.indexOf("--setting-sources");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("");
+  });
+
+  it("defaults --setting-sources to empty string when not set", async () => {
+    const promise = runClaude({
+      prompt: "test",
+      model: "sonnet",
+      timeoutMs: 5000,
+      stage: "s",
+      runDir,
+    });
+    emitSuccess(mockSpawn);
+    await promise;
+
+    const args = mockSpawn.mock.calls[0][1] as string[];
+    const idx = args.indexOf("--setting-sources");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("");
+  });
+
+  it("passes custom --setting-sources value when provided", async () => {
+    const promise = runClaude({
+      prompt: "test",
+      model: "sonnet",
+      timeoutMs: 5000,
+      stage: "s",
+      runDir,
+      settingSources: "user,project",
+    });
+    emitSuccess(mockSpawn);
+    await promise;
+
+    const args = mockSpawn.mock.calls[0][1] as string[];
+    const idx = args.indexOf("--setting-sources");
+    expect(idx).toBeGreaterThan(-1);
+    expect(args[idx + 1]).toBe("user,project");
   });
 
   it("returns timedOut=true when timeout fires", async () => {
