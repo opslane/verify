@@ -11,8 +11,18 @@
   - Files: pipeline/src/init.ts, pipeline/test/init.test.ts
   - restart → goto/fill/click/sleep replay → verifyAuthState, 8 new tests
 
+- [x] Task 3: Create the login agent prompt (commit: 6ddd63d)
+  - Files: pipeline/src/prompts/login-agent.txt
+  - __DUNDER__ template vars for inputs, {{curly}} for output tokens
+- [x] Task 4: Add login agent stage functions (commit: c11f253)
+  - Files: pipeline/src/stages/login-agent.ts, pipeline/test/login-agent.test.ts
+  - buildLoginAgentPrompt + parseLoginAgentOutput, @eN rejection, 8 tests
+- [x] Task 5: Add STAGE_PERMISSIONS entry for login-agent (commit: 98108c5)
+  - Files: pipeline/src/lib/types.ts
+  - login-agent: Bash only
+
 ## Current
-Task 3: Create the login agent prompt
+Task 6: Update /verify-setup skill to use login agent
 
 ## Remaining
 Task 2: Rewrite loginWithCredentials as a step replayer
