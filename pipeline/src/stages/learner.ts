@@ -25,6 +25,7 @@ const ALLOWED_SECTIONS = new Set([
   "Column Mappings",
   "Required Fields",
   "Timing",
+  "Navigation",
 ]);
 
 const BANNED_PATTERNS = [

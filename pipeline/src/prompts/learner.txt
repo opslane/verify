@@ -32,6 +32,11 @@ Only add entries when a run succeeded WITH the field and failed WITHOUT it.
 Average stage durations from timeline.jsonl. Update each run.
 Format: stage_name: Xs (average across N runs)
 
+## Navigation
+Page navigation facts discovered from browse agent nav_failures.
+Format: /route — element [selector] is under [tab/sub-view name] (?queryParam=value)
+Only add entries from actual nav_failure evidence (replan-input.json files) in this run.
+
 RULES:
 1. NEVER write conclusions about whether an AC is testable or untestable.
 2. NEVER write advice about what the planner or AC generator should do.

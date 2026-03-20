@@ -80,6 +80,36 @@ describe("validateLearnings", () => {
     expect(result).toContain("trialEnd");
   });
 
+  it("preserves Navigation section", () => {
+    const input = `# Learnings
+
+## SQL Corrections
+- ERROR: column "foo" does not exist
+  FIX: Use "bar"
+
+## Navigation
+- /event-types — element [data-testid=event-type-options-1159] is under "Seeded Team" tab (?teamId=2)
+`;
+    const result = validateLearnings(input);
+    expect(result).toContain("## Navigation");
+    expect(result).toContain("event-type-options-1159");
+    expect(result).toContain("Seeded Team");
+  });
+
+  it("strips banned patterns in Navigation section", () => {
+    const input = `# Learnings
+
+## Navigation
+- /event-types — element is under Seeded Team tab
+- Planner MUST always add tab-switching steps
+- NEVER navigate without checking tabs first
+`;
+    const result = validateLearnings(input);
+    expect(result).toContain("element is under Seeded Team tab");
+    expect(result).not.toContain("Planner MUST");
+    expect(result).not.toContain("NEVER navigate");
+  });
+
   it("strips h3+ sub-sections as unauthorized boundaries", () => {
     const input = `# Learnings
 
