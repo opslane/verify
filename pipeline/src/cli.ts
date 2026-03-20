@@ -377,8 +377,12 @@ if (command === "run") {
       break;
     }
     case "verify-login": {
-      const { startDaemon } = await import("./lib/browse.js");
       const { loginWithCredentials } = await import("./init.js");
+      if (!config.auth?.loginSteps?.length) {
+        console.error("No auth config — run /verify-setup to configure login");
+        process.exit(1);
+      }
+      const { startDaemon } = await import("./lib/browse.js");
       startDaemon({});
       const loginResult = loginWithCredentials(config, projectRoot);
       if (loginResult.ok) {

@@ -77,7 +77,11 @@ describe("loginWithCredentials", () => {
     mockExec.mockReturnValue(Buffer.from("@e1 [link] Dashboard"));
   });
 
-  it("restarts daemon before replaying steps", async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("starts replay with first login step (no daemon management)", async () => {
     const { loginWithCredentials } = await import("../src/init.js");
     const config = {
       baseUrl: "http://localhost:3000",
@@ -93,9 +97,9 @@ describe("loginWithCredentials", () => {
       },
     };
     loginWithCredentials(config, "/tmp/project");
-    // First call must be browse restart to clear all cookies/state
+    // First call is the first login step — no daemon lifecycle
     expect(mockExec.mock.calls[0][0]).toBe("/mock/browse");
-    expect(mockExec.mock.calls[0][1]).toEqual(["restart"]);
+    expect(mockExec.mock.calls[0][1]).toEqual(["goto", "http://localhost:3000/login"]);
   });
 
   it("replays goto, fill, click steps in order", async () => {
@@ -116,13 +120,12 @@ describe("loginWithCredentials", () => {
     const result = loginWithCredentials(config, "/tmp/project");
     expect(result.ok).toBe(true);
 
-    // Verify step order: restart, goto, fill email, fill password, click, then verify
+    // Verify step order: goto, fill email, fill password, click, then poll
     const calls = mockExec.mock.calls.map(c => c[1]);
-    expect(calls[0]).toEqual(["restart"]);
-    expect(calls[1]).toEqual(["goto", "http://localhost:3000/auth/login"]);
-    expect(calls[2]).toEqual(["fill", "[name='email']", "admin@test.com"]);
-    expect(calls[3]).toEqual(["fill", "[name='password']", "secret"]);
-    expect(calls[4]).toEqual(["click", "button:has-text('Sign in')"]);
+    expect(calls[0]).toEqual(["goto", "http://localhost:3000/auth/login"]);
+    expect(calls[1]).toEqual(["fill", "[name='email']", "admin@test.com"]);
+    expect(calls[2]).toEqual(["fill", "[name='password']", "secret"]);
+    expect(calls[3]).toEqual(["click", "button:has-text('Sign in')"]);
   });
 
   it("passes through absolute URLs without prepending baseUrl", async () => {
@@ -141,6 +144,7 @@ describe("loginWithCredentials", () => {
     };
     loginWithCredentials(config, "/tmp");
     const gotoCalls = mockExec.mock.calls.filter(c => c[1]?.[0] === "goto");
+    // First goto is the login URL (no about:blank prefix)
     expect(gotoCalls[0][1]).toEqual(["goto", "http://localhost:4000/custom-login"]);
   });
 
@@ -174,10 +178,17 @@ describe("loginWithCredentials", () => {
 
   it("returns error when login form still visible after replay", async () => {
     const { loginWithCredentials } = await import("../src/init.js");
-    // After replay, verification snapshot shows a password field = still on login page
-    mockExec.mockReturnValue(Buffer.from(
+    // Every snapshot shows a password field — waitForAuth will poll until timeout
+    const loginPage = Buffer.from(
       "@e1 [text]: Email\n@e2 [textbox] \"\"\n@e3 [text]: Password\n@e4 [textbox] \"\"\n@e5 [button] \"Sign in\""
-    ));
+    );
+    // Advance Date.now by 2s on each call so the 10s deadline is hit after ~5 iterations
+    const realNow = Date.now.bind(Date);
+    let callCount = 0;
+    const startTime = realNow();
+    vi.spyOn(Date, "now").mockImplementation(() => startTime + (callCount++) * 2000);
+
+    mockExec.mockReturnValue(loginPage);
     const config = {
       baseUrl: "http://localhost:3000",
       auth: {
@@ -196,10 +207,9 @@ describe("loginWithCredentials", () => {
 
   it("returns error when browse command throws (bad selector)", async () => {
     const { loginWithCredentials } = await import("../src/init.js");
-    // Restart succeeds, then goto succeeds, then fill throws
+    // goto succeeds, then fill throws
     mockExec
-      .mockReturnValueOnce(Buffer.from("")) // restart
-      .mockReturnValueOnce(Buffer.from("")) // goto
+      .mockReturnValueOnce(Buffer.from("")) // goto /login
       .mockImplementationOnce(() => { throw new Error("Operation timed out"); }); // fill
     const config = {
       baseUrl: "http://localhost:3000",
@@ -235,5 +245,88 @@ describe("loginWithCredentials", () => {
     expect(result.ok).toBe(true);
     const sleepCall = mockExec.mock.calls.find(c => c[0] === "sleep");
     expect(sleepCall?.[1]).toEqual(["2"]);
+  });
+
+  it("waitForAuth succeeds immediately when no password field in snapshot", async () => {
+    const { loginWithCredentials } = await import("../src/init.js");
+    // Snapshot shows dashboard (no password field) on first check
+    mockExec.mockReturnValue(Buffer.from("@e1 [link] Dashboard\n@e2 [button] Logout"));
+    const config = {
+      baseUrl: "http://localhost:3000",
+      auth: {
+        email: "a@b.com",
+        password: "x",
+        loginSteps: [
+          { action: "goto" as const, url: "/login" },
+          { action: "click" as const, selector: "#submit" },
+        ],
+      },
+    };
+    const result = loginWithCredentials(config, "/tmp");
+    expect(result.ok).toBe(true);
+  });
+
+  it("waitForAuth retries and succeeds when auth completes after delay", async () => {
+    const { loginWithCredentials } = await import("../src/init.js");
+    const loginPageSnapshot = Buffer.from(
+      "@e1 [textbox] \"Email\"\n@e2 [textbox] \"Password\"\n@e3 [button] \"Sign In\""
+    );
+    const dashboardSnapshot = Buffer.from("@e1 [link] Dashboard\n@e2 [button] Logout");
+
+    // Login steps succeed, then poll: first 2 checks show login page, third shows dashboard
+    mockExec
+      .mockReturnValueOnce(Buffer.from("")) // goto /login (step)
+      .mockReturnValueOnce(Buffer.from("")) // click #submit (step)
+      .mockReturnValueOnce(Buffer.from("")) // poll: goto baseUrl (attempt 1)
+      .mockReturnValueOnce(loginPageSnapshot) // poll: snapshot (attempt 1) — still login
+      .mockReturnValueOnce(Buffer.from("")) // poll: sleep 0.5
+      .mockReturnValueOnce(Buffer.from("")) // poll: goto baseUrl (attempt 2)
+      .mockReturnValueOnce(loginPageSnapshot) // poll: snapshot (attempt 2) — still login
+      .mockReturnValueOnce(Buffer.from("")) // poll: sleep 0.5
+      .mockReturnValueOnce(Buffer.from("")) // poll: goto baseUrl (attempt 3)
+      .mockReturnValueOnce(dashboardSnapshot); // poll: snapshot (attempt 3) — success!
+
+    const config = {
+      baseUrl: "http://localhost:3000",
+      auth: {
+        email: "a@b.com",
+        password: "x",
+        loginSteps: [
+          { action: "goto" as const, url: "/login" },
+          { action: "click" as const, selector: "#submit" },
+        ],
+      },
+    };
+    const result = loginWithCredentials(config, "/tmp");
+    expect(result.ok).toBe(true);
+  });
+
+  it("waitForAuth returns error when password field persists after max wait", async () => {
+    const { loginWithCredentials } = await import("../src/init.js");
+    // Every snapshot shows login page — auth never completes
+    const loginPage = Buffer.from(
+      "@e1 [textbox] \"Email\"\n@e2 [textbox] \"Password\"\n@e3 [button] \"Sign In\""
+    );
+    // Advance Date.now by 2s on each call so the 10s deadline is hit after ~5 iterations
+    const realNow = Date.now.bind(Date);
+    let callCount = 0;
+    const startTime = realNow();
+    vi.spyOn(Date, "now").mockImplementation(() => startTime + (callCount++) * 2000);
+
+    mockExec.mockReturnValue(loginPage);
+    const config = {
+      baseUrl: "http://localhost:3000",
+      auth: {
+        email: "a@b.com",
+        password: "x",
+        loginSteps: [
+          { action: "goto" as const, url: "/login" },
+          { action: "click" as const, selector: "#submit" },
+        ],
+      },
+    };
+    const result = loginWithCredentials(config, "/tmp");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("still on login page");
   });
 });
