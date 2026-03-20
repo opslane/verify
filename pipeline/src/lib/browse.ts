@@ -40,6 +40,8 @@ export function stopDaemon(): void {
 }
 
 export function resetPage(): void {
-  try { execFileSync(resolveBrowseBin(), ["goto", "about:blank"], { timeout: 10_000, stdio: "ignore" }); } catch { /* best effort */ }
+  // Intentionally a no-op. Navigating to about:blank between ACs breaks cookie persistence
+  // in gstack/browse, causing login cookies to be lost for subsequent browse agents.
+  // The browse agent's first goto step handles navigation to the correct page.
 }
 
