@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type {
   ACGeneratorOutput, PlannerOutput, JudgeOutput,
-  ACVerdict, ProgressEvent,
+  ACVerdict, ProgressEvent, StageProgressEvent,
 } from "./lib/types.js";
 import { STAGE_PERMISSIONS, isAuthFailure } from "./lib/types.js";
 import { loadConfig } from "./lib/config.js";
@@ -17,8 +17,9 @@ import { runPreflight } from "./init.js";
 import { buildACGeneratorPrompt, parseACGeneratorOutput, fanOutPureUIGroups } from "./stages/ac-generator.js";
 import { buildPlannerPrompt, parsePlannerOutput, buildRetryPrompt, filterPlanErrors } from "./stages/planner.js";
 import { validatePlan } from "./stages/plan-validator.js";
-import { buildSetupWriterPrompt, parseSetupWriterOutput, executeSetupCommands, executeTeardownCommands, loadProjectEnv } from "./stages/setup-writer.js";
-import { buildBrowseAgentPrompt, parseBrowseResult } from "./stages/browse-agent.js";
+import { buildSetupWriterPrompt, buildSetupWriterRetryPrompt, parseSetupWriterOutput, executeSetupCommands, executeTeardownCommands, loadProjectEnv } from "./stages/setup-writer.js";
+import type { SetupRetryContext } from "./stages/setup-writer.js";
+import { buildBrowseAgentPrompt, parseBrowseResult, buildReplanPrompt, parseReplanOutput } from "./stages/browse-agent.js";
 import { collectEvidencePaths, buildJudgePrompt, parseJudgeOutput } from "./stages/judge.js";
 import { buildLearnerPrompt, backupAndRestore, validateLearnings } from "./stages/learner.js";
 import { resolveBrowseBin, resetPage } from "./lib/browse.js";
@@ -32,6 +33,7 @@ export interface OrchestratorCallbacks {
   onLog: (message: string) => void;
   onError: (message: string) => void;
   onProgress: (event: ProgressEvent) => void;
+  onStageProgress?: (event: StageProgressEvent) => void;
 }
 
 export interface PipelineResult {
@@ -56,9 +58,9 @@ export async function runPipeline(
   // Safe because Node.js is single-threaded and all pushes are synchronous between awaits.
   const allVerdicts: ACVerdict[] = [];
 
-  /** Merge stage permissions with cwd — every runClaude call uses this */
+  /** Merge stage permissions with cwd + progress callback — every runClaude call uses this */
   function perms(stage: string) {
-    return { ...STAGE_PERMISSIONS[stage] ?? {}, cwd: projectRoot };
+    return { ...STAGE_PERMISSIONS[stage] ?? {}, cwd: projectRoot, onProgress: callbacks.onStageProgress };
   }
 
   callbacks.onLog(`Run: ${runId}`);
@@ -184,41 +186,77 @@ export async function runPipeline(
     let snapshotTableList: string[] = [];
 
     if (condition) {
-      const setupPrompt = buildSetupWriterPrompt(groupId, condition, projectRoot);
-      const setupResult = await runClaude({
-        prompt: setupPrompt, model: "sonnet", timeoutMs: 240_000,
-        stage: `setup-${groupId}`, runDir, ...perms("setup-writer"),
-      });
-      const commands = parseSetupWriterOutput(setupResult.stdout);
-      if (!commands) {
-        for (const ac of groupAcs) {
-          allVerdicts.push({ ac_id: ac.id, verdict: "setup_failed", confidence: "high", reasoning: "Setup writer failed to produce commands" });
-          progress.update(ac.id, "error", "setup_failed");
+      const MAX_SETUP_ATTEMPTS = 3;
+      let setupSuccess = false;
+      let lastRetryContext: SetupRetryContext | null = null;
+
+      for (let attempt = 1; attempt <= MAX_SETUP_ATTEMPTS; attempt++) {
+        // Build prompt — original on first attempt, retry with error context after
+        const setupPrompt = attempt === 1
+          ? buildSetupWriterPrompt(groupId, condition, projectRoot)
+          : buildSetupWriterRetryPrompt(groupId, condition, projectRoot, lastRetryContext!);
+        const stageName = attempt === 1
+          ? `setup-${groupId}`
+          : `setup-${groupId}-retry${attempt - 1}`;
+        const timeoutMs = attempt === 1 ? 120_000 : 90_000;
+
+        const setupResult = await runClaude({
+          prompt: setupPrompt, model: "sonnet", timeoutMs,
+          stage: stageName, runDir, ...perms("setup-writer"),
+        });
+        const commands = parseSetupWriterOutput(setupResult.stdout);
+        if (!commands) {
+          lastRetryContext = { type: "parse_error" };
+          callbacks.onLog(`  Setup attempt ${attempt}/${MAX_SETUP_ATTEMPTS} for ${groupId}: parse error, ${attempt < MAX_SETUP_ATTEMPTS ? "retrying..." : "giving up"}`);
+          continue;
         }
-        return;
+
+        // Restore snapshot if this is a retry (clean slate before re-executing)
+        if (attempt > 1 && snapshotPath) {
+          const restoreResult = restoreSnapshot(snapshotPath, snapshotTableList, projectEnv);
+          if (!restoreResult.success) {
+            callbacks.onLog(`  Snapshot restore failed for ${groupId} — aborting retries: ${restoreResult.error}`);
+            break;  // DB in unknown state, don't retry
+          }
+        }
+
+        // Snapshot affected tables (first attempt or re-snapshot on retry)
+        snapshotTableList = extractTableNames(commands.setup_commands);
+        const snapshotDir = join(runDir, "setup", groupId);
+        mkdirSync(snapshotDir, { recursive: true });
+        snapshotPath = snapshotTables(snapshotTableList, snapshotDir, projectEnv);
+        if (attempt === 1 && snapshotPath) {
+          callbacks.onLog(`  Snapshotted ${snapshotTableList.length} tables for ${groupId}`);
+        }
+
+        // Execute setup SQL
+        const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot, seedIds);
+        if (setupExec.success) {
+          setupSuccess = true;
+          writeFileSync(join(runDir, "setup", groupId, "commands.json"), JSON.stringify(commands, null, 2));
+          break;
+        }
+
+        lastRetryContext = {
+          type: "exec_error",
+          failedCommands: commands.setup_commands,
+          error: setupExec.error ?? "Unknown error",
+        };
+        callbacks.onLog(`  Setup attempt ${attempt}/${MAX_SETUP_ATTEMPTS} for ${groupId}: ${setupExec.error}${attempt < MAX_SETUP_ATTEMPTS ? " — retrying..." : ""}`);
       }
 
-      // Snapshot affected tables BEFORE running setup SQL
-      snapshotTableList = extractTableNames(commands.setup_commands);
-      const snapshotDir = join(runDir, "setup", groupId);
-      mkdirSync(snapshotDir, { recursive: true });
-      snapshotPath = snapshotTables(snapshotTableList, snapshotDir, projectEnv);
-      if (snapshotPath) {
-        callbacks.onLog(`  Snapshotted ${snapshotTableList.length} tables for ${groupId}`);
-      }
-
-      const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot, seedIds);
-      if (!setupExec.success) {
-        // Restore snapshot on setup failure
+      if (!setupSuccess) {
+        // Restore snapshot after all attempts failed
         if (snapshotPath) restoreSnapshot(snapshotPath, snapshotTableList, projectEnv);
+        const reason = lastRetryContext?.type === "exec_error"
+          ? `Setup failed after ${MAX_SETUP_ATTEMPTS} attempts: ${lastRetryContext.error}`
+          : `Setup failed after ${MAX_SETUP_ATTEMPTS} attempts: could not produce valid output`;
         for (const ac of groupAcs) {
-          allVerdicts.push({ ac_id: ac.id, verdict: "setup_failed", confidence: "high", reasoning: `Setup failed: ${setupExec.error}` });
+          allVerdicts.push({ ac_id: ac.id, verdict: "setup_failed", confidence: "high", reasoning: reason });
           progress.update(ac.id, "error", "setup_failed");
         }
         return;
       }
-
-      writeFileSync(join(runDir, "setup", groupId, "commands.json"), JSON.stringify(commands, null, 2));
     }
 
     // Run browse agents sequentially within group
@@ -237,7 +275,7 @@ export async function runPipeline(
         baseUrl: config.baseUrl, browseBin, evidenceDir,
       });
       const agentResult = await runClaude({
-        prompt: agentPrompt, model: "sonnet", timeoutMs: Math.max(ac.timeout_seconds, 300) * 1000,
+        prompt: agentPrompt, model: "sonnet", timeoutMs: Math.max(ac.timeout_seconds, 120) * 1000,
         stage: `browse-agent-${ac.id}`, runDir, ...perms("browse-agent"),
       });
 
@@ -247,10 +285,67 @@ export async function runPipeline(
       if (agentResult.timedOut) {
         allVerdicts.push({ ac_id: ac.id, verdict: "timeout", confidence: "high", reasoning: `Timed out after ${ac.timeout_seconds}s` });
         progress.update(ac.id, "timeout");
+        resetPage();
         continue;
       }
 
-      const browseResult = parseBrowseResult(agentResult.stdout);
+      let browseResult = parseBrowseResult(agentResult.stdout);
+
+      // Nav failure → replan → retry (max 1 attempt)
+      if (browseResult?.nav_failure) {
+        callbacks.onLog(`  ${ac.id}: nav_failure — replanning...`);
+        progress.update(ac.id, "running", "replanning");
+
+        // Write replan input
+        const replanInputPath = join(evidenceDir, "replan-input.json");
+        writeFileSync(replanInputPath, JSON.stringify({
+          ac_id: ac.id,
+          description: ac.description,
+          original_steps: ac.steps,
+          failed_step: browseResult.nav_failure.failed_step,
+          error: browseResult.nav_failure.error,
+          page_snapshot: browseResult.nav_failure.page_snapshot,
+        }));
+
+        // Call replan prompt (lightweight, 30s timeout, minimal permissions)
+        const replanResult = await runClaude({
+          prompt: buildReplanPrompt(replanInputPath),
+          model: "sonnet", timeoutMs: 30_000,
+          stage: `replan-${ac.id}`, runDir, ...perms("browse-replan"),
+        });
+        const replanOutput = parseReplanOutput(replanResult.stdout);
+
+        if (replanOutput?.revised_steps) {
+          // Retry browse agent with revised steps — reuse same evidenceDir
+          // so judge sees one clean result per AC (no ghost dirs)
+          callbacks.onLog(`  ${ac.id}: retrying with ${replanOutput.revised_steps.length} revised steps`);
+          resetPage();
+          const retryAc = { ...ac, steps: replanOutput.revised_steps };
+          const retryPrompt = buildBrowseAgentPrompt(retryAc, {
+            baseUrl: config.baseUrl, browseBin, evidenceDir,
+          });
+          const retryResult = await runClaude({
+            prompt: retryPrompt, model: "sonnet",
+            timeoutMs: Math.max(ac.timeout_seconds, 120) * 1000,
+            stage: `browse-agent-${ac.id}-retry`, runDir, ...perms("browse-agent"),
+          });
+
+          findAndRenameVideo(evidenceDir);
+
+          if (retryResult.timedOut) {
+            allVerdicts.push({ ac_id: ac.id, verdict: "timeout", confidence: "high", reasoning: `Timed out after replan retry (${ac.timeout_seconds}s)` });
+            progress.update(ac.id, "timeout");
+            resetPage();
+            continue;
+          }
+
+          const retryBrowse = parseBrowseResult(retryResult.stdout);
+          if (retryBrowse) {
+            browseResult = retryBrowse; // Use retry result — written to evidenceDir below
+          }
+        }
+      }
+
       if (browseResult) {
         writeFileSync(join(evidenceDir, "result.json"), JSON.stringify(browseResult, null, 2));
 
@@ -260,6 +355,7 @@ export async function runPipeline(
           abortController.abort();
           allVerdicts.push({ ac_id: ac.id, verdict: "auth_expired", confidence: "high", reasoning: "Auth redirect detected" });
           progress.update(ac.id, "error", "auth_expired");
+          resetPage();
           continue;
         }
       } else {

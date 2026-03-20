@@ -302,7 +302,7 @@ describe("orchestrator", () => {
   });
 
   describe("setup failure handling", () => {
-    it("marks group ACs as setup_failed when setup commands fail", async () => {
+    it("marks group ACs as setup_failed after all retry attempts fail", async () => {
       const specPath = join(verifyDir, "spec.md");
       writeFileSync(specPath, "# Test spec");
 
@@ -313,15 +313,21 @@ describe("orchestrator", () => {
       const planWithSetup: PlannerOutput = {
         criteria: [{ id: "ac1", group: "group-a", description: "Check", url: "/a", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 }],
       };
+      const setupOutput = JSON.stringify({ group_id: "group-a", condition: "trial user exists", setup_commands: ["psql -c 'INSERT...'"], teardown_commands: [] });
 
       mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(acsWithSetup) });
       mockRunClaudeResult("planner", { stdout: JSON.stringify(planWithSetup) });
-      mockRunClaudeResult("setup-group-a", { stdout: JSON.stringify({ group_id: "group-a", condition: "trial user exists", setup_commands: ["psql -c 'INSERT...'"], teardown_commands: [] }) });
+      mockRunClaudeResult("setup-group-a", { stdout: setupOutput });
+      mockRunClaudeResult("setup-group-a-retry1", { stdout: setupOutput });
+      mockRunClaudeResult("setup-group-a-retry2", { stdout: setupOutput });
       mockRunClaudeResult("learner", { stdout: "" });
 
-      // Make executeSetupCommands fail
+      // Make executeSetupCommands fail on ALL attempts
       const { executeSetupCommands } = await import("../src/stages/setup-writer.js");
-      vi.mocked(executeSetupCommands).mockReturnValueOnce({ success: false, error: "psql: connection refused" });
+      vi.mocked(executeSetupCommands)
+        .mockReturnValueOnce({ success: false, error: "psql: LIMIT not valid" })
+        .mockReturnValueOnce({ success: false, error: "psql: LIMIT not valid" })
+        .mockReturnValueOnce({ success: false, error: "psql: LIMIT not valid" });
 
       const { callbacks } = makeCallbacks();
       const { runPipeline } = await import("../src/orchestrator.js");
@@ -330,6 +336,90 @@ describe("orchestrator", () => {
       const setupFailed = result.verdicts!.verdicts.filter(v => v.verdict === "setup_failed");
       expect(setupFailed.length).toBe(1);
       expect(setupFailed[0].ac_id).toBe("ac1");
+      expect(setupFailed[0].reasoning).toContain("3 attempts");
+    });
+
+    it("retries setup and succeeds on second attempt after SQL error", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      const acsWithSetup: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: "trial user exists", acs: [{ id: "ac1", description: "Check" }] }],
+        skipped: [],
+      };
+      const planWithSetup: PlannerOutput = {
+        criteria: [{ id: "ac1", group: "group-a", description: "Check", url: "/a", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 }],
+      };
+      const setupOutput = JSON.stringify({ group_id: "group-a", condition: "trial user exists", setup_commands: ["psql -c 'UPDATE ...'"], teardown_commands: [] });
+      const browseOutput = JSON.stringify({ ac_id: "ac1", observed: "Banner visible", screenshots: [], commands_run: [] });
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(acsWithSetup) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(planWithSetup) });
+      mockRunClaudeResult("setup-group-a", { stdout: setupOutput });
+      mockRunClaudeResult("setup-group-a-retry1", { stdout: setupOutput });
+      mockRunClaudeResult("browse-agent-ac1", { stdout: browseOutput });
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [{ ac_id: "ac1", verdict: "pass", confidence: "high", reasoning: "Banner visible" }] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      // Fail first attempt, succeed on retry
+      const { executeSetupCommands } = await import("../src/stages/setup-writer.js");
+      vi.mocked(executeSetupCommands)
+        .mockReturnValueOnce({ success: false, error: "psql: syntax error at LIMIT" })
+        .mockReturnValueOnce({ success: true });
+
+      const { callbacks, logs } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      const result = await runPipeline(specPath, verifyDir, callbacks);
+
+      // Should NOT have setup_failed — retry succeeded
+      const setupFailed = result.verdicts!.verdicts.filter(v => v.verdict === "setup_failed");
+      expect(setupFailed.length).toBe(0);
+
+      // Should see retry log message
+      expect(logs.some(l => l.includes("retrying"))).toBe(true);
+
+      // The retry stage should have been called
+      const retryCalls = runClaudeCalls.filter(c => c.stage === "setup-group-a-retry1");
+      expect(retryCalls.length).toBe(1);
+    });
+
+    it("retries setup on parse failure with distinct prompt", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      const acsWithSetup: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: "trial user exists", acs: [{ id: "ac1", description: "Check" }] }],
+        skipped: [],
+      };
+      const planWithSetup: PlannerOutput = {
+        criteria: [{ id: "ac1", group: "group-a", description: "Check", url: "/a", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 }],
+      };
+      const goodSetupOutput = JSON.stringify({ group_id: "group-a", condition: "trial user exists", setup_commands: ["psql -c 'UPDATE ...'"], teardown_commands: [] });
+      const browseOutput = JSON.stringify({ ac_id: "ac1", observed: "Banner visible", screenshots: [], commands_run: [] });
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(acsWithSetup) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(planWithSetup) });
+      // First attempt: LLM returns garbage, not parseable JSON
+      mockRunClaudeResult("setup-group-a", { stdout: "Here is the setup SQL: ..." });
+      // Retry: returns valid JSON
+      mockRunClaudeResult("setup-group-a-retry1", { stdout: goodSetupOutput });
+      mockRunClaudeResult("browse-agent-ac1", { stdout: browseOutput });
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [{ ac_id: "ac1", verdict: "pass", confidence: "high", reasoning: "OK" }] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { executeSetupCommands } = await import("../src/stages/setup-writer.js");
+      vi.mocked(executeSetupCommands).mockReturnValueOnce({ success: true });
+
+      const { callbacks, logs } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      const result = await runPipeline(specPath, verifyDir, callbacks);
+
+      // Should NOT have setup_failed — retry succeeded
+      const setupFailed = result.verdicts!.verdicts.filter(v => v.verdict === "setup_failed");
+      expect(setupFailed.length).toBe(0);
+
+      // Parse error retry log
+      expect(logs.some(l => l.includes("parse error"))).toBe(true);
     });
   });
 
@@ -485,6 +575,144 @@ describe("orchestrator", () => {
 
       const verdicts = JSON.parse(readFileSync(join(result.runDir, "verdicts.json"), "utf-8"));
       expect(verdicts.verdicts.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("nav_failure retry", () => {
+    const NAV_FAILURE_BROWSE_RESULT = {
+      ac_id: "ac1",
+      nav_failure: {
+        failed_step: "click [data-testid=event-type-options-1159]",
+        error: "Operation timed out: click: Timeout 5000ms exceeded.",
+        page_snapshot: "Tabs: [Personal] [Seeded Team]\nEvent types: 30 min meeting",
+      },
+      screenshots: ["nav-failure.png"],
+      commands_run: ["goto http://localhost:3000/event-types", "click [data-testid=event-type-options-1159]"],
+    };
+
+    const REPLAN_OUTPUT = {
+      revised_steps: [
+        "Click the 'Seeded Team' tab",
+        "Wait for page load",
+        "Click [data-testid=event-type-options-1159]",
+      ],
+    };
+
+    it("replans and retries browse agent on nav_failure", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      const singleAcs: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: null, acs: [{ id: "ac1", description: "Check managed event" }] }],
+        skipped: [],
+      };
+      const singlePlan: PlannerOutput = {
+        criteria: [{ id: "ac1", group: "group-a", description: "Check managed event", url: "/event-types", steps: ["Navigate", "Click kebab"], screenshot_at: [], timeout_seconds: 90 }],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(singleAcs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(singlePlan) });
+      mockRunClaudeResult("browse-agent-ac1", { stdout: JSON.stringify(NAV_FAILURE_BROWSE_RESULT) });
+      mockRunClaudeResult("replan-ac1", { stdout: JSON.stringify(REPLAN_OUTPUT) });
+      mockRunClaudeResult("browse-agent-ac1-retry", { stdout: JSON.stringify({ ac_id: "ac1", observed: "Duplicate dialog visible", screenshots: ["success.png"], commands_run: ["goto ..."] }) });
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [{ ac_id: "ac1", verdict: "pass", confidence: "high", reasoning: "OK" }] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks, logs } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      const result = await runPipeline(specPath, verifyDir, callbacks);
+
+      const replanCalls = runClaudeCalls.filter(c => c.stage === "replan-ac1");
+      expect(replanCalls.length).toBe(1);
+      expect(replanCalls[0].timeoutMs).toBe(30_000);
+
+      const retryCalls = runClaudeCalls.filter(c => c.stage === "browse-agent-ac1-retry");
+      expect(retryCalls.length).toBe(1);
+
+      expect(logs.some(l => l.includes("nav_failure") && l.includes("replanning"))).toBe(true);
+
+      const passVerdicts = result.verdicts!.verdicts.filter(v => v.verdict === "pass");
+      expect(passVerdicts.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("records fail verdict when replan returns null revised_steps", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      const singleAcs: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: null, acs: [{ id: "ac1", description: "Check" }] }],
+        skipped: [],
+      };
+      const singlePlan: PlannerOutput = {
+        criteria: [{ id: "ac1", group: "group-a", description: "Check", url: "/a", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 }],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(singleAcs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(singlePlan) });
+      mockRunClaudeResult("browse-agent-ac1", { stdout: JSON.stringify(NAV_FAILURE_BROWSE_RESULT) });
+      mockRunClaudeResult("replan-ac1", { stdout: JSON.stringify({ revised_steps: null }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      await runPipeline(specPath, verifyDir, callbacks);
+
+      const retryCalls = runClaudeCalls.filter(c => c.stage === "browse-agent-ac1-retry");
+      expect(retryCalls.length).toBe(0);
+    });
+
+    it("skips replan when replan prompt times out", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      const singleAcs: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: null, acs: [{ id: "ac1", description: "Check" }] }],
+        skipped: [],
+      };
+      const singlePlan: PlannerOutput = {
+        criteria: [{ id: "ac1", group: "group-a", description: "Check", url: "/a", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 }],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(singleAcs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(singlePlan) });
+      mockRunClaudeResult("browse-agent-ac1", { stdout: JSON.stringify(NAV_FAILURE_BROWSE_RESULT) });
+      mockRunClaudeResult("replan-ac1", { stdout: "", timedOut: true });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      await runPipeline(specPath, verifyDir, callbacks);
+
+      const retryCalls = runClaudeCalls.filter(c => c.stage === "browse-agent-ac1-retry");
+      expect(retryCalls.length).toBe(0);
+    });
+
+    it("does not replan a second time if retry also produces nav_failure", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      const singleAcs: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: null, acs: [{ id: "ac1", description: "Check" }] }],
+        skipped: [],
+      };
+      const singlePlan: PlannerOutput = {
+        criteria: [{ id: "ac1", group: "group-a", description: "Check", url: "/a", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 }],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(singleAcs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(singlePlan) });
+      mockRunClaudeResult("browse-agent-ac1", { stdout: JSON.stringify(NAV_FAILURE_BROWSE_RESULT) });
+      mockRunClaudeResult("replan-ac1", { stdout: JSON.stringify(REPLAN_OUTPUT) });
+      mockRunClaudeResult("browse-agent-ac1-retry", { stdout: JSON.stringify(NAV_FAILURE_BROWSE_RESULT) });
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [{ ac_id: "ac1", verdict: "fail", confidence: "high", reasoning: "Element still not found after replan" }] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      await runPipeline(specPath, verifyDir, callbacks);
+
+      const replanCalls = runClaudeCalls.filter(c => c.stage.startsWith("replan-"));
+      expect(replanCalls.length).toBe(1);
     });
   });
 });
