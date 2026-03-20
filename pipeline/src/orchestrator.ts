@@ -259,6 +259,9 @@ export async function runPipeline(
       }
     }
 
+    // Nav hints: accumulated from successful replans, applied to subsequent ACs
+    const navHints: NavHint[] = [];
+
     // Run browse agents sequentially within group
     for (const ac of groupAcs) {
       if (abortController.signal.aborted) {
@@ -271,7 +274,12 @@ export async function runPipeline(
       const evidenceDir = join(runDir, "evidence", ac.id);
       mkdirSync(evidenceDir, { recursive: true });
 
-      const agentPrompt = buildBrowseAgentPrompt(ac, {
+      // Apply nav hints from earlier ACs in this group
+      const enrichedAc = navHints.length > 0
+        ? { ...ac, steps: spliceNavHints(ac.steps, ac.url, navHints) }
+        : ac;
+
+      const agentPrompt = buildBrowseAgentPrompt(enrichedAc, {
         baseUrl: config.baseUrl, browseBin, evidenceDir,
       });
       const agentResult = await runClaude({
@@ -293,6 +301,7 @@ export async function runPipeline(
 
       // Nav failure → replan → retry (max 1 attempt)
       if (browseResult?.nav_failure) {
+        const failedStep = browseResult.nav_failure.failed_step;
         callbacks.onLog(`  ${ac.id}: nav_failure — replanning...`);
         progress.update(ac.id, "running", "replanning");
 
@@ -302,12 +311,12 @@ export async function runPipeline(
           ac_id: ac.id,
           description: ac.description,
           original_steps: ac.steps,
-          failed_step: browseResult.nav_failure.failed_step,
+          failed_step: failedStep,
           error: browseResult.nav_failure.error,
           page_snapshot: browseResult.nav_failure.page_snapshot,
         }));
 
-        // Call replan prompt (lightweight, 30s timeout, minimal permissions)
+        // Call replan prompt (lightweight, 45s timeout, minimal permissions)
         const replanResult = await runClaude({
           prompt: buildReplanPrompt(replanInputPath),
           model: "sonnet", timeoutMs: 45_000, effort: "low",
@@ -341,7 +350,25 @@ export async function runPipeline(
 
           const retryBrowse = parseBrowseResult(retryResult.stdout);
           if (retryBrowse) {
-            browseResult = retryBrowse; // Use retry result — written to evidenceDir below
+            browseResult = retryBrowse;
+
+            // Save nav hint ONLY if retry succeeded (no nav_failure on retry)
+            if (!retryBrowse.nav_failure) {
+              // Extract nav steps: everything in revised_steps before the first
+              // step that also appears in the original ac.steps
+              const origSet = new Set(ac.steps.map(s => s.toLowerCase()));
+              const firstOrigIdx = replanOutput.revised_steps.findIndex(
+                s => origSet.has(s.toLowerCase())
+              );
+              const navSteps = firstOrigIdx > 0
+                ? replanOutput.revised_steps.slice(0, firstOrigIdx)
+                : [];
+
+              if (navSteps.length > 0) {
+                navHints.push({ url: ac.url, steps: navSteps });
+                callbacks.onLog(`  ${ac.id}: saved ${navSteps.length} nav hint(s) for ${ac.url}`);
+              }
+            }
           }
         }
       }
