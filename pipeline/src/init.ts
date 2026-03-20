@@ -32,7 +32,7 @@ export function checkSpecFile(specPath: string): CheckResult {
 
 /**
  * Replay saved login steps from config.json.
- * Restarts the browse daemon first to guarantee a clean cookie jar.
+ * Caller must ensure browse daemon is running (via startDaemon or runPreflight).
  * No LLM, no regex — pure mechanical replay of steps discovered during /verify-setup.
  */
 export function loginWithCredentials(config: VerifyConfig, projectRoot?: string): CheckResult {
@@ -45,9 +45,6 @@ export function loginWithCredentials(config: VerifyConfig, projectRoot?: string)
   const { email, password, loginSteps } = config.auth;
 
   try {
-    // Restart daemon — clean slate, no stale cookies from prior sessions
-    execFileSync(bin, ["restart"], { timeout: 10_000, stdio: "ignore", ...opts });
-
     for (const step of loginSteps) {
       switch (step.action) {
         case "goto": {
@@ -74,6 +71,9 @@ export function loginWithCredentials(config: VerifyConfig, projectRoot?: string)
         }
       }
     }
+
+    // Wait for the final action (usually a click/submit) to complete auth + redirect
+    execFileSync("sleep", ["3"], { timeout: 5_000, stdio: "ignore" });
 
     return verifyAuthState(config.baseUrl, bin, opts);
   } catch (err: unknown) {
