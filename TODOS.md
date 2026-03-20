@@ -4,6 +4,20 @@ Deferred work captured from plan reviews. Each item includes enough context to p
 
 ---
 
+## P1 — Upstream: gstack browse stop hangs ~30s
+
+**What:** `browse stop` and `browse restart` hang for ~30 seconds when the daemon won't shut down cleanly, then time out. This causes orphaned daemon accumulation.
+
+**Why:** This is the root cause of the ETIMEDOUT errors in verify-login. The verify pipeline works around it by not calling stop/restart, but the underlying browse bug remains. Orphaned daemons accumulate over time and compete for the port.
+
+**Context:** Reproduced consistently: `time ~/.cache/verify/gstack/browse/dist/browse stop` → 31s, exit 1, "The operation timed out". This happens when multiple browse daemons are running (common when multiple Claude sessions use browse). The `startDaemon` function in `browse.ts` also calls `stop` and is affected. File upstream on gstack.
+
+**Depends on:** Nothing — this is an upstream gstack issue.
+
+**Effort:** XS human (file issue) → XS with CC+gstack
+
+---
+
 ## P2 — Demo PR auto-close
 
 **What:** After a user's first real (non-demo) PR gets a successful review, automatically close the `opslane/demo` PR with a note.
@@ -57,6 +71,20 @@ Deferred work captured from plan reviews. Each item includes enough context to p
 **Context:** At launch scale this is not urgent — `claimDemoPrSlot` already prevents the worst outcome (duplicate PRs). Rate limiting becomes relevant when the product gets wider adoption. Implementation: use a simple in-process sliding window (e.g., `hono-rate-limiter` or a lightweight Map-based counter) keyed on IP or installation_id. For `GET /auth/status`, 30 req/min per IP is reasonable. For `POST /auth/installed`, 5 req/min per installation_id.
 
 **Depends on:** Task 3 (POST /auth/installed, GET /auth/status) — must be shipped first.
+
+**Effort:** S human → XS with CC+gstack
+
+---
+
+## P2 — Auto-extract seed credentials during index-app
+
+**What:** During `index-app`, scan seed files for email/password pairs and store them in `app.json` as `seed_accounts`. `/verify-setup` could then offer these as defaults instead of asking the user.
+
+**Why:** Currently users manually provide credentials during `/verify-setup`. Most apps with seed data already have test accounts defined in their seed files (e.g., `prisma.user.create({ data: { email: 'admin@example.com', password: 'test123' } })`). Auto-extraction would make setup nearly zero-input.
+
+**Context:** `seed-extractor.ts` already scans seed files for IDs (CUIDs/UUIDs). Extending it to capture email+password pairs near `user.create`/`user.upsert` calls would follow the same pattern. Passwords in seed files are usually plaintext (pre-hashing). Store as `AppIndex.seed_accounts: Array<{email: string, password: string, role?: string}>`. The setup skill would read these and pre-fill the credential prompt.
+
+**Depends on:** Login recipe auth plan (docs/plans/2026-03-20-login-recipe-auth.md) must ship first.
 
 **Effort:** S human → XS with CC+gstack
 
