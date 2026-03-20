@@ -89,6 +89,36 @@ describe("parseBrowseResult", () => {
   it("returns null when observed is missing", () => {
     expect(parseBrowseResult('{"ac_id": "ac1"}')).toBeNull();
   });
+
+  it("parses nav_failure result", () => {
+    const output = JSON.stringify({
+      ac_id: "ac1",
+      nav_failure: {
+        failed_step: "click [data-testid=event-type-options-1159]",
+        error: "Operation timed out: click: Timeout 5000ms exceeded.",
+        page_snapshot: "Tabs: [Personal] [Seeded Team]\nEvent types: 30 min meeting",
+      },
+      screenshots: ["nav-failure.png"],
+      commands_run: ["goto http://localhost:3000/event-types", "click [data-testid=event-type-options-1159]"],
+    });
+    const result = parseBrowseResult(output);
+    expect(result).not.toBeNull();
+    expect(result!.ac_id).toBe("ac1");
+    expect(result!.nav_failure).toBeDefined();
+    expect(result!.nav_failure!.failed_step).toBe("click [data-testid=event-type-options-1159]");
+    expect(result!.nav_failure!.page_snapshot).toContain("Seeded Team");
+    expect(result!.observed).toBe("Nav failure: could not find [data-testid=event-type-options-1159]");
+  });
+
+  it("parses normal result without nav_failure", () => {
+    const output = JSON.stringify({
+      ac_id: "ac1", observed: "Banner visible",
+      screenshots: ["s.png"], commands_run: ["goto ..."],
+    });
+    const result = parseBrowseResult(output);
+    expect(result).not.toBeNull();
+    expect(result!.nav_failure).toBeUndefined();
+  });
 });
 
 describe("auth failure fixture integration", () => {

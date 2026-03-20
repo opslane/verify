@@ -46,7 +46,19 @@ export function buildBrowseAgentPrompt(ac: PlannedAC, opts: BrowseAgentOpts): st
 
 export function parseBrowseResult(raw: string): BrowseResult | null {
   const parsed = parseJsonOutput<BrowseResult>(raw);
-  if (!parsed || typeof parsed.observed !== "string") return null;
+  if (!parsed) return null;
+
+  // Nav failure result: no observed, but has nav_failure
+  if (parsed.nav_failure && typeof parsed.nav_failure.failed_step === "string") {
+    // Synthesize an observed string for downstream consumers (judge, etc.)
+    if (typeof parsed.observed !== "string" || !parsed.observed) {
+      const selector = parsed.nav_failure.failed_step.replace(/^(click|fill)\s+/, "");
+      parsed.observed = `Nav failure: could not find ${selector}`;
+    }
+  } else if (typeof parsed.observed !== "string") {
+    return null;
+  }
+
   // Ensure arrays default to empty if LLM omits them
   if (!Array.isArray(parsed.screenshots)) parsed.screenshots = [];
   if (!Array.isArray(parsed.commands_run)) parsed.commands_run = [];
