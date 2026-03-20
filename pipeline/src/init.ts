@@ -32,16 +32,16 @@ export function checkSpecFile(specPath: string): CheckResult {
 
 /**
  * Replay saved login steps from config.json.
- * Caller must ensure browse daemon is running (via startDaemon or runPreflight).
+ * Caller must ensure no prior about:blank navigation — it breaks cookie persistence.
+ * The first goto in login steps starts the daemon implicitly if needed.
  * No LLM, no regex — pure mechanical replay of steps discovered during /verify-setup.
  */
-export function loginWithCredentials(config: VerifyConfig, projectRoot?: string): CheckResult {
+export function loginWithCredentials(config: VerifyConfig, _projectRoot?: string): CheckResult {
   if (!config.auth || !config.auth.email || !config.auth.password || !config.auth.loginSteps?.length) {
     return { ok: false, error: "No auth config — run /verify-setup to configure login" };
   }
 
   const bin = resolveBrowseBin();
-  const opts = projectRoot ? { cwd: projectRoot } : {};
   const { email, password, loginSteps } = config.auth;
 
   try {
@@ -51,18 +51,18 @@ export function loginWithCredentials(config: VerifyConfig, projectRoot?: string)
           const url = step.url.startsWith("http://") || step.url.startsWith("https://")
             ? step.url
             : `${config.baseUrl}${step.url}`;
-          execFileSync(bin, ["goto", url], { timeout: 10_000, stdio: "ignore", ...opts });
+          execFileSync(bin, ["goto", url], { timeout: 10_000, stdio: "ignore" });
           break;
         }
         case "fill": {
           const value = step.value
             .replaceAll("{{email}}", email)
             .replaceAll("{{password}}", password);
-          execFileSync(bin, ["fill", step.selector, value], { timeout: 5_000, stdio: "ignore", ...opts });
+          execFileSync(bin, ["fill", step.selector, value], { timeout: 5_000, stdio: "ignore" });
           break;
         }
         case "click":
-          execFileSync(bin, ["click", step.selector], { timeout: 5_000, stdio: "ignore", ...opts });
+          execFileSync(bin, ["click", step.selector], { timeout: 5_000, stdio: "ignore" });
           break;
         case "sleep": {
           const seconds = Math.min(Math.ceil(step.ms / 1000), 30); // cap at 30s to prevent hangs
@@ -72,7 +72,11 @@ export function loginWithCredentials(config: VerifyConfig, projectRoot?: string)
       }
     }
 
-    return waitForAuth(config.baseUrl, bin, opts);
+    // Wait for the click/submit to complete auth + server-side redirect before polling.
+    // Without this delay, the first poll's goto races with the auth redirect and sees the login page.
+    execFileSync("sleep", ["3"], { timeout: 5_000, stdio: "ignore" });
+
+    return waitForAuth(config.baseUrl, bin);
   } catch (err: unknown) {
     return { ok: false, error: `Login replay failed: ${err instanceof Error ? err.message : String(err)}. Re-run /verify-setup.` };
   }
@@ -85,7 +89,6 @@ export function loginWithCredentials(config: VerifyConfig, projectRoot?: string)
 function waitForAuth(
   baseUrl: string,
   bin: string,
-  opts: { cwd?: string } = {},
   maxWait = 10_000,
   interval = 500,
 ): CheckResult {
@@ -93,8 +96,8 @@ function waitForAuth(
 
   while (Date.now() < deadline) {
     try {
-      execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore", ...opts });
-      const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8", ...opts });
+      execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore" });
+      const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
 
       const hasPasswordField = /\[textbox\].*password|\[text\].*password/i.test(snapshot);
       if (!hasPasswordField) {
@@ -127,22 +130,21 @@ export async function runPreflight(
   const server = await checkDevServer(baseUrl);
   if (!server.ok) errors.push(server.error!);
 
-  // Ensure browse daemon is running
-  const daemon = checkBrowseDaemon();
-  if (!daemon.ok) {
-    try {
-      await startDaemon({});
-    } catch {
-      errors.push(daemon.error!);
-      return { ok: errors.length === 0, errors };
-    }
-  }
-
-  // Login with credentials — must use same cwd as browse agents (projectRoot)
-  const projectRoot = verifyDir ? resolve(verifyDir, "..") : undefined;
+  // When auth is configured, skip startDaemon — its stop/goto about:blank breaks
+  // cookie persistence. The first goto in login steps starts the daemon implicitly.
   if (config?.auth) {
-    const auth = loginWithCredentials(config, projectRoot);
+    const auth = loginWithCredentials(config);
     if (!auth.ok) errors.push(auth.error!);
+  } else {
+    const daemon = checkBrowseDaemon();
+    if (!daemon.ok) {
+      try {
+        startDaemon({});
+      } catch {
+        errors.push(daemon.error!);
+        return { ok: errors.length === 0, errors };
+      }
+    }
   }
 
   return { ok: errors.length === 0, errors };

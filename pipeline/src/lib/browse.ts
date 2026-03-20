@@ -19,8 +19,10 @@ export function startDaemon(opts: { videoDir?: string }): void {
   const env = { ...process.env };
   if (opts.videoDir) env.BROWSE_VIDEO_DIR = opts.videoDir;
 
+  // NOTE: browse status/stop/goto about:blank all break cookie persistence for subsequent
+  // navigations. Only call startDaemon for non-auth flows (browse agents, QA).
+  // For login flows, skip startDaemon — the first goto in login steps starts the daemon.
   try { execFileSync(bin, ["stop"], { env, timeout: 5000, stdio: "ignore" }); } catch { /* wasn't running */ }
-  // goto about:blank implicitly starts the daemon if not running
   execFileSync(bin, ["goto", "about:blank"], { env, timeout: 10_000, stdio: "ignore" });
 }
 

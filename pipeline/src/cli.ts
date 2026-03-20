@@ -285,7 +285,7 @@ if (command === "run") {
       const acId = values.ac;
       if (!acId) { console.error("--ac is required for browse-agent"); process.exit(1); }
       const planPath = join(runDir, "plan.json");
-      const plan = JSON.parse(readFileSync(planPath, "utf-8")) as { criteria: Array<{ id: string; group: string; description: string; url: string; steps: string[]; screenshot_at: string[]; timeout_seconds: number }> };
+      const plan = JSON.parse(readFileSync(planPath, "utf-8")) as { criteria: Array<{ id: string; group: string; description: string; url: string; steps: string[]; screenshot_at: string[] }> };
       const ac = plan.criteria.find(c => c.id === acId);
       if (!ac) { console.error(`AC ${acId} not found in plan.json`); process.exit(1); }
       const { resolveBrowseBin } = await import("./lib/browse.js");
@@ -297,7 +297,8 @@ if (command === "run") {
         browseBin: resolveBrowseBin(),
         evidenceDir,
       });
-      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: (ac.timeout_seconds ?? 90) * 1000, stage: `browse-agent-${acId}`, runDir, settingSources: "", ...permissions });
+      const { computeTimeoutMs } = await import("./orchestrator.js");
+      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: computeTimeoutMs(ac.steps), stage: `browse-agent-${acId}`, runDir, settingSources: "", ...permissions });
       const parsed = parseBrowseResult(result.stdout);
       if (parsed) {
         writeFileSync(join(evidenceDir, "result.json"), JSON.stringify(parsed, null, 2));
@@ -382,9 +383,9 @@ if (command === "run") {
         console.error("No auth config — run /verify-setup to configure login");
         process.exit(1);
       }
-      const { startDaemon } = await import("./lib/browse.js");
-      startDaemon({});
-      const loginResult = loginWithCredentials(config, projectRoot);
+      // No startDaemon needed — the first goto in login steps starts the daemon implicitly.
+      // Calling startDaemon/healthCheck/goto about:blank before login breaks cookie persistence.
+      const loginResult = loginWithCredentials(config);
       if (loginResult.ok) {
         console.log("Login recipe verified — authentication succeeded.");
       } else {
