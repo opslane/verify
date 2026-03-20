@@ -74,11 +74,18 @@ export interface SetupCommands {
 
 // ── Browse Agent output ─────────────────────────────────────────────────────
 
+export interface NavFailure {
+  failed_step: string;
+  error: string;
+  page_snapshot: string;
+}
+
 export interface BrowseResult {
   ac_id: string;
   observed: string;
   screenshots: string[];                // filenames relative to evidence dir
   commands_run: string[];
+  nav_failure?: NavFailure;             // present when element not found on current view
 }
 
 // ── Judge output (with confidence scoring) ──────────────────────────────────
@@ -116,6 +123,7 @@ export interface AppIndex {
     table_name: string;                 // actual Postgres table name (from @@map, or model name)
     enums: Record<string, string[]>;
     source: string;
+    manual_id_columns: string[];        // @id columns with no @default — need explicit IDs in SQL
   }>;
   fixtures: Record<string, {
     description: string;
@@ -126,6 +134,14 @@ export interface AppIndex {
   feature_flags: string[];
   seed_ids: Record<string, string[]>;   // modelName → array of known seed record IDs
   json_type_annotations: Record<string, Record<string, string>>;  // model → { field → TypeName }
+}
+
+// ── Stage progress (stream-json observability) ──────────────────────────────
+
+export interface StageProgressEvent {
+  stage: string;
+  event: "tool_call" | "output" | "heartbeat";
+  detail?: string;
 }
 
 // ── Run Claude helper ───────────────────────────────────────────────────────
@@ -139,6 +155,7 @@ export interface RunClaudeOptions {
   cwd?: string;                         // working directory for claude (target project root)
   dangerouslySkipPermissions?: boolean;
   allowedTools?: string[];              // e.g. ["Bash", "Read", "Glob", "Grep"]
+  onProgress?: (event: StageProgressEvent) => void;
 }
 
 export interface RunClaudeResult {
@@ -155,8 +172,9 @@ export interface RunClaudeResult {
 export const STAGE_PERMISSIONS: Record<string, Pick<RunClaudeOptions, "dangerouslySkipPermissions" | "allowedTools">> = {
   "ac-generator":  { dangerouslySkipPermissions: true },   // needs Read, Grep for spec + app.json
   "planner":       { dangerouslySkipPermissions: true },   // needs Read, Grep, Glob for full codebase
-  "setup-writer":  { allowedTools: ["Bash", "Read"] },      // Bash for psql, Read for app.json/schema.sql/learnings.md
+  "setup-writer":  { allowedTools: ["Bash"] },                  // Bash for psql queries + setup commands (schema injected in prompt)
   "browse-agent":  { allowedTools: ["Bash", "Read"] },      // Bash for browse CLI, Read for instructions.json
+  "browse-replan": { allowedTools: ["Read"] },              // reads replan-input.json only — DOM content is attacker-controllable
   "judge":         { allowedTools: ["Read"] },              // only reads evidence files
   "learner":       { dangerouslySkipPermissions: true },   // needs Read + Write for learnings.md
 };
