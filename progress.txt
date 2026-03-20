@@ -3,10 +3,12 @@
 # Plan: docs/plans/2026-03-20-login-recipe-auth.md
 
 ## Completed
-(none yet)
+- [x] Task 1: Add LoginStep type and update VerifyConfig.auth (commit: 0ae06f8)
+  - Files: pipeline/src/lib/types.ts, pipeline/src/init.ts, pipeline/test/config.test.ts
+  - LoginStep discriminated union, auth.method/loginUrl removed, loginWithCredentials stubbed
 
 ## Current
-Task 1: Add LoginStep type and update VerifyConfig.auth
+Task 2: Rewrite loginWithCredentials as a step replayer
 
 ## Remaining
 Task 2: Rewrite loginWithCredentials as a step replayer
