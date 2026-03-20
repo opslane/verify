@@ -1,6 +1,6 @@
 ---
 name: verify-setup
-description: One-time auth setup for /verify. Imports cookies from your real browser via gstack browse.
+description: One-time auth setup for /verify. Discovers login steps using seed credentials and saves a replayable recipe.
 ---
 
 # /verify-setup
@@ -12,7 +12,7 @@ Run once before using /verify on any app that requires authentication.
 ### 1. Add .verify/ to .gitignore
 
 ```bash
-for pattern in ".verify/evidence/" ".verify/prompts/" ".verify/report.json" ".verify/plan.json" ".verify/.spec_path" ".verify/browse.json" ".verify/report.html" ".verify/judge-prompt.txt" ".verify/progress.jsonl"; do
+for pattern in ".verify/config.json" ".verify/evidence/" ".verify/prompts/" ".verify/report.json" ".verify/plan.json" ".verify/.spec_path" ".verify/browse.json" ".verify/report.html" ".verify/judge-prompt.txt" ".verify/progress.jsonl"; do
   grep -qF "$pattern" .gitignore 2>/dev/null || echo "$pattern" >> .gitignore
 done
 echo "✓ .gitignore updated"
@@ -25,8 +25,7 @@ mkdir -p .verify
 if [ ! -f .verify/config.json ]; then
   cat > .verify/config.json << 'CONFIG'
 {
-  "baseUrl": "http://localhost:3000",
-  "specPath": null
+  "baseUrl": "http://localhost:3000"
 }
 CONFIG
 fi
@@ -55,42 +54,67 @@ BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
 curl -sf "$BASE_URL" > /dev/null 2>&1 || echo "⚠ Dev server not running at $BASE_URL. Start it before continuing."
 ```
 
-### 5. Import cookies from browser
+### 5. Collect seed credentials
 
 Ask the user:
-- "Which browser are you logged into your app with? (Chrome / Arc / Edge / Brave / Comet)"
-- "What domain should I import cookies for? (e.g. localhost)"
+- "What email and password can I use to log in? (These should be from your seed data)"
 
-Then import:
+Save credentials to config:
 ```bash
-$BROWSE_BIN cookie-import-browser BROWSER --domain DOMAIN
+jq --arg email "THEIR_EMAIL" --arg password "THEIR_PASSWORD" \
+  '.auth = { email: $email, password: $password, loginSteps: [] }' \
+  .verify/config.json > .verify/config.tmp && mv .verify/config.tmp .verify/config.json
 ```
 
-First time: a macOS Keychain dialog will appear. The user must click "Allow" or "Always Allow".
+### 6. Discover login steps
 
-### 6. Verify auth was captured
+Run the login agent to figure out how to log in. This uses an LLM to navigate the login form once and record the steps.
 
 ```bash
 BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
-$BROWSE_BIN goto "$BASE_URL"
-$BROWSE_BIN snapshot -i
+EMAIL=$(jq -r '.auth.email' .verify/config.json)
+PASSWORD=$(jq -r '.auth.password' .verify/config.json)
+BROWSE_BIN="${BROWSE_BIN:-$(cat ~/.cache/verify/browse-path 2>/dev/null || echo ~/.cache/verify/browse)}"
+
+cd "$(git rev-parse --show-toplevel)"
+
+npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts run-stage login-agent \
+  --verify-dir .verify \
+  --run-dir .verify/runs/setup-login \
+  --base-url "$BASE_URL" \
+  --email "$EMAIL" \
+  --password "$PASSWORD" \
+  --browse-bin "$BROWSE_BIN"
 ```
 
-Show the snapshot output to the user and ask: "Does this look like your app's authenticated page? (y/n)"
+If the login agent succeeds, it outputs login steps. The CLI automatically saves them to config.json.
 
-If yes:
-```
-✓ Setup complete. Run /verify before your next push.
+If it fails, show the error and ask the user to verify their credentials and dev server.
+
+### 7. Verify login recipe by replay
+
+Clear cookies and replay the saved steps mechanically to confirm they work:
+
+```bash
+BROWSE_BIN="${BROWSE_BIN:-$(cat ~/.cache/verify/browse-path 2>/dev/null || echo ~/.cache/verify/browse)}"
+
+npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts run-stage verify-login \
+  --verify-dir .verify
 ```
 
-If no:
+If replay succeeds:
 ```
-Auth may not have imported correctly. Make sure you're logged into DOMAIN in BROWSER, then try again.
+✓ Login recipe verified — /verify will authenticate automatically on every run.
 ```
 
-### 7. Index the application
+If replay fails:
+```
+✗ Login replay failed. Check the credentials and try again, or re-run /verify-setup.
+```
 
-After auth is confirmed, build the app index. This gives the pipeline correct column mappings, seed IDs, routes, and selectors.
+### 8. Index the application
+
+After auth is confirmed, build the app index.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
@@ -99,7 +123,7 @@ npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts index-app \
   --output .verify/app.json
 ```
 
-Show the summary to the user:
+Show the summary:
 
 ```bash
 echo "App index built:"
@@ -110,15 +134,3 @@ echo "  DB URL env: $(jq -r '.db_url_env // "not found"' .verify/app.json)"
 ```
 
 If the model count is 0, warn: "No Prisma schema found. Setup writer will have to discover column names from the codebase — this may cause SQL column name errors."
-
-### 8. Legacy MCP setup (fallback)
-
-If cookie import fails or the user prefers the old approach:
-
-```bash
-BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
-echo "Falling back to Playwright codegen. A browser will open — log in, then close it."
-npx playwright codegen --save-storage=.verify/auth.json "$BASE_URL"
-chmod 600 .verify/auth.json
-echo "✓ Auth saved. Use VERIFY_ENGINE=mcp when running /verify."
-```
