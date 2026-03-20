@@ -687,6 +687,174 @@ describe("orchestrator", () => {
       expect(retryCalls.length).toBe(0);
     });
 
+    it("passes nav hints from ac1 replan to ac2 (same URL, no replan needed)", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      // Two ACs in same group, same URL
+      const twoAcs: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: null, acs: [
+          { id: "ac1", description: "Check event type A" },
+          { id: "ac2", description: "Check event type B" },
+        ] }],
+        skipped: [],
+      };
+      const twoPlan: PlannerOutput = {
+        criteria: [
+          { id: "ac1", group: "group-a", description: "Check event type A", url: "/event-types", steps: ["Navigate to /event-types", "Wait for page load", "Click [data-testid=event-type-options-1159]"], screenshot_at: [], timeout_seconds: 90 },
+          { id: "ac2", group: "group-a", description: "Check event type B", url: "/event-types", steps: ["Navigate to /event-types", "Wait for page load", "Click [data-testid=event-type-options-1160]"], screenshot_at: [], timeout_seconds: 90 },
+        ],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(twoAcs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(twoPlan) });
+
+      // ac1: nav_failure → replan → retry succeeds
+      mockRunClaudeResult("browse-agent-ac1", { stdout: JSON.stringify(NAV_FAILURE_BROWSE_RESULT) });
+      mockRunClaudeResult("replan-ac1", { stdout: JSON.stringify(REPLAN_OUTPUT) });
+      mockRunClaudeResult("browse-agent-ac1-retry", { stdout: JSON.stringify({ ac_id: "ac1", observed: "Event type A visible", screenshots: ["s.png"], commands_run: ["goto ..."] }) });
+
+      // ac2: should succeed WITHOUT replan (got nav hints from ac1)
+      mockRunClaudeResult("browse-agent-ac2", { stdout: JSON.stringify({ ac_id: "ac2", observed: "Event type B visible", screenshots: ["s.png"], commands_run: ["goto ..."] }) });
+
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [
+        { ac_id: "ac1", verdict: "pass", confidence: "high", reasoning: "OK" },
+        { ac_id: "ac2", verdict: "pass", confidence: "high", reasoning: "OK" },
+      ] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks, logs } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      const result = await runPipeline(specPath, verifyDir, callbacks);
+
+      // ac1 should have triggered a replan
+      const replanCalls = runClaudeCalls.filter(c => c.stage === "replan-ac1");
+      expect(replanCalls.length).toBe(1);
+
+      // ac2 should NOT have triggered a replan
+      const replanAc2 = runClaudeCalls.filter(c => c.stage === "replan-ac2");
+      expect(replanAc2.length).toBe(0);
+
+      // Verify ac2's instructions.json contains the nav hint step from ac1's replan
+      const ac2EvidenceDir = runClaudeCalls.find(c => c.stage === "browse-agent-ac2");
+      expect(ac2EvidenceDir).toBeDefined();
+      // The instructions.json is written by buildBrowseAgentPrompt into evidenceDir
+      // Find ac2's evidence dir from the run dir
+      const runsDir = join(verifyDir, "runs");
+      const runDirs = require("node:fs").readdirSync(runsDir);
+      const runDir = join(runsDir, runDirs[0]);
+      const ac2Instructions = JSON.parse(readFileSync(join(runDir, "evidence", "ac2", "instructions.json"), "utf-8"));
+      // The enriched steps should include the nav hint "Click the 'Seeded Team' tab"
+      expect(ac2Instructions.steps.some((s: string) => s.includes("Seeded Team"))).toBe(true);
+
+      // Should log that hints were saved
+      expect(logs.some(l => l.includes("nav hint"))).toBe(true);
+    });
+
+    it("does not apply hints across different URLs", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      // Two ACs in same group, DIFFERENT URLs
+      const twoAcs: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: null, acs: [
+          { id: "ac1", description: "Check event types" },
+          { id: "ac2", description: "Check settings" },
+        ] }],
+        skipped: [],
+      };
+      const twoPlan: PlannerOutput = {
+        criteria: [
+          { id: "ac1", group: "group-a", description: "Check event types", url: "/event-types", steps: ["Navigate to /event-types", "Wait for page load", "Click [data-testid=event-type-options-1159]"], screenshot_at: [], timeout_seconds: 90 },
+          { id: "ac2", group: "group-a", description: "Check settings", url: "/settings", steps: ["Navigate to /settings", "Wait for page load", "Click [data-testid=billing-tab]"], screenshot_at: [], timeout_seconds: 90 },
+        ],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(twoAcs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(twoPlan) });
+
+      // ac1: nav_failure → replan → retry succeeds (saves hint for /event-types)
+      mockRunClaudeResult("browse-agent-ac1", { stdout: JSON.stringify(NAV_FAILURE_BROWSE_RESULT) });
+      mockRunClaudeResult("replan-ac1", { stdout: JSON.stringify(REPLAN_OUTPUT) });
+      mockRunClaudeResult("browse-agent-ac1-retry", { stdout: JSON.stringify({ ac_id: "ac1", observed: "OK", screenshots: ["s.png"], commands_run: ["goto ..."] }) });
+
+      // ac2: different URL — should NOT get /event-types hints
+      mockRunClaudeResult("browse-agent-ac2", { stdout: JSON.stringify({ ac_id: "ac2", observed: "Settings visible", screenshots: ["s.png"], commands_run: ["goto ..."] }) });
+
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [
+        { ac_id: "ac1", verdict: "pass", confidence: "high", reasoning: "OK" },
+        { ac_id: "ac2", verdict: "pass", confidence: "high", reasoning: "OK" },
+      ] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      await runPipeline(specPath, verifyDir, callbacks);
+
+      // Both should pass — no cross-contamination
+      // Verify ac2's instructions.json does NOT contain Seeded Team hint
+      const runsDir = join(verifyDir, "runs");
+      const runDirs = require("node:fs").readdirSync(runsDir);
+      const runDir = join(runsDir, runDirs[0]);
+      const ac2Instructions = JSON.parse(readFileSync(join(runDir, "evidence", "ac2", "instructions.json"), "utf-8"));
+      expect(ac2Instructions.steps.some((s: string) => s.includes("Seeded Team"))).toBe(false);
+
+      // ac2 should not have been replanned
+      const replanAc2 = runClaudeCalls.filter(c => c.stage === "replan-ac2");
+      expect(replanAc2.length).toBe(0);
+    });
+
+    it("does not save hints when retry also has nav_failure", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      // Two ACs — ac1's retry also fails with nav_failure, ac2 should get no hints
+      const twoAcs: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: null, acs: [
+          { id: "ac1", description: "Check A" },
+          { id: "ac2", description: "Check B" },
+        ] }],
+        skipped: [],
+      };
+      const twoPlan: PlannerOutput = {
+        criteria: [
+          { id: "ac1", group: "group-a", description: "Check A", url: "/event-types", steps: ["Navigate to /event-types", "Wait for page load", "Click [data-testid=event-type-options-1159]"], screenshot_at: [], timeout_seconds: 90 },
+          { id: "ac2", group: "group-a", description: "Check B", url: "/event-types", steps: ["Navigate to /event-types", "Wait for page load", "Click [data-testid=event-type-options-1160]"], screenshot_at: [], timeout_seconds: 90 },
+        ],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(twoAcs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(twoPlan) });
+
+      // ac1: nav_failure → replan → retry ALSO fails with nav_failure
+      mockRunClaudeResult("browse-agent-ac1", { stdout: JSON.stringify(NAV_FAILURE_BROWSE_RESULT) });
+      mockRunClaudeResult("replan-ac1", { stdout: JSON.stringify(REPLAN_OUTPUT) });
+      mockRunClaudeResult("browse-agent-ac1-retry", { stdout: JSON.stringify(NAV_FAILURE_BROWSE_RESULT) });
+
+      // ac2: should NOT receive any hints (ac1's retry failed)
+      mockRunClaudeResult("browse-agent-ac2", { stdout: JSON.stringify({ ac_id: "ac2", observed: "OK", screenshots: ["s.png"], commands_run: ["goto ..."] }) });
+
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [
+        { ac_id: "ac1", verdict: "fail", confidence: "high", reasoning: "Still broken" },
+        { ac_id: "ac2", verdict: "pass", confidence: "high", reasoning: "OK" },
+      ] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks, logs } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      await runPipeline(specPath, verifyDir, callbacks);
+
+      // No hints should have been saved (retry failed)
+      expect(logs.some(l => l.includes("nav hint"))).toBe(false);
+
+      // ac2's instructions.json should NOT contain Seeded Team hint
+      const runsDir = join(verifyDir, "runs");
+      const runDirs = require("node:fs").readdirSync(runsDir);
+      const runDir = join(runsDir, runDirs[0]);
+      const ac2Instructions = JSON.parse(readFileSync(join(runDir, "evidence", "ac2", "instructions.json"), "utf-8"));
+      expect(ac2Instructions.steps.some((s: string) => s.includes("Seeded Team"))).toBe(false);
+    });
+
     it("does not replan a second time if retry also produces nav_failure", async () => {
       const specPath = join(verifyDir, "spec.md");
       writeFileSync(specPath, "# Test spec");
