@@ -106,8 +106,12 @@ function waitForAuth(
       execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore" });
       const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
 
-      const hasPasswordField = /\[textbox\].*password|\[text\].*password/i.test(snapshot);
-      if (!hasPasswordField) {
+      // Detect login page: password field (by label or masked dots), or sign-in/log-in button
+      const isLoginPage =
+        /\[textbox\].*password|\[text\].*password/i.test(snapshot) ||
+        /\[textbox\]\s*"•+"/i.test(snapshot) ||
+        /\[button\]\s*"(Sign [Ii]n|Log [Ii]n)"/i.test(snapshot);
+      if (!isLoginPage) {
         return { ok: true };
       }
     } catch {

@@ -1,6 +1,7 @@
 // pipeline/src/orchestrator.ts — Wires all stages together into a single pipeline run
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import type {
   ACGeneratorOutput, PlannerOutput, JudgeOutput,
   ACVerdict, ProgressEvent, StageProgressEvent,
@@ -26,6 +27,15 @@ import { resolveBrowseBin, resetPage } from "./lib/browse.js";
 import { extractTableNames, snapshotTables, restoreSnapshot } from "./lib/db-snapshot.js";
 import { findAndRenameVideo } from "./lib/video.js";
 import { formatTerminalReport, formatTimingSummary } from "./report.js";
+
+const SECONDS_PER_STEP = 20;
+const MIN_TIMEOUT_S = 90;
+const MAX_TIMEOUT_S = 300;
+
+export function computeTimeoutMs(steps: string[]): number {
+  const seconds = Math.min(Math.max(steps.length * SECONDS_PER_STEP, MIN_TIMEOUT_S), MAX_TIMEOUT_S);
+  return seconds * 1000;
+}
 
 export interface OrchestratorCallbacks {
   /** Called after AC generation — return modified ACs or null to abort */
@@ -70,6 +80,15 @@ export async function runPipeline(
   if (!preflight.ok) {
     for (const err of preflight.errors) callbacks.onError(err);
     return { runDir, verdicts: null };
+  }
+
+  // Check daemon after preflight login
+  try {
+    const _bin = resolveBrowseBin();
+    const statusOut = execFileSync(_bin, ["status"], { timeout: 5_000, encoding: "utf-8" });
+    callbacks.onLog(`[debug] daemon after preflight: ${statusOut.trim().replace(/\n/g, " | ")}`);
+  } catch {
+    callbacks.onLog("[debug] daemon NOT running after preflight!");
   }
 
   // ── Stage 1: AC Generator ────────────────────────────────────────────
@@ -262,6 +281,14 @@ export async function runPipeline(
     // Nav hints: accumulated from successful replans, applied to subsequent ACs
     const navHints: NavHint[] = [];
 
+    // Check daemon health before browse agents — login cookies depend on the daemon surviving
+    try {
+      const statusOut = execFileSync(browseBin, ["status"], { timeout: 5_000, encoding: "utf-8" });
+      callbacks.onLog(`  [debug] daemon status before browse: ${statusOut.trim().replace(/\n/g, " | ")}`);
+    } catch {
+      callbacks.onLog("  [debug] daemon NOT running before browse agents — cookies will be lost!");
+    }
+
     // Run browse agents sequentially within group
     for (const ac of groupAcs) {
       if (abortController.signal.aborted) {
@@ -283,7 +310,7 @@ export async function runPipeline(
         baseUrl: config.baseUrl, browseBin, evidenceDir,
       });
       const agentResult = await runClaude({
-        prompt: agentPrompt, model: "sonnet", timeoutMs: Math.max(ac.timeout_seconds, 120) * 1000,
+        prompt: agentPrompt, model: "sonnet", timeoutMs: computeTimeoutMs(enrichedAc.steps),
         stage: `browse-agent-${ac.id}`, runDir, ...perms("browse-agent"),
       });
 
@@ -291,7 +318,7 @@ export async function runPipeline(
       findAndRenameVideo(evidenceDir);
 
       if (agentResult.timedOut) {
-        allVerdicts.push({ ac_id: ac.id, verdict: "timeout", confidence: "high", reasoning: `Timed out after ${ac.timeout_seconds}s` });
+        allVerdicts.push({ ac_id: ac.id, verdict: "timeout", confidence: "high", reasoning: `Timed out after ${computeTimeoutMs(enrichedAc.steps) / 1000}s` });
         progress.update(ac.id, "timeout");
         resetPage();
         continue;
@@ -335,14 +362,14 @@ export async function runPipeline(
           });
           const retryResult = await runClaude({
             prompt: retryPrompt, model: "sonnet",
-            timeoutMs: Math.max(ac.timeout_seconds, 120) * 1000,
+            timeoutMs: computeTimeoutMs(retryAc.steps),
             stage: `browse-agent-${ac.id}-retry`, runDir, ...perms("browse-agent"),
           });
 
           findAndRenameVideo(evidenceDir);
 
           if (retryResult.timedOut) {
-            allVerdicts.push({ ac_id: ac.id, verdict: "timeout", confidence: "high", reasoning: `Timed out after replan retry (${ac.timeout_seconds}s)` });
+            allVerdicts.push({ ac_id: ac.id, verdict: "timeout", confidence: "high", reasoning: `Timed out after replan retry (${computeTimeoutMs(retryAc.steps) / 1000}s)` });
             progress.update(ac.id, "timeout");
             resetPage();
             continue;
