@@ -59,6 +59,10 @@ export function loginWithCredentials(config: VerifyConfig, _projectRoot?: string
             ? step.url
             : `${config.baseUrl}${step.url}`;
           execFileSync(bin, ["goto", url], { timeout: 10_000, stdio: "ignore" });
+          // Wait for page load + React hydration before subsequent fill/click steps.
+          // Without this, fills hit native HTML inputs before React mounts event handlers,
+          // causing form submission to send stale/empty data.
+          execFileSync("sleep", ["2"], { timeout: 5_000, stdio: "ignore" });
           break;
         }
         case "fill": {
