@@ -356,3 +356,92 @@ Task 8: E2E validation on Formbricks (needs running instance)
 
 ### Status
 COMPLETE (Tasks 1-7) — 203 tests passing, typecheck clean
+
+---
+
+## setup-writer-retry (plan: docs/plans/2026-03-19-setup-writer-retry-loop.md)
+
+### Completed
+- [x] Task 1: SetupRetryContext type + buildSetupWriterRetryPrompt
+  - Files: pipeline/src/stages/setup-writer.ts, pipeline/test/setup-writer.test.ts
+  - 2 unit tests: exec_error prompt, parse_error prompt
+- [x] Task 2: Retry loop in orchestrator's executeGroup
+  - Files: pipeline/src/orchestrator.ts
+  - Max 3 attempts, re-snapshot between retries, abort on restore failure
+  - Timeouts: 90s first attempt, 60s retries
+- [x] Task 3: Update existing orchestrator test + add retry tests
+  - Files: pipeline/test/orchestrator.test.ts
+  - 3 tests: retry-exhaustion, retry-succeed, parse-error-retry
+- [x] Task 4: Reduce setup-writer timeout in cli.ts
+  - Files: pipeline/src/cli.ts
+  - 240s → 90s (setup-writer no longer explores codebase)
+
+### Status
+COMPLETE (Tasks 1-4) — 207 tests passing, typecheck clean
+
+---
+
+## prisma-manual-id (plan: docs/plans/2026-03-19-prisma-manual-id-detection.md)
+
+### Completed
+- [x] Task 1: Export PrismaModel, add manual_id_columns, write parser tests
+  - Files: pipeline/src/lib/prisma-parser.ts, pipeline/test/prisma-parser.test.ts
+  - Exported PrismaModel interface, 5 new tests
+- [x] Task 2: Wire manual_id_columns through AppIndex, fix types everywhere
+  - Files: types.ts, index-app.ts, cli.ts, app-index.json fixture, index-app.test.ts
+  - DRY: cli.ts uses ReturnType<typeof parsePrismaSchema> instead of inline type
+  - 2 new merge tests (eng review decision)
+- [x] Task 3: Update setup-writer prompts to reference manual_id_columns
+  - Files: setup-writer.txt, setup-writer-prisma.txt
+
+### Status
+COMPLETE (Tasks 1-3) — 214 tests passing, typecheck clean
+
+---
+
+## seed-data-dump (plan: docs/plans/2026-03-19-seed-data-dump.md)
+
+### Completed
+- [x] Task 1: Add dumpSeedData function and tests
+  - Files: pipeline/src/lib/index-app.ts, pipeline/test/index-app.test.ts
+  - Samples ALL data_model tables (not just seed_ids), psql -P columns=120 for truncation
+  - 3 new tests
+- [x] Task 2: Call dumpSeedData in index-app CLI command
+  - Files: pipeline/src/cli.ts
+  - Writes .verify/seed-data.txt after mergeIndexResults
+- [x] Task 3: Update setup-writer prompts to read seed-data.txt
+  - Files: setup-writer.txt, setup-writer-prisma.txt
+  - Both prompts now list seed-data.txt as required reading with "do NOT guess" instructions
+
+### Status
+COMPLETE (Tasks 1-3) — 217 tests passing, typecheck clean
+
+---
+
+## browse-agent-nav-retry (plan: docs/plans/2026-03-19-browse-agent-nav-retry.md)
+
+### Completed
+- [x] Task 1: NavFailure type + replan permissions (commit: 34aae03)
+  - Files: pipeline/src/lib/types.ts
+  - Added NavFailure interface, optional nav_failure on BrowseResult, browse-replan stage permissions
+- [x] Task 2: parseBrowseResult handles nav_failure (commit: 1df5f10)
+  - Files: pipeline/src/stages/browse-agent.ts, pipeline/test/browse-agent.test.ts
+  - Synthesizes observed string for downstream consumers, 2 new tests
+- [x] Task 3: Browse agent fail-fast prompt (commit: 1a85462)
+  - Files: pipeline/src/prompts/browse-agent.txt
+  - ELEMENT NOT FOUND protocol: stop on "Operation timed out", output nav_failure JSON
+- [x] Task 4: Replan prompt + parser (commit: cc03bdb)
+  - Files: pipeline/src/stages/browse-agent.ts, pipeline/src/prompts/browse-replan.txt, pipeline/test/browse-agent.test.ts
+  - buildReplanPrompt + parseReplanOutput in browse-agent.ts (not separate module), 6 new tests
+  - Empty revised_steps [] treated as null
+- [x] Task 5: Orchestrator nav_failure retry loop (commit: c588826)
+  - Files: pipeline/src/orchestrator.ts, pipeline/test/orchestrator.test.ts
+  - Detects nav_failure → calls replan (30s, Read-only perms) → retries browse agent once
+  - Timeout floor reduced 300s → 120s, 4 new tests
+- [x] Task 6: Learner Navigation section (commit: b71c525)
+  - Files: pipeline/src/stages/learner.ts, pipeline/src/prompts/learner.txt, pipeline/test/learner-validator.test.ts
+  - "Navigation" added to ALLOWED_SECTIONS, 2 new tests
+- [x] Task 7: Final verification — 231 tests passing, typecheck clean
+
+### Status
+COMPLETE — all 7 tasks done, 231 tests passing (14 new), typecheck clean
