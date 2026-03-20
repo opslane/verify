@@ -67,9 +67,11 @@ export function loginWithCredentials(config: VerifyConfig, projectRoot?: string)
         case "click":
           execFileSync(bin, ["click", step.selector], { timeout: 5_000, stdio: "ignore", ...opts });
           break;
-        case "sleep":
-          execFileSync("sleep", [String(Math.ceil(step.ms / 1000))], { timeout: step.ms + 2_000, stdio: "ignore" });
+        case "sleep": {
+          const seconds = Math.min(Math.ceil(step.ms / 1000), 30); // cap at 30s to prevent hangs
+          execFileSync("sleep", [String(seconds)], { timeout: seconds * 1000 + 2_000, stdio: "ignore" });
           break;
+        }
       }
     }
 
@@ -90,7 +92,7 @@ function verifyAuthState(baseUrl: string, bin: string, opts: { cwd?: string } = 
     const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8", ...opts });
 
     // Generic detection: if snapshot has a password-type input, we're on a login page
-    const hasPasswordField = /\[textbox\].*password|\[text\].*password/i.test(String(snapshot));
+    const hasPasswordField = /\[textbox\].*password|\[text\].*password/i.test(snapshot);
     if (hasPasswordField) {
       return { ok: false, error: "Login steps did not authenticate — still on login page. Re-run /verify-setup." };
     }
