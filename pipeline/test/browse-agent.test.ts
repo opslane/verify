@@ -1,10 +1,10 @@
 // pipeline/test/browse-agent.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { readFileSync, existsSync, rmSync } from "node:fs";
+import { readFileSync, existsSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { buildBrowseAgentPrompt, writeInstructionsFile, parseBrowseResult } from "../src/stages/browse-agent.js";
+import { buildBrowseAgentPrompt, writeInstructionsFile, parseBrowseResult, buildReplanPrompt, parseReplanOutput } from "../src/stages/browse-agent.js";
 import { isAuthFailure } from "../src/lib/types.js";
 import type { PlannedAC } from "../src/lib/types.js";
 
@@ -118,6 +118,67 @@ describe("parseBrowseResult", () => {
     const result = parseBrowseResult(output);
     expect(result).not.toBeNull();
     expect(result!.nav_failure).toBeUndefined();
+  });
+});
+
+describe("buildReplanPrompt", () => {
+  let tmpDir: string;
+
+  beforeEach(() => { tmpDir = join(tmpdir(), `verify-replan-${Date.now()}`); });
+  afterEach(() => { rmSync(tmpDir, { recursive: true, force: true }); });
+
+  it("substitutes replan input path into template", () => {
+    mkdirSync(tmpDir, { recursive: true });
+    const inputPath = join(tmpDir, "replan-input.json");
+    writeFileSync(inputPath, JSON.stringify({
+      ac_id: "ac2",
+      description: "Duplicate dialog for managed event type",
+      original_steps: ["Navigate to /event-types", "Click [data-testid=event-type-options-1159]"],
+      failed_step: "Click [data-testid=event-type-options-1159]",
+      error: "Operation timed out: click: Timeout 5000ms exceeded.",
+      page_snapshot: "Tabs: [Personal] [Seeded Team]",
+    }));
+    const prompt = buildReplanPrompt(inputPath);
+    expect(prompt).toContain(inputPath);
+    expect(prompt).not.toContain("{{");
+  });
+});
+
+describe("parseReplanOutput", () => {
+  it("parses revised steps", () => {
+    const output = JSON.stringify({
+      revised_steps: [
+        "Click the 'Seeded Team' tab",
+        "Wait for page load",
+        "Click [data-testid=event-type-options-1159]",
+      ],
+    });
+    const result = parseReplanOutput(output);
+    expect(result).not.toBeNull();
+    expect(result!.revised_steps).toHaveLength(3);
+    expect(result!.revised_steps![0]).toContain("Seeded Team");
+  });
+
+  it("parses null revised_steps (element genuinely missing)", () => {
+    const output = JSON.stringify({ revised_steps: null });
+    const result = parseReplanOutput(output);
+    expect(result).not.toBeNull();
+    expect(result!.revised_steps).toBeNull();
+  });
+
+  it("treats empty revised_steps array as null", () => {
+    const output = JSON.stringify({ revised_steps: [] });
+    const result = parseReplanOutput(output);
+    expect(result).not.toBeNull();
+    expect(result!.revised_steps).toBeNull();
+  });
+
+  it("returns null for unparseable output", () => {
+    expect(parseReplanOutput("garbage")).toBeNull();
+  });
+
+  it("returns null for empty output", () => {
+    expect(parseReplanOutput("")).toBeNull();
   });
 });
 

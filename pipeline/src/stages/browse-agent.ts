@@ -64,3 +64,26 @@ export function parseBrowseResult(raw: string): BrowseResult | null {
   if (!Array.isArray(parsed.commands_run)) parsed.commands_run = [];
   return parsed;
 }
+
+// ── Replan (nav failure recovery) ──────────────────────────────────────────
+
+export interface ReplanOutput {
+  revised_steps: string[] | null;
+}
+
+export function buildReplanPrompt(replanInputPath: string): string {
+  const template = readFileSync(join(__dirname, "../prompts/browse-replan.txt"), "utf-8");
+  return template.replaceAll("{{replanInputPath}}", replanInputPath);
+}
+
+export function parseReplanOutput(raw: string): ReplanOutput | null {
+  const parsed = parseJsonOutput<ReplanOutput>(raw);
+  if (!parsed) return null;
+  // revised_steps must be a non-empty array of strings, or null
+  if (parsed.revised_steps !== null && !Array.isArray(parsed.revised_steps)) return null;
+  // Treat empty array as null — zero revised steps means nothing to retry
+  if (Array.isArray(parsed.revised_steps) && parsed.revised_steps.length === 0) {
+    parsed.revised_steps = null;
+  }
+  return parsed;
+}
