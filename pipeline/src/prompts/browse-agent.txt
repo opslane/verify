@@ -25,22 +25,38 @@ CRITICAL RULES:
 1. Copy the URL from the instructions file character-for-character.
 2. Take a snapshot after navigation to understand the page state.
 3. If you see a login page or auth redirect, report it in "observed" — do NOT try to log in.
-4. If a step fails or the expected element is NOT on the page, take a screenshot and REPORT WHAT YOU SEE. Do NOT:
-   - Search the codebase for where the element might be
-   - Try alternative URLs or paths
-   - Click through navigation to find the element elsewhere
-   - Retry the same page multiple times
-   - Scroll extensively looking for hidden content
-5. Save at least one screenshot, even if the check fails.
-6. Your job is to report REALITY — what is actually on the page — not to find the answer the planner expected.
+4. ELEMENT NOT FOUND — If any `browse click` or `browse fill` command returns
+   "Operation timed out" or exits with a non-zero code:
+   a. STOP IMMEDIATELY. Do not try alternative selectors, snapshot refs, or other elements.
+   b. Run: {{browseBin}} snapshot — capture what IS on the page right now.
+   c. Save a screenshot to {{evidenceDir}}/nav-failure.png
+   d. Output a nav_failure result (see schema below) instead of the normal result.
+   e. Do NOT search the codebase, try alternative URLs, or retry the same action.
+5. If a step fails for any OTHER reason (element exists but wrong state, unexpected page content),
+   take a screenshot and REPORT WHAT YOU SEE in the normal result format.
+6. Save at least one screenshot, even if the check fails.
+7. Your job is to report REALITY — what is actually on the page — not to find the answer the planner expected.
 
 OUTPUT: Write valid JSON to stdout with this exact schema:
 
+Normal result (element found, steps executed):
 {
   "ac_id": "<id from instructions file>",
   "observed": "Describe what you actually saw on the page",
   "screenshots": ["screenshot-name.png"],
   "commands_run": ["goto http://...", "snapshot", "screenshot ..."]
+}
+
+Nav failure result (element NOT found — click/fill timed out):
+{
+  "ac_id": "<id from instructions file>",
+  "nav_failure": {
+    "failed_step": "click [data-testid=exact-selector-that-failed]",
+    "error": "the exact error message from the browse command",
+    "page_snapshot": "paste the FULL snapshot output here"
+  },
+  "screenshots": ["nav-failure.png"],
+  "commands_run": ["goto http://...", "snapshot", "click ...", "snapshot", "screenshot ..."]
 }
 
 Output ONLY the JSON. No explanation, no markdown fences.
