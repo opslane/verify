@@ -18,6 +18,10 @@ const { positionals, values } = parseArgs({
     condition: { type: "string" },
     ac: { type: "string" },
     timeout: { type: "string" },
+    "base-url": { type: "string" },
+    email: { type: "string" },
+    password: { type: "string" },
+    "browse-bin": { type: "string" },
   },
 });
 
@@ -337,8 +341,54 @@ if (command === "run") {
       console.log("Learner complete. Learnings at:", learningsPath);
       break;
     }
+    case "login-agent": {
+      const baseUrl = values["base-url"];
+      const email = values.email;
+      const password = values.password;
+      const browseBin = values["browse-bin"];
+      if (!baseUrl || !email || !password || !browseBin) {
+        console.error("login-agent requires --base-url, --email, --password, --browse-bin");
+        process.exit(1);
+      }
+      const { buildLoginAgentPrompt, parseLoginAgentOutput } = await import("./stages/login-agent.js");
+      const prompt = buildLoginAgentPrompt({ baseUrl, email, password, browseBin });
+      const result = await runClaude({
+        prompt, model: "sonnet", timeoutMs: 60_000,
+        stage: "login-agent", runDir, settingSources: "", ...permissions,
+      });
+      const parsed = parseLoginAgentOutput(result.stdout);
+      if (!parsed) {
+        console.error("Failed to parse login agent output. Check logs:", join(runDir, "logs"));
+        process.exit(1);
+      }
+      if (!parsed.success) {
+        console.error(`Login agent failed: ${parsed.error}`);
+        process.exit(1);
+      }
+      // Save discovered loginSteps to config.json
+      const updatedConfig = loadConfig(verifyDir);
+      updatedConfig.auth = {
+        email,
+        password,
+        loginSteps: parsed.loginSteps,
+      };
+      writeFileSync(join(verifyDir, "config.json"), JSON.stringify(updatedConfig, null, 2));
+      console.log(`Login recipe saved: ${parsed.loginSteps.length} steps`);
+      break;
+    }
+    case "verify-login": {
+      const { loginWithCredentials } = await import("./init.js");
+      const loginResult = loginWithCredentials(config, projectRoot);
+      if (loginResult.ok) {
+        console.log("Login recipe verified — authentication succeeded.");
+      } else {
+        console.error(loginResult.error);
+        process.exit(1);
+      }
+      break;
+    }
     default:
-      console.error(`Unknown stage: ${stageName}. Available: ac-generator, planner, plan-validator, setup-writer, browse-agent, judge, learner`);
+      console.error(`Unknown stage: ${stageName}. Available: ac-generator, planner, plan-validator, setup-writer, browse-agent, judge, learner, login-agent, verify-login`);
       process.exit(1);
   }
 } else {
@@ -360,5 +410,7 @@ if (command === "run") {
   console.error("  browse-agent   --ac <id>");
   console.error("  judge");
   console.error("  learner");
+  console.error("  login-agent    --base-url <url> --email <e> --password <p> --browse-bin <path>");
+  console.error("  verify-login");
   process.exit(1);
 }

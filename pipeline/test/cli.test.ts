@@ -35,6 +35,25 @@ describe("cli", () => {
     expect(result.stderr).toContain("Unknown stage");
   });
 
+  it("login-agent stage is accepted (not unknown)", () => {
+    const result = runCli(["run-stage", "login-agent",
+      "--verify-dir", "/tmp/nonexistent",
+      "--base-url", "http://localhost:3000",
+      "--email", "a@b.com",
+      "--password", "x",
+      "--browse-bin", "/nonexistent/browse",
+    ]);
+    // Should not error with "Unknown stage" — may fail for other reasons (no browse binary, etc.)
+    expect(result.stderr).not.toContain("Unknown stage: login-agent");
+  });
+
+  it("verify-login stage is accepted (not unknown)", () => {
+    const result = runCli(["run-stage", "verify-login",
+      "--verify-dir", "/tmp/nonexistent",
+    ]);
+    expect(result.stderr).not.toContain("Unknown stage: verify-login");
+  });
+
   it("judge with empty evidence outputs empty verdicts", () => {
     const runDir = join(tmpdir(), `verify-cli-${Date.now()}`);
     mkdirSync(join(runDir, "logs"), { recursive: true });
