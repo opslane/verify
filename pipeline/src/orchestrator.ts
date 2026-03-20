@@ -366,7 +366,7 @@ export async function runPipeline(
 
               if (navSteps.length > 0) {
                 navHints.push({ url: ac.url, steps: navSteps });
-                callbacks.onLog(`  ${ac.id}: saved ${navSteps.length} nav hint(s) for ${ac.url}`);
+                callbacks.onLog(`  ${ac.id}: saved nav hint with ${navSteps.length} step(s) for ${ac.url}`);
               }
             }
           }
