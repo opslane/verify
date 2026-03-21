@@ -7,7 +7,10 @@ const MAX_TIMEOUT = 300;
 
 /** Convert a parameterized route like /t/:teamUrl/settings to a regex */
 function routeToRegex(route: string): RegExp {
-  const pattern = route.replace(/:[a-zA-Z]+/g, "[^/]+");
+  const pattern = route
+    .split(/:[a-zA-Z]+/)
+    .map(s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("[^/]+");
   return new RegExp(`^${pattern}$`);
 }
 

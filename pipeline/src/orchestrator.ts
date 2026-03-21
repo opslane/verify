@@ -1,7 +1,6 @@
 // pipeline/src/orchestrator.ts — Wires all stages together into a single pipeline run
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { execFileSync } from "node:child_process";
 import type {
   ACGeneratorOutput, PlannerOutput, JudgeOutput,
   ACVerdict, ProgressEvent, StageProgressEvent,
@@ -80,15 +79,6 @@ export async function runPipeline(
   if (!preflight.ok) {
     for (const err of preflight.errors) callbacks.onError(err);
     return { runDir, verdicts: null };
-  }
-
-  // Check daemon after preflight login
-  try {
-    const _bin = resolveBrowseBin();
-    const statusOut = execFileSync(_bin, ["status"], { timeout: 5_000, encoding: "utf-8" });
-    callbacks.onLog(`[debug] daemon after preflight: ${statusOut.trim().replace(/\n/g, " | ")}`);
-  } catch {
-    callbacks.onLog("[debug] daemon NOT running after preflight!");
   }
 
   // ── Stage 1: AC Generator ────────────────────────────────────────────
@@ -280,14 +270,6 @@ export async function runPipeline(
 
     // Nav hints: accumulated from successful replans, applied to subsequent ACs
     const navHints: NavHint[] = [];
-
-    // Check daemon health before browse agents — login cookies depend on the daemon surviving
-    try {
-      const statusOut = execFileSync(browseBin, ["status"], { timeout: 5_000, encoding: "utf-8" });
-      callbacks.onLog(`  [debug] daemon status before browse: ${statusOut.trim().replace(/\n/g, " | ")}`);
-    } catch {
-      callbacks.onLog("  [debug] daemon NOT running before browse agents — cookies will be lost!");
-    }
 
     // Run browse agents sequentially within group
     for (const ac of groupAcs) {

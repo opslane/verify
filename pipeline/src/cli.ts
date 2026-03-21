@@ -237,7 +237,7 @@ if (command === "run") {
 
       const cleaned = resolverResult.stdout.replace(/^```json?\n?|\n?```$/g, "").trim();
       const parsed = JSON.parse(cleaned);
-      if (parsed?.example_urls && typeof parsed.example_urls === "object") {
+      if (parsed?.example_urls && typeof parsed.example_urls === "object" && parsed.example_urls !== null) {
         appIndex.example_urls = parsed.example_urls;
         console.log(`  Resolved ${Object.keys(parsed.example_urls).length} example URLs`);
       }
