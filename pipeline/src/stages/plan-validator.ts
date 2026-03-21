@@ -1,9 +1,15 @@
 import type { PlannerOutput, PlanValidationResult, PlanValidationError, AppIndex } from "../lib/types.js";
 
-const TEMPLATE_VAR_RE = /\{[a-zA-Z]+\}/;
+const TEMPLATE_VAR_RE = /\{[a-zA-Z]+\}|__[A-Z_]+__/;
 const ABSOLUTE_URL_RE = /^https?:\/\//;
 const MIN_TIMEOUT = 60;
 const MAX_TIMEOUT = 300;
+
+/** Convert a parameterized route like /t/:teamUrl/settings to a regex */
+function routeToRegex(route: string): RegExp {
+  const pattern = route.replace(/:[a-zA-Z]+/g, "[^/]+");
+  return new RegExp(`^${pattern}$`);
+}
 
 export function validatePlan(
   plan: PlannerOutput,
@@ -11,12 +17,13 @@ export function validatePlan(
 ): PlanValidationResult {
   const errors: PlanValidationError[] = [];
   const knownRoutes = appIndex ? Object.keys(appIndex.routes) : [];
+  const routePatterns = knownRoutes.map(r => ({ route: r, re: routeToRegex(r) }));
 
   for (const ac of plan.criteria) {
     if (TEMPLATE_VAR_RE.test(ac.url)) {
       errors.push({
         acId: ac.id, field: "url",
-        message: `URL "${ac.url}" contains a template variable — use real IDs from app.json`,
+        message: `URL "${ac.url}" contains a template variable — use real IDs from app.json example_urls`,
       });
     }
 
@@ -29,8 +36,8 @@ export function validatePlan(
 
     if (appIndex && !TEMPLATE_VAR_RE.test(ac.url) && !ABSOLUTE_URL_RE.test(ac.url)) {
       const urlBase = ac.url.split("?")[0];
-      const routeExists = knownRoutes.some(
-        (route) => urlBase === route || urlBase.startsWith(route + "/")
+      const routeExists = routePatterns.some(
+        ({ re }) => re.test(urlBase)
       );
       if (!routeExists) {
         errors.push({
