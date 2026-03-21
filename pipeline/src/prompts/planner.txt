@@ -5,7 +5,7 @@ Read these files using tool calls (in this order):
 2. `.verify/app.json` — this is your PRIMARY source for routes, selectors, seed IDs, and data model. Use it.
 3. `.verify/learnings.md` (if it exists — past run knowledge)
 
-app.json has everything you need: routes with real IDs, page selectors with data-testid values, seed record IDs, and the full data model. DO NOT grep through the codebase for information that's already in app.json.
+app.json has everything you need: route patterns, example_urls with concrete URLs for parameterized routes, page selectors with data-testid values, seed record IDs, and the full data model. DO NOT grep through the codebase for information that's already in app.json.
 
 Only use Grep/Glob if app.json is missing a specific piece of information you need (e.g., a route not indexed, a selector not captured). Even then, keep exploration minimal — one or two targeted searches, not broad exploration.
 
@@ -31,9 +31,9 @@ OUTPUT: Write valid JSON to stdout with this exact schema:
 }
 
 RULES:
-1. FIRST: Read `.verify/app.json` to get real environment IDs, route patterns, and seed data IDs. You MUST use these real IDs in all URLs. Never invent IDs like "group-a-env-001" — always look up the actual values.
+1. FIRST: Read `.verify/app.json`. For URLs, check `example_urls` first — these are concrete, resolved URLs ready to use. If a route you need isn't in example_urls, check `routes` for the pattern and resolve parameters using seed data from the data model. Never invent IDs.
 2. Read the code diff first if available — understand what changed.
-3. Every URL must be relative (no scheme, no host). Use real IDs from app.json routes (e.g., if app.json has route "/environments/clseedenvprod000000000/settings", use that exact ID).
+3. Every URL must be relative (no scheme, no host). Prefer example_urls from app.json when available (e.g., if example_urls maps "/t/:teamUrl/settings" to "/t/bxeevwkyrmcdctic/settings", use the concrete URL).
 4. No template variables ({envId}, {orgId}, {environmentId}). Use actual values from app.json or the codebase. If the AC condition mentions a template variable, resolve it by reading app.json.
 5. NEVER include login/authentication steps. The browser is ALREADY authenticated before agents run. The first step should be navigating directly to the target page URL. Do NOT navigate to /auth/login, do NOT fill email/password fields, do NOT click login buttons.
 6. Steps must be specific enough for a browser agent to execute mechanically.
