@@ -201,6 +201,51 @@ if (command === "run") {
     console.log("  Warning: could not dump seed data (no tables or DB unreachable)");
   }
 
+  // Step 3.5: Route resolver — map parameterized routes to concrete URLs using seed data
+  const paramRoutes = Object.keys(appIndex.routes).filter(r => r.includes(":"));
+  if (paramRoutes.length > 0 && seedDataDump) {
+    console.log(`  Resolving ${paramRoutes.length} parameterized routes...`);
+    const resolverPromptTemplate = readPrompt(join(promptDir, "route-resolver.txt"), "utf-8");
+
+    const dataModelSummary = Object.entries(appIndex.data_model)
+      .map(([model, info]) => `${model} (table: ${info.table_name}): ${Object.keys(info.columns).join(", ")}`)
+      .join("\n");
+
+    // Truncate seed data on section boundaries to fit context
+    const sections = seedDataDump.split(/^(?=-- )/m);
+    let truncatedSeedData = "";
+    for (const section of sections) {
+      if (truncatedSeedData.length + section.length > 16_000) break;
+      truncatedSeedData += section;
+    }
+
+    const resolverPrompt = resolverPromptTemplate
+      .replace("__ROUTES__", paramRoutes.join("\n"))
+      .replace("__SEED_DATA__", truncatedSeedData)
+      .replace("__DATA_MODEL__", dataModelSummary);
+
+    try {
+      const resolverResult = await runClaude({
+        prompt: resolverPrompt,
+        model: "haiku",
+        timeoutMs: 60_000,
+        stage: "index-resolver",
+        runDir,
+        cwd: projectDir,
+        dangerouslySkipPermissions: true,
+      });
+
+      const cleaned = resolverResult.stdout.replace(/^```json?\n?|\n?```$/g, "").trim();
+      const parsed = JSON.parse(cleaned);
+      if (parsed?.example_urls && typeof parsed.example_urls === "object") {
+        appIndex.example_urls = parsed.example_urls;
+        console.log(`  Resolved ${Object.keys(parsed.example_urls).length} example URLs`);
+      }
+    } catch (err) {
+      console.warn("  Warning: route resolver failed, continuing without example URLs:", (err as Error).message);
+    }
+  }
+
   writeFileSync(outputPath, JSON.stringify(appIndex, null, 2));
   console.log(`\nApp index written to: ${outputPath}`);
   console.log(`  Routes: ${Object.keys(appIndex.routes).length}`);

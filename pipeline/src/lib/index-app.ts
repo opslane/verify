@@ -193,6 +193,7 @@ export function mergeIndexResults(
   prismaMapping: Record<string, PrismaModel>,
   seedIds: Record<string, string[]>,
   jsonAnnotations?: Record<string, Record<string, string>>,
+  exampleUrls: Record<string, string> = {},
 ): AppIndex {
   // Merge prisma column mappings into data_model (union of LLM + deterministic sources)
   // The deterministic parser is authoritative for column mappings; LLM enriches with enums/source
@@ -241,5 +242,6 @@ export function mergeIndexResults(
     feature_flags: envVars.feature_flags,
     seed_ids: seedIds,
     json_type_annotations: jsonAnnotations ?? {},
+    example_urls: exampleUrls,
   };
 }
