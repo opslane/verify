@@ -138,6 +138,7 @@ export interface AppIndex {
   feature_flags: string[];
   seed_ids: Record<string, string[]>;   // modelName → array of known seed record IDs
   json_type_annotations: Record<string, Record<string, string>>;  // model → { field → TypeName }
+  example_urls: Record<string, string>;  // parameterized route → concrete example URL
 }
 
 // ── Stage progress (stream-json observability) ──────────────────────────────

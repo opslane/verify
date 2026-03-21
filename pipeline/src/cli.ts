@@ -285,14 +285,15 @@ if (command === "run") {
       const acId = values.ac;
       if (!acId) { console.error("--ac is required for browse-agent"); process.exit(1); }
       const planPath = join(runDir, "plan.json");
-      const plan = JSON.parse(readFileSync(planPath, "utf-8")) as { criteria: Array<{ id: string; group: string; description: string; url: string; steps: string[]; screenshot_at: string[] }> };
+      const plan = JSON.parse(readFileSync(planPath, "utf-8")) as { criteria: Array<{ id: string; group: string; description: string; url: string; steps: string[]; screenshot_at: string[]; timeout_seconds?: number }> };
       const ac = plan.criteria.find(c => c.id === acId);
       if (!ac) { console.error(`AC ${acId} not found in plan.json`); process.exit(1); }
+      const typedAc = { ...ac, timeout_seconds: ac.timeout_seconds ?? 120 };
       const { resolveBrowseBin } = await import("./lib/browse.js");
       const { buildBrowseAgentPrompt, parseBrowseResult } = await import("./stages/browse-agent.js");
       const evidenceDir = join(runDir, "evidence", acId);
       mkdirSync(evidenceDir, { recursive: true });
-      const prompt = buildBrowseAgentPrompt(ac, {
+      const prompt = buildBrowseAgentPrompt(typedAc, {
         baseUrl: config.baseUrl,
         browseBin: resolveBrowseBin(),
         evidenceDir,
