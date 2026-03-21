@@ -33,5 +33,6 @@
     "Organization": ["clseedorg0000000000000"],
     "Environment": ["clseedenvprod000000000"]
   },
-  "json_type_annotations": {}
+  "json_type_annotations": {},
+  "example_urls": {}
 }

@@ -12,6 +12,9 @@ const mockAppIndex: AppIndex = {
   fixtures: {},
   db_url_env: null,
   feature_flags: [],
+  seed_ids: {},
+  json_type_annotations: {},
+  example_urls: {},
 };
 
 describe("validatePlan", () => {
@@ -81,5 +84,59 @@ describe("validatePlan", () => {
     const result = validatePlan({ criteria: [] }, mockAppIndex);
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
+  });
+
+  it("passes when URL matches a parameterized route", () => {
+    const appIndex: AppIndex = {
+      ...mockAppIndex,
+      routes: { "/t/:teamUrl/settings": { component: "settings.tsx" } },
+    };
+    const plan: PlannerOutput = {
+      criteria: [{
+        id: "ac1", group: "group-a",
+        description: "test",
+        url: "/t/bxeevwkyrmcdctic/settings",
+        steps: ["Navigate to settings"],
+        screenshot_at: [],
+        timeout_seconds: 90,
+      }],
+    };
+    const result = validatePlan(plan, appIndex);
+    expect(result.valid).toBe(true);
+  });
+
+  it("catches __PLACEHOLDER__ style template variables", () => {
+    const plan: PlannerOutput = {
+      criteria: [{
+        id: "ac1", group: "group-a",
+        description: "test",
+        url: "/t/__TEAM_URL__/settings",
+        steps: ["Navigate"],
+        screenshot_at: [],
+        timeout_seconds: 90,
+      }],
+    };
+    const result = validatePlan(plan, mockAppIndex);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0].message).toContain("template variable");
+  });
+
+  it("matches multi-segment parameterized routes", () => {
+    const appIndex: AppIndex = {
+      ...mockAppIndex,
+      routes: { "/t/:teamUrl/documents/:id": { component: "document.tsx" } },
+    };
+    const plan: PlannerOutput = {
+      criteria: [{
+        id: "ac1", group: "group-a",
+        description: "test",
+        url: "/t/abc/documents/42",
+        steps: ["Navigate to document"],
+        screenshot_at: [],
+        timeout_seconds: 90,
+      }],
+    };
+    const result = validatePlan(plan, appIndex);
+    expect(result.valid).toBe(true);
   });
 });
