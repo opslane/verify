@@ -358,9 +358,9 @@ export function runVerifyPipeline(specPath: string, verifyDir: string, projectDi
 function findLatestRunDir(runsDir: string): string | null {
   if (!existsSync(runsDir)) return null;
   const entries = readdirSync(runsDir)
-    .map(name => ({ name, path: join(runsDir, name) }))
-    .filter(e => statSync(e.path).isDirectory())
-    .sort((a, b) => statSync(b.path).mtimeMs - statSync(a.path).mtimeMs);
+    .map(name => { const p = join(runsDir, name); const s = statSync(p); return { path: p, isDir: s.isDirectory(), mtime: s.mtimeMs }; })
+    .filter(e => e.isDir)
+    .sort((a, b) => b.mtime - a.mtime);
   return entries[0]?.path ?? null;
 }
 
@@ -663,6 +663,13 @@ First, add `pr` to the options block (after line 24):
     pr: { type: "string" },
 ```
 
+Add these imports at the top of `cli.ts` (after existing imports):
+
+```typescript
+import { execSync } from "node:child_process";
+import type { EvalResult } from "./lib/eval-types.js";
+```
+
 Then add the command handler before the final `else`:
 
 ```typescript
@@ -673,6 +680,10 @@ Then add the command handler before the final `else`:
 
   if (!config.repo) {
     console.error('No "repo" in config. Add to .verify/config.json, e.g. "repo": "calcom/cal.com"');
+    process.exit(1);
+  }
+  if (!/^[\w.-]+\/[\w.-]+$/.test(config.repo)) {
+    console.error('Invalid repo format — expected "owner/repo" (e.g. "calcom/cal.com")');
     process.exit(1);
   }
   if (!config.projectDir) {
@@ -716,7 +727,7 @@ Then add the command handler before the final `else`:
     process.exit(0);
   }
 
-  const batchResults: (typeof import("./lib/eval-types.js"))["EvalResult"][] = [];
+  const batchResults: EvalResult[] = [];
   for (const pr of todo) {
     const result = await evalSinglePR(pr, config, resultsFile, verifyDir);
     batchResults.push(result);
@@ -905,7 +916,21 @@ describe("loadACDescriptions", () => {
     expect(loadACDescriptions(join(TMP, "nonexistent")).size).toBe(0);
   });
 });
+
+describe("healthCheck", () => {
+  it("returns false when URL is unreachable", async () => {
+    const { healthCheck } = await import("../src/eval-runner.js");
+    const config = {
+      baseUrl: "http://127.0.0.1:19999",  // nothing listening
+      healthCheck: { readyUrl: "http://127.0.0.1:19999", readyTimeout: 1_000, pollInterval: 200 },
+    } as VerifyConfig;
+    const result = await healthCheck(config);
+    expect(result).toBe(false);
+  }, 10_000);
+});
 ```
+
+Add `import type { VerifyConfig } from "../src/lib/types.js";` to the imports at the top of the test file.
 
 **Step 2: Run tests**
 
@@ -1018,6 +1043,10 @@ cat docs/evals/cal.com/eval-results.jsonl | jq .
 | Introspection LLM fails | Use low-confidence fallback, continue |
 | 3 consecutive auth_expired | Stop loop, print re-run /verify-setup |
 | 3 consecutive health_check fails | Stop loop, print check server |
+
+## Known Limitations
+
+- **Stale server after checkout:** After `gh pr checkout`, the dev server may still serve code from the previous branch until hot-reload kicks in. The health check polls for HTTP 200 but cannot distinguish stale vs fresh builds. If the target repo's dev server supports a health endpoint that returns a git SHA, set `healthCheck.readyUrl` to that endpoint.
 ```
 
 **Step 2: Add sync hook case**
