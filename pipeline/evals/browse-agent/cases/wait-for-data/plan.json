@@ -7,8 +7,10 @@
       "url": "/reports",
       "steps": [
         "Navigate to /reports",
+        "Take a snapshot after the page loads",
         "Wait for table rows to appear",
-        "Take screenshot"
+        "Take a snapshot after the rows appear",
+        "Take screenshot rows_loaded"
       ],
       "screenshot_at": ["rows_loaded"],
       "timeout_seconds": 120

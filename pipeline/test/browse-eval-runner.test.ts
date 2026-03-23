@@ -136,4 +136,19 @@ describe("browse eval runner", () => {
     expect(expected.required_commands).toContain("snapshot");
     expect(expected.max_duration_ms).toBeGreaterThanOrEqual(25000);
   });
+
+  it("requires the fake wait-for-data case to take a post-wait snapshot and score the loaded state", () => {
+    const plan = readFakeCaseJson<{ criteria: Array<{ steps: string[] }> }>("wait-for-data", "plan.json");
+    const expected = readFakeCaseJson<{
+      required_commands: string[];
+      required_observed_substrings: string[];
+      forbidden_observed_substrings: string[];
+    }>("wait-for-data", "expected.json");
+
+    expect(plan.criteria[0]?.steps).toContain("Take a snapshot after the page loads");
+    expect(plan.criteria[0]?.steps).toContain("Take a snapshot after the rows appear");
+    expect(expected.required_commands).toEqual(expect.arrayContaining(["wait", "snapshot"]));
+    expect(expected.required_observed_substrings).toEqual(expect.arrayContaining(["Reports loaded", "Monthly revenue"]));
+    expect(expected.forbidden_observed_substrings).toEqual(expect.not.arrayContaining(["Loading reports"]));
+  });
 });
