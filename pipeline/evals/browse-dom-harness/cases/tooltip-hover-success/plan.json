@@ -6,10 +6,10 @@
       "description": "The trial page shows the tooltip when the badge is hovered.",
       "url": "/trial",
       "steps": [
-        "Navigate to /trial",
-        "Wait for page load",
-        "Hover the trial badge",
-        "Take screenshot"
+        "Go to /trial",
+        "Take a snapshot after the page loads",
+        "Hover #trial-badge",
+        "Take screenshot trial_tooltip_visible"
       ],
       "screenshot_at": ["trial_tooltip_visible"],
       "timeout_seconds": 90

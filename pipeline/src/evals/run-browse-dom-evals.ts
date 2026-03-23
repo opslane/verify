@@ -1,9 +1,9 @@
-import { execFileSync, type ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFile, type ExecFileException, type ExecFileOptions } from "node:child_process";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveBrowseBin, startDaemon, stopDaemon } from "../lib/browse.js";
+import { resolveBrowseBin, stopDaemon } from "../lib/browse.js";
 import { scoreBrowseEvalArtifacts, type BrowseEvalResult, type BrowseEvalArtifactPaths } from "./browse-eval-score.js";
 import { startBrowseDomHarnessServer, stopBrowseDomHarnessServer, type BrowseDomHarnessServerHandle } from "./browse-dom-harness-server.js";
 import { formatBrowseEvalSummary } from "./run-browse-evals.js";
@@ -20,7 +20,13 @@ export interface StageExecutorInput {
   verifyDir: string;
 }
 
-export type StageExecutor = (input: StageExecutorInput) => void;
+export type StageExecutor = (input: StageExecutorInput) => Promise<void> | void;
+type ExecFileLike = (
+  file: string,
+  args: readonly string[],
+  options: ExecFileOptions,
+  callback: (error: ExecFileException | null, stdout: string, stderr: string) => void,
+) => void;
 
 export interface RunBrowseDomEvalCaseOptions {
   baseUrl: string;
@@ -36,7 +42,6 @@ export interface RunBrowseDomEvalsOptions {
   resolveBrowseBinHook?: () => string;
   scoreArtifacts?: (paths: BrowseEvalArtifactPaths) => BrowseEvalResult;
   stageExecutor?: StageExecutor;
-  startDaemonHook?: typeof startDaemon;
   startServer?: (options?: { port?: number }) => Promise<BrowseDomHarnessServerHandle>;
   stopDaemonHook?: typeof stopDaemon;
   stopServer?: (server: BrowseDomHarnessServerHandle["server"]) => Promise<void>;
@@ -64,39 +69,51 @@ export function createTraceWrapper(tmpRoot: string, pipelineDir = PIPELINE_DIR):
   return wrapperPath;
 }
 
+export function canonicalizePath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return path;
+  }
+}
+
 export function defaultStageExecutor(
   input: StageExecutorInput,
-  execFileSyncImpl: (
-    file: string,
-    args: readonly string[],
-    options: ExecFileSyncOptionsWithStringEncoding,
-  ) => string | Buffer = execFileSync,
-): void {
-  execFileSyncImpl("npx", [
-    "tsx",
-    "src/cli.ts",
-    "run-stage",
-    "browse-agent",
-    "--verify-dir",
-    input.verifyDir,
-    "--run-dir",
-    input.runDir,
-    "--ac",
-    input.acId,
-  ], {
-    cwd: input.pipelineDir,
-    env: input.env,
-    encoding: "utf-8",
-    stdio: "pipe",
+  execFileImpl: ExecFileLike = execFile as ExecFileLike,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFileImpl("npx", [
+      "tsx",
+      "src/cli.ts",
+      "run-stage",
+      "browse-agent",
+      "--verify-dir",
+      input.verifyDir,
+      "--run-dir",
+      input.runDir,
+      "--ac",
+      input.acId,
+    ], {
+      cwd: input.pipelineDir,
+      env: input.env,
+      encoding: "utf-8",
+      timeout: 120_000,
+    }, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
   });
 }
 
-export function runBrowseDomEvalCase(caseDir: string, options: RunBrowseDomEvalCaseOptions): BrowseEvalResult {
+export async function runBrowseDomEvalCase(caseDir: string, options: RunBrowseDomEvalCaseOptions): Promise<BrowseEvalResult> {
   const caseId = basename(caseDir);
   const pipelineDir = options.pipelineDir ?? PIPELINE_DIR;
   const stageExecutor = options.stageExecutor ?? defaultStageExecutor;
   const scoreArtifacts = options.scoreArtifacts ?? scoreBrowseEvalArtifacts;
-  const tmpRoot = mkdtempSync(join(tmpdir(), "verify-browse-dom-eval-"));
+  const tmpRoot = canonicalizePath(mkdtempSync(join(tmpdir(), "verify-browse-dom-eval-")));
   const verifyDir = join(tmpRoot, ".verify");
   const runDir = join(tmpRoot, "run");
   const tracePath = join(runDir, "trace.jsonl");
@@ -109,7 +126,7 @@ export function runBrowseDomEvalCase(caseDir: string, options: RunBrowseDomEvalC
 
   try {
     try {
-      stageExecutor({
+      await stageExecutor({
         acId: "ac1",
         env: {
           ...process.env,
@@ -147,7 +164,6 @@ export async function runBrowseDomEvals(
   const startServerFn = options.startServer ?? startBrowseDomHarnessServer;
   const stopServerFn = options.stopServer ?? stopBrowseDomHarnessServer;
   const resolveBrowseBinFn = options.resolveBrowseBinHook ?? resolveBrowseBin;
-  const startDaemonFn = options.startDaemonHook ?? startDaemon;
   const stopDaemonFn = options.stopDaemonHook ?? stopDaemon;
 
   const realBrowseBin = resolveBrowseBinFn();
@@ -158,9 +174,9 @@ export async function runBrowseDomEvals(
   stopDaemonFn();
   try {
     for (const caseDir of selectedCaseDirs) {
-      startDaemonFn({});
+      stopDaemonFn();
       try {
-        results.push(runBrowseDomEvalCase(caseDir, {
+        results.push(await runBrowseDomEvalCase(caseDir, {
           baseUrl,
           pipelineDir: options.pipelineDir ?? PIPELINE_DIR,
           realBrowseBin,
@@ -188,18 +204,38 @@ export function parseCaseFilter(argv: string[]): string | undefined {
   return undefined;
 }
 
-async function main(argv = process.argv.slice(2)): Promise<void> {
+export function isLiveSmokeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.BROWSE_DOM_LIVE_SMOKE === "1";
+}
+
+export async function runDomEvalCli(
+  argv = process.argv.slice(2),
+  env: NodeJS.ProcessEnv = process.env,
+  runner: typeof runBrowseDomEvals = runBrowseDomEvals,
+  logger: Pick<typeof console, "log"> = console,
+): Promise<BrowseEvalResult[]> {
   const caseFilter = parseCaseFilter(argv);
-  const results = await runBrowseDomEvals(discoverCaseDirs(), { caseFilter });
+
+  if (caseFilter && !isLiveSmokeEnabled(env)) {
+    logger.log(`SKIP set BROWSE_DOM_LIVE_SMOKE=1 to run single-case DOM smoke for ${caseFilter}`);
+    return [];
+  }
+
+  const results = await runner(discoverCaseDirs(), { caseFilter });
 
   for (const result of results) {
     if (result.passed) {
-      console.log(`PASS ${result.caseId}  ${result.commandCount} cmds  ${result.durationMs}ms`);
+      logger.log(`PASS ${result.caseId}  ${result.commandCount} cmds  ${result.durationMs}ms`);
       continue;
     }
-    console.log(`FAIL ${result.caseId}  ${result.failures.join("; ")}`);
+    logger.log(`FAIL ${result.caseId}  ${result.failures.join("; ")}`);
   }
-  console.log(formatBrowseEvalSummary(results));
+  logger.log(formatBrowseEvalSummary(results));
+  return results;
+}
+
+async function main(argv = process.argv.slice(2)): Promise<void> {
+  await runDomEvalCli(argv);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

@@ -344,7 +344,9 @@ if (command === "run") {
         evidenceDir,
       });
       const { computeTimeoutMs } = await import("./orchestrator.js");
-      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: computeTimeoutMs(ac.steps), stage: `browse-agent-${acId}`, runDir, settingSources: "", ...permissions });
+      const browseTimeoutMs = timeoutOverrideMs
+        ?? (typeof ac.timeout_seconds === "number" ? ac.timeout_seconds * 1000 : computeTimeoutMs(ac.steps));
+      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: browseTimeoutMs, stage: `browse-agent-${acId}`, runDir, settingSources: "", ...permissions });
       const parsed = parseBrowseResult(result.stdout);
       if (parsed) {
         writeFileSync(join(evidenceDir, "result.json"), JSON.stringify(parsed, null, 2));

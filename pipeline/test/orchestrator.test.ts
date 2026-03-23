@@ -588,6 +588,17 @@ describe("orchestrator", () => {
       screenshots: ["nav-failure.png"],
       commands_run: ["goto http://localhost:3000/event-types", "click [data-testid=event-type-options-1159]"],
     };
+    const INTERACTION_FAILURE_BROWSE_RESULT = {
+      ac_id: "ac1",
+      nav_failure: {
+        kind: "interaction",
+        failed_step: "hover @e1",
+        error: "Operation timed out: hover: Timeout 5000ms exceeded.",
+        page_snapshot: "@e1 [button] \"Trial\"\n@e2 [text] \"14 days left in your trial\"",
+      },
+      screenshots: ["nav-failure.png"],
+      commands_run: ["goto http://localhost:3000/settings/billing", "snapshot", "hover @e1", "snapshot", "screenshot nav-failure.png"],
+    };
 
     const REPLAN_OUTPUT = {
       revised_steps: [
@@ -658,6 +669,34 @@ describe("orchestrator", () => {
       await runPipeline(specPath, verifyDir, callbacks);
 
       const retryCalls = runClaudeCalls.filter(c => c.stage === "browse-agent-ac1-retry");
+      expect(retryCalls.length).toBe(0);
+    });
+
+    it("does not replan on interaction failures", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      const singleAcs: ACGeneratorOutput = {
+        groups: [{ id: "group-a", condition: null, acs: [{ id: "ac1", description: "Hover check" }] }],
+        skipped: [],
+      };
+      const singlePlan: PlannerOutput = {
+        criteria: [{ id: "ac1", group: "group-a", description: "Hover check", url: "/settings/billing", steps: ["Navigate", "Hover trial badge"], screenshot_at: [], timeout_seconds: 90 }],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(singleAcs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(singlePlan) });
+      mockRunClaudeResult("browse-agent-ac1", { stdout: JSON.stringify(INTERACTION_FAILURE_BROWSE_RESULT) });
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [{ ac_id: "ac1", verdict: "fail", confidence: "high", reasoning: "Hover timed out" }] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+      await runPipeline(specPath, verifyDir, callbacks);
+
+      const replanCalls = runClaudeCalls.filter(c => c.stage === "replan-ac1");
+      const retryCalls = runClaudeCalls.filter(c => c.stage === "browse-agent-ac1-retry");
+      expect(replanCalls.length).toBe(0);
       expect(retryCalls.length).toBe(0);
     });
 

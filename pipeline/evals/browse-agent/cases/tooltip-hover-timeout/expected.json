@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac1",
+  "expect_parseable_result": true,
+  "expect_result_kind": "nav_failure",
+  "required_commands": ["goto", "snapshot", "hover", "screenshot"],
+  "required_evidence_substrings": ["Timeout 5000ms exceeded", "Trial"],
+  "forbidden_shell_patterns": ["rg ", "grep ", "find ", "git ", "ls "],
+  "required_observed_substrings": ["hover", "timed out"],
+  "forbidden_observed_substrings": ["playwright", "codebase", "retrying"],
+  "max_command_count": 5,
+  "max_duration_ms": 15000
+}

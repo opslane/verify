@@ -19,6 +19,12 @@
         min-height: 0;
       }
 
+      .tooltip-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
       .tooltip-popover {
         position: absolute;
         top: calc(100% + 12px);
@@ -31,13 +37,21 @@
         box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
         font-weight: 600;
       }
+
+      .tooltip-trigger-blocked {
+        pointer-events: none;
+        opacity: 0.6;
+      }
     </style>
   </head>
   <body>
     <main class="page">
       <section class="surface tooltip-shell" aria-label="Trial status">
         <p class="muted">Billing</p>
-        <button id="trial-badge" class="chip button" type="button">Trial</button>
+        <div class="tooltip-actions">
+          <button id="trial-badge" class="chip button" type="button">Trial</button>
+          <button id="trial-blocked-badge" class="chip button tooltip-trigger-blocked" type="button" aria-disabled="true">Trial blocked</button>
+        </div>
         <div id="tooltip-layer" class="tooltip-layer" aria-live="polite"></div>
       </section>
     </main>

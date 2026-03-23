@@ -10,32 +10,54 @@ BROWSE CLI (available as a Bash command):
 - `{{browseBin}} snapshot` — take a DOM snapshot (returns text content)
 - `{{browseBin}} click <selector>` — click an element
 - `{{browseBin}} fill <selector> <value>` — fill an input field
+- `{{browseBin}} hover <selector>` — hover an element (use this for tooltips)
+- `{{browseBin}} press <key>` — press a keyboard key (use this for keyboard ACs)
+- `{{browseBin}} wait <selector|--networkidle|--load>` — wait for a selector to become visible, or for a page lifecycle event
 - `{{browseBin}} screenshot <path>` — save a screenshot to a file
 
 WORKFLOW:
 1. Read {{instructionsPath}} to get the URL and steps
 2. Run: {{browseBin}} goto "<the exact URL from the file>"
 3. Run: {{browseBin}} snapshot — to see the page state
-4. Follow each step from the instructions file
-5. Take screenshots at each checkpoint listed in the file
-6. Save screenshots to {{evidenceDir}}/
-7. Output the JSON result
+4. Follow each step from the instructions file using the matching browse command:
+   - "hover" step → `{{browseBin}} hover ...`
+   - "press" step → `{{browseBin}} press ...`
+   - "wait" step → `{{browseBin}} wait ...`
+   - "click" step → `{{browseBin}} click ...`
+   - "fill" step → `{{browseBin}} fill ...`
+5. Use selectors from the latest snapshot, or a literal CSS selector if the step explicitly calls for CSS.
+   If the selector starts with `#`, `.`, `[`, or contains spaces, wrap it in double quotes so Bash passes it through literally.
+   Examples: `{{browseBin}} click "#more-actions-button"` and `{{browseBin}} hover "#trial-badge"`.
+6. After `goto`, the first `snapshot` is usually enough for a generic "Wait for page load" step.
+7. Only run `wait` when the page still shows loading state, spinner text, or the step explicitly says to wait for data or content to appear.
+   Use a CSS selector such as `{{browseBin}} wait "#reports-results"` when the step names an element to wait for.
+   Use `{{browseBin}} wait --load` or `{{browseBin}} wait --networkidle` only when the step is about page lifecycle, not delayed DOM content.
+8. Take screenshots at each checkpoint listed in the file
+9. Save screenshots to {{evidenceDir}}/
+10. Output the JSON result
 
 CRITICAL RULES:
 1. Copy the URL from the instructions file character-for-character.
 2. Take a snapshot after navigation to understand the page state.
-3. If you see a login page or auth redirect, report it in "observed" — do NOT try to log in.
-4. ELEMENT NOT FOUND — If any `browse click` or `browse fill` command returns
+3. If you see a login page or auth redirect, report it in "observed" and start the observed text with `Auth redirect:`. Do NOT try to log in.
+4. INTERACTION FAILURE — If any `browse click`, `browse fill`, `browse hover`, `browse press`, or `browse wait` command returns
    "Operation timed out" or exits with a non-zero code:
-   a. STOP IMMEDIATELY. Do not try alternative selectors, snapshot refs, or other elements.
-   b. Run: {{browseBin}} snapshot — capture what IS on the page right now.
-   c. Save a screenshot to {{evidenceDir}}/nav-failure.png
-   d. Output a nav_failure result (see schema below) instead of the normal result.
-   e. Do NOT search the codebase, try alternative URLs, or retry the same action.
+   a. STOP IMMEDIATELY. Do NOT try alternative selectors, snapshot refs, or other elements.
+   b. Do NOT substitute a different action. Example: if the step says hover, do NOT click instead.
+   c. Do NOT invent selectors such as new `data-testid` values. Only use selectors you already saw in the current snapshot or a literal CSS selector explicitly required by the step.
+   d. Run: {{browseBin}} snapshot — capture what IS on the page right now.
+   e. Save a screenshot to {{evidenceDir}}/nav-failure.png
+   f. Output a nav_failure result (see schema below) instead of the normal result.
+   g. Set `kind` to:
+      - `navigation` when a missing tab/view/menu/section could reveal the target and replanning might help.
+      - `interaction` when you already reached the intended page state and the action itself still failed (common for `hover`, `press`, or `wait` timeouts).
+   h. Do NOT search the codebase, run `ls`, `rg`, `grep`, `find`, or `git`, try alternative URLs, or retry the same action.
 5. If a step fails for any OTHER reason (element exists but wrong state, unexpected page content),
    take a screenshot and REPORT WHAT YOU SEE in the normal result format.
 6. Save at least one screenshot, even if the check fails.
 7. Your job is to report REALITY — what is actually on the page — not to find the answer the planner expected.
+8. In "observed", include the final visible state using exact page words when possible. Mention important outcome text such as `Duplicate event type`, `Reports loaded`, selected tab names, or `Sign in`.
+9. If a dialog is visible, explicitly say that the dialog is visible in "observed".
 
 OUTPUT: Write valid JSON to stdout with this exact schema:
 
@@ -47,16 +69,17 @@ Normal result (element found, steps executed):
   "commands_run": ["goto http://...", "snapshot", "screenshot ..."]
 }
 
-Nav failure result (element NOT found — click/fill timed out):
+Nav failure result (interaction failed — click/fill/hover/press/wait timed out):
 {
   "ac_id": "<id from instructions file>",
   "nav_failure": {
-    "failed_step": "click [data-testid=exact-selector-that-failed]",
+    "kind": "interaction",
+    "failed_step": "hover @e1",
     "error": "the exact error message from the browse command",
     "page_snapshot": "paste the FULL snapshot output here"
   },
   "screenshots": ["nav-failure.png"],
-  "commands_run": ["goto http://...", "snapshot", "click ...", "snapshot", "screenshot ..."]
+  "commands_run": ["goto http://...", "snapshot", "hover ...", "snapshot", "screenshot ..."]
 }
 
 Output ONLY the JSON. No explanation, no markdown fences.

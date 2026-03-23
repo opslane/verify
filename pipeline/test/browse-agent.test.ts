@@ -69,6 +69,49 @@ describe("buildBrowseAgentPrompt", () => {
     });
     expect(existsSync(join(evidenceDir, "instructions.json"))).toBe(true);
   });
+
+  it("documents hover, press, and wait commands explicitly", () => {
+    const prompt = buildBrowseAgentPrompt(mockAC, {
+      baseUrl: "http://localhost:3002", browseBin: "/usr/local/bin/browse", evidenceDir,
+    });
+    expect(prompt).toContain("/usr/local/bin/browse hover <selector>");
+    expect(prompt).toContain("/usr/local/bin/browse press <key>");
+    expect(prompt).toContain("/usr/local/bin/browse wait <selector|--networkidle|--load>");
+  });
+
+  it("tells the agent to quote CSS selectors in Bash commands", () => {
+    const prompt = buildBrowseAgentPrompt(mockAC, {
+      baseUrl: "http://localhost:3002", browseBin: "/usr/local/bin/browse", evidenceDir,
+    });
+    expect(prompt).toContain("wrap it in double quotes");
+    expect(prompt).toContain('/usr/local/bin/browse click "#more-actions-button"');
+    expect(prompt).toContain('/usr/local/bin/browse hover "#trial-badge"');
+  });
+
+  it("requires fail-fast for hover and press failures and forbids selector invention", () => {
+    const prompt = buildBrowseAgentPrompt(mockAC, {
+      baseUrl: "http://localhost:3002", browseBin: "/usr/local/bin/browse", evidenceDir,
+    });
+    expect(prompt).toContain("If any `browse click`, `browse fill`, `browse hover`, `browse press`, or `browse wait` command returns");
+    expect(prompt).toContain("Do NOT try alternative selectors");
+    expect(prompt).toContain("Do NOT invent selectors");
+    expect(prompt).toContain("Do NOT search the codebase");
+  });
+
+  it("requires observed auth redirects to be labeled clearly", () => {
+    const prompt = buildBrowseAgentPrompt(mockAC, {
+      baseUrl: "http://localhost:3002", browseBin: "/usr/local/bin/browse", evidenceDir,
+    });
+    expect(prompt).toContain("start the observed text with `Auth redirect:`");
+  });
+
+  it("treats generic page-load waits as snapshot checks unless content is still loading", () => {
+    const prompt = buildBrowseAgentPrompt(mockAC, {
+      baseUrl: "http://localhost:3002", browseBin: "/usr/local/bin/browse", evidenceDir,
+    });
+    expect(prompt).toContain("After `goto`, the first `snapshot` is usually enough for a generic \"Wait for page load\" step.");
+    expect(prompt).toContain("Only run `wait` when the page still shows loading state");
+  });
 });
 
 describe("parseBrowseResult", () => {
@@ -107,7 +150,43 @@ describe("parseBrowseResult", () => {
     expect(result!.nav_failure).toBeDefined();
     expect(result!.nav_failure!.failed_step).toBe("click [data-testid=event-type-options-1159]");
     expect(result!.nav_failure!.page_snapshot).toContain("Seeded Team");
-    expect(result!.observed).toBe("Nav failure: could not find [data-testid=event-type-options-1159]");
+    expect((result!.nav_failure as any).kind).toBe("navigation");
+    expect(result!.observed).toContain("click [data-testid=event-type-options-1159]");
+    expect(result!.observed).toContain("Operation timed out");
+  });
+
+  it("synthesizes useful observed text for hover nav failures", () => {
+    const output = JSON.stringify({
+      ac_id: "ac1",
+      nav_failure: {
+        failed_step: "hover @e1",
+        error: "Operation timed out: hover: Timeout 5000ms exceeded.",
+        page_snapshot: "@e1 [button] \"Trial\"",
+      },
+      screenshots: ["nav-failure.png"],
+      commands_run: ["goto http://localhost:3000/settings/billing", "hover @e1"],
+    });
+    const result = parseBrowseResult(output);
+    expect(result).not.toBeNull();
+    expect(result!.observed).toContain("hover @e1");
+    expect(result!.observed).toContain("Operation timed out");
+  });
+
+  it("preserves explicit interaction failure kind", () => {
+    const output = JSON.stringify({
+      ac_id: "ac1",
+      nav_failure: {
+        kind: "interaction",
+        failed_step: "hover @e1",
+        error: "Operation timed out: hover: Timeout 5000ms exceeded.",
+        page_snapshot: "@e1 [button] \"Trial\"",
+      },
+      screenshots: ["nav-failure.png"],
+      commands_run: ["goto http://localhost:3000/settings/billing", "hover @e1"],
+    });
+    const result = parseBrowseResult(output);
+    expect(result).not.toBeNull();
+    expect((result!.nav_failure as any).kind).toBe("interaction");
   });
 
   it("parses normal result without nav_failure", () => {

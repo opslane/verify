@@ -50,10 +50,19 @@ export function parseBrowseResult(raw: string): BrowseResult | null {
 
   // Nav failure result: no observed, but has nav_failure
   if (parsed.nav_failure && typeof parsed.nav_failure.failed_step === "string") {
+    if (!parsed.nav_failure.kind) {
+      parsed.nav_failure.kind = "navigation";
+    } else if (parsed.nav_failure.kind !== "navigation" && parsed.nav_failure.kind !== "interaction") {
+      return null;
+    }
+
     // Synthesize an observed string for downstream consumers (judge, etc.)
     if (typeof parsed.observed !== "string" || !parsed.observed) {
-      const selector = parsed.nav_failure.failed_step.replace(/^(click|fill)\s+/, "");
-      parsed.observed = `Nav failure: could not find ${selector}`;
+      const failedStep = parsed.nav_failure.failed_step.trim();
+      const error = parsed.nav_failure.error?.trim();
+      parsed.observed = error
+        ? `Nav failure during ${failedStep}: ${error}`
+        : `Nav failure during ${failedStep}`;
     }
   } else if (typeof parsed.observed !== "string") {
     return null;

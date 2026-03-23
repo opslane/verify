@@ -7,6 +7,11 @@ const moduleDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(moduleDir, "..", "..", "evals", "browse-dom-harness", "public");
 const routeAliases: Record<string, string> = {
   "/event-types": "dialog.html",
+  "/keyboard": "keyboard.html",
+  "/loading": "loading.html",
+  "/login": "login.html",
+  "/reports": "loading.html",
+  "/settings": "keyboard.html",
   "/trial": "tooltip.html",
 };
 
@@ -47,6 +52,14 @@ function send(res: ServerResponse, statusCode: number, body: string, headers?: R
   res.end(body);
 }
 
+function sendRedirect(res: ServerResponse, location: string, statusCode = 302): void {
+  res.writeHead(statusCode, {
+    "Content-Length": "0",
+    "Location": location,
+  });
+  res.end();
+}
+
 function resolveStaticFile(urlPath: string): string | null {
   const decodedPath = decodeURIComponent(urlPath);
   const aliasedFile = routeAliases[decodedPath];
@@ -68,9 +81,25 @@ function resolveStaticFile(urlPath: string): string | null {
   return existsSync(resolvedPath) ? resolvedPath : null;
 }
 
+function renderLoginHtml(filePath: string, nextTarget: string): string {
+  const html = readFileSync(filePath, "utf-8");
+  const renderedNextTarget = escapeHtml(nextTarget || "/");
+  return html.replaceAll("__NEXT_TARGET__", renderedNextTarget);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   const method = req.method?.toUpperCase() ?? "GET";
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  const nextTarget = url.searchParams.get("next") ?? "";
 
   if (method !== "GET" && method !== "HEAD") {
     send(res, 404, "not found");
@@ -82,6 +111,11 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
+  if (url.pathname === "/billing") {
+    sendRedirect(res, `/login.html?next=${encodeURIComponent("/billing")}`);
+    return;
+  }
+
   const filePath = resolveStaticFile(url.pathname);
 
   if (!filePath) {
@@ -89,7 +123,10 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     return;
   }
 
-  const body = readFileSync(filePath);
+  const body =
+    filePath.endsWith(`${sep}login.html`)
+      ? Buffer.from(renderLoginHtml(filePath, nextTarget))
+      : readFileSync(filePath);
   res.writeHead(200, {
     "Content-Length": body.length.toString(),
     "Content-Type": contentTypeFor(filePath),

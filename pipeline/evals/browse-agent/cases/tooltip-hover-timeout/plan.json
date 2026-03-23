@@ -1,0 +1,18 @@
+{
+  "criteria": [
+    {
+      "id": "ac1",
+      "group": "group-a",
+      "description": "The browse agent fails fast when the hover target times out.",
+      "url": "/settings/billing",
+      "steps": [
+        "Navigate to /settings/billing",
+        "Wait for page load",
+        "Hover the trial badge",
+        "Take screenshot"
+      ],
+      "screenshot_at": ["nav_failure_state"],
+      "timeout_seconds": 90
+    }
+  ]
+}

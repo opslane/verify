@@ -6,11 +6,11 @@
       "description": "The event types page opens the duplicate dialog from the menu.",
       "url": "/event-types",
       "steps": [
-        "Navigate to /event-types",
-        "Wait for page load",
-        "Open the action menu",
-        "Click the duplicate action",
-        "Take screenshot"
+        "Go to /event-types",
+        "Take a snapshot after the page loads",
+        "Click #more-actions-button",
+        "Click #duplicate-action-button",
+        "Take screenshot duplicate_dialog_visible"
       ],
       "screenshot_at": ["duplicate_dialog_visible"],
       "timeout_seconds": 120
