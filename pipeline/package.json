@@ -6,7 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eval:browse": "tsx src/evals/run-browse-evals.ts",
+    "eval:browse:dom": "tsx src/evals/run-browse-dom-evals.ts"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
