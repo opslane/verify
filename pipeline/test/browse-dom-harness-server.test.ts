@@ -62,6 +62,22 @@ describe("browse dom harness server", () => {
     expect(await response.text()).toBe("browse harness static file");
   });
 
+  it("serves the shared harness assets", async () => {
+    const started = await startBrowseDomHarnessServer({ port: 0 });
+    server = started.server;
+
+    const cssResponse = await fetch(`http://127.0.0.1:${started.port}/shared.css`);
+    const jsResponse = await fetch(`http://127.0.0.1:${started.port}/shared.js`);
+
+    expect(cssResponse.status).toBe(200);
+    expect(cssResponse.headers.get("content-type")).toContain("text/css");
+    expect(await cssResponse.text()).not.toBe("");
+
+    expect(jsResponse.status).toBe(200);
+    expect(jsResponse.headers.get("content-type")).toContain("text/javascript");
+    expect(await jsResponse.text()).not.toBe("");
+  });
+
   it("returns 404 for unknown routes", async () => {
     const started = await startBrowseDomHarnessServer({ port: 0 });
     server = started.server;
