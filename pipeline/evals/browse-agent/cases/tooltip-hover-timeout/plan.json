@@ -8,8 +8,8 @@
       "steps": [
         "Navigate to /settings/billing",
         "Wait for page load",
-        "Hover the trial badge",
-        "Take screenshot"
+        "Hover @e1",
+        "Take screenshot nav_failure_state"
       ],
       "screenshot_at": ["nav_failure_state"],
       "timeout_seconds": 90

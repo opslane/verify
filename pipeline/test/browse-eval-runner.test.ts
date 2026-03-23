@@ -117,4 +117,13 @@ describe("browse eval runner", () => {
     expect(expected.required_commands).toContain("click [role='dialog'] button:nth-child(2)");
     expect(expected.max_duration_ms).toBeGreaterThanOrEqual(25000);
   });
+
+  it("requires the fake tooltip-timeout case to target the known hover ref and allow realistic failure latency", () => {
+    const plan = readFakeCaseJson<{ criteria: Array<{ steps: string[] }> }>("tooltip-hover-timeout", "plan.json");
+    const expected = readFakeCaseJson<{ required_commands: string[]; max_duration_ms: number }>("tooltip-hover-timeout", "expected.json");
+
+    expect(plan.criteria[0]?.steps).toContain("Hover @e1");
+    expect(expected.required_commands).toContain("hover @e1");
+    expect(expected.max_duration_ms).toBeGreaterThanOrEqual(20000);
+  });
 });
