@@ -126,4 +126,14 @@ describe("browse eval runner", () => {
     expect(expected.required_commands).toContain("hover @e1");
     expect(expected.max_duration_ms).toBeGreaterThanOrEqual(20000);
   });
+
+  it("requires the fake tooltip-success case to target the known hover ref and allow realistic success latency", () => {
+    const plan = readFakeCaseJson<{ criteria: Array<{ steps: string[] }> }>("tooltip-hover-success", "plan.json");
+    const expected = readFakeCaseJson<{ required_commands: string[]; max_duration_ms: number }>("tooltip-hover-success", "expected.json");
+
+    expect(plan.criteria[0]?.steps).toContain("Hover @e1");
+    expect(expected.required_commands).toContain("hover @e1");
+    expect(expected.required_commands).toContain("snapshot");
+    expect(expected.max_duration_ms).toBeGreaterThanOrEqual(25000);
+  });
 });

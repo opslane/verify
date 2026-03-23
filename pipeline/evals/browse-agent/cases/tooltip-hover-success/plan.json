@@ -8,8 +8,8 @@
       "steps": [
         "Navigate to /settings/billing",
         "Wait for page load",
-        "Hover the trial badge",
-        "Take screenshot"
+        "Hover @e1",
+        "Take screenshot trial_tooltip_visible"
       ],
       "screenshot_at": ["trial_tooltip_visible"],
       "timeout_seconds": 90

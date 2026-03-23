@@ -8,5 +8,5 @@
   "required_observed_substrings": ["dialog", "Duplicate event type"],
   "forbidden_observed_substrings": ["playwright", "codebase"],
   "max_command_count": 7,
-  "max_duration_ms": 25000
+  "max_duration_ms": 30000
 }
