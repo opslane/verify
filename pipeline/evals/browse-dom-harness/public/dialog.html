@@ -38,13 +38,13 @@
         const duplicateHeading = ["Duplicate", "event", "type"].join(" ");
         let currentDialog = null;
 
-        function removeCurrentDialog() {
+        function removeCurrentDialog(restoreFocus = true) {
           if (!currentDialog) {
             return;
           }
 
+          currentDialog.dataset.restoreFocus = restoreFocus ? "true" : "false";
           currentDialog.close();
-          currentDialog.remove();
           currentDialog = null;
           trigger.setAttribute("aria-expanded", "false");
         }
@@ -65,9 +65,8 @@
             removeCurrentDialog();
           });
           dialog.addEventListener("close", () => {
-            if (currentDialog === dialog) {
-              currentDialog = null;
-              trigger.setAttribute("aria-expanded", "false");
+            if (dialog.dataset.restoreFocus !== "false") {
+              trigger.focus();
             }
             dialog.remove();
           });
@@ -75,7 +74,7 @@
         }
 
         function openDuplicateDialog() {
-          removeCurrentDialog();
+          removeCurrentDialog(false);
 
           const dialog = createDialog(`
             <div class="stack">
