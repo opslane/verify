@@ -7,7 +7,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "eval:browse:dom": "tsx src/evals/run-browse-dom-evals.ts"
+    "eval:browse:dom": "node -e \"console.error('DOM browse eval runner is not implemented yet.'); process.exit(1)\""
   },
   "devDependencies": {
     "typescript": "^5.0.0",
