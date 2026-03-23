@@ -79,6 +79,7 @@ export interface SetupCommands {
 // ── Browse Agent output ─────────────────────────────────────────────────────
 
 export interface NavFailure {
+  kind?: "navigation" | "interaction";
   failed_step: string;
   error: string;
   page_snapshot: string;

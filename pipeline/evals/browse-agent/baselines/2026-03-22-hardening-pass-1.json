@@ -1,0 +1,46 @@
+{
+  "recorded_at": "2026-03-22T20:29:31-07:00",
+  "cases": 6,
+  "passed": 6,
+  "median_duration_ms": 12345,
+  "timeout_like_failures": 0,
+  "notes": "First hardening pass after prompt, parser, failure-kind separation, and stronger scorer improvements. Summary: 6/6 passed; timeout-like failures: 0.",
+  "results": [
+    {
+      "case_id": "auth-redirect",
+      "passed": true,
+      "command_count": 3,
+      "duration_ms": 8395
+    },
+    {
+      "case_id": "dialog-css-required",
+      "passed": true,
+      "command_count": 7,
+      "duration_ms": 14818
+    },
+    {
+      "case_id": "keyboard-nav",
+      "passed": true,
+      "command_count": 5,
+      "duration_ms": 9720
+    },
+    {
+      "case_id": "tooltip-hover-success",
+      "passed": true,
+      "command_count": 5,
+      "duration_ms": 10210
+    },
+    {
+      "case_id": "tooltip-hover-timeout",
+      "passed": true,
+      "command_count": 5,
+      "duration_ms": 14479
+    },
+    {
+      "case_id": "wait-for-data",
+      "passed": true,
+      "command_count": 5,
+      "duration_ms": 15360
+    }
+  ]
+}

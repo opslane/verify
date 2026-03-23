@@ -1,0 +1,18 @@
+{
+  "criteria": [
+    {
+      "id": "ac1",
+      "group": "group-a",
+      "description": "Hovering a tooltip-only target fails fast on the trial page.",
+      "url": "/trial",
+      "steps": [
+        "Go to /trial",
+        "Take a snapshot after the page loads",
+        "Hover #trial-blocked-badge",
+        "Take screenshot nav_failure"
+      ],
+      "screenshot_at": ["nav_failure"],
+      "timeout_seconds": 60
+    }
+  ]
+}

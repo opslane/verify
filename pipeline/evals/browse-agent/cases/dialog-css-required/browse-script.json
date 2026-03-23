@@ -1,0 +1,39 @@
+{
+  "steps": [
+    {
+      "match": "goto ",
+      "stdout": "Navigated to event types page.\n",
+      "exitCode": 0
+    },
+    {
+      "match": "snapshot",
+      "stdout": "@e70 [button] \"More\"\n@e71 [text] \"Event types\"\n",
+      "exitCode": 0
+    },
+    {
+      "match": "click @e70",
+      "stdout": "Action menu opened.\n",
+      "exitCode": 0
+    },
+    {
+      "match": "snapshot",
+      "stdout": "[role='dialog'] [button] \"Cancel\"\n[role='dialog'] [button] \"Duplicate\"\n",
+      "exitCode": 0
+    },
+    {
+      "match": "click [role='dialog'] button:nth-child(2)",
+      "stdout": "Duplicate dialog opened.\n",
+      "exitCode": 0
+    },
+    {
+      "match": "snapshot",
+      "stdout": "[role='dialog'] [heading] \"Duplicate event type\"\n[role='dialog'] [button] \"Confirm\"\n",
+      "exitCode": 0
+    },
+    {
+      "match": "screenshot ",
+      "stdout": "Screenshot saved.\n",
+      "exitCode": 0
+    }
+  ]
+}

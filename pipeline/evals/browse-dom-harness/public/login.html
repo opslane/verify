@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in</title>
+    <link rel="stylesheet" href="/shared.css" />
+    <style>
+      .login-shell {
+        display: grid;
+        gap: 18px;
+        padding: 32px;
+      }
+
+      .login-card {
+        display: grid;
+        gap: 14px;
+        max-width: 360px;
+        padding: 22px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.75);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="surface login-shell" aria-label="Sign in">
+        <div class="login-card">
+          <p class="muted">Sign in</p>
+          <h1>Sign in</h1>
+          <p id="next-target" class="muted">Next: __NEXT_TARGET__</p>
+          <button class="button button-primary" type="button">Sign in</button>
+        </div>
+      </section>
+    </main>
+    <script src="/shared.js"></script>
+  </body>
+</html>

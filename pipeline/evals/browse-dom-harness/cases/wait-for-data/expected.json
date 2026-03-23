@@ -1,0 +1,13 @@
+{
+  "ac_id": "ac1",
+  "expect_parseable_result": true,
+  "expect_result_kind": "normal",
+  "required_commands": ["goto", "snapshot", "wait #reports-results", "snapshot", "screenshot"],
+  "required_evidence_substrings": ["Reports loaded", "Monthly revenue", "Active users"],
+  "forbidden_shell_patterns": ["rg ", "grep ", "find ", "git ", "ls ", "cat ", "sed ", "awk ", "head ", "tail "],
+  "required_observed_substrings": ["Reports loaded", "Monthly revenue", "Active users"],
+  "forbidden_observed_substrings": ["playwright", "codebase"],
+  "allowed_read_path_suffixes": ["instructions.json"],
+  "max_command_count": 5,
+  "max_duration_ms": 20000
+}

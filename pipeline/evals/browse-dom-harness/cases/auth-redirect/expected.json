@@ -1,0 +1,13 @@
+{
+  "ac_id": "ac1",
+  "expect_parseable_result": true,
+  "expect_result_kind": "normal",
+  "required_commands": ["goto", "snapshot", "screenshot"],
+  "required_evidence_substrings": ["Sign in", "/billing"],
+  "forbidden_shell_patterns": ["rg ", "grep ", "find ", "git ", "ls ", "cat ", "sed ", "awk ", "head ", "tail "],
+  "required_observed_substrings": ["Auth redirect", "Sign in", "Next: /billing"],
+  "forbidden_observed_substrings": ["playwright", "codebase"],
+  "allowed_read_path_suffixes": ["instructions.json"],
+  "max_command_count": 3,
+  "max_duration_ms": 10000
+}

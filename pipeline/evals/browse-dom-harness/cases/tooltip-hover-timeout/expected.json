@@ -1,0 +1,13 @@
+{
+  "ac_id": "ac1",
+  "expect_parseable_result": true,
+  "expect_result_kind": "nav_failure",
+  "expect_nav_failure_kind": "interaction",
+  "required_commands": ["goto", "snapshot", "hover #trial-blocked-badge", "snapshot", "screenshot"],
+  "forbidden_shell_patterns": ["rg ", "grep ", "find ", "git ", "ls ", "cat ", "sed ", "awk ", "head ", "tail "],
+  "required_observed_substrings": ["nav failure", "trial"],
+  "forbidden_observed_substrings": ["playwright", "codebase"],
+  "allowed_read_path_suffixes": ["instructions.json"],
+  "max_command_count": 5,
+  "max_duration_ms": 20000
+}

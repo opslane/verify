@@ -308,8 +308,8 @@ export async function runPipeline(
 
       let browseResult = parseBrowseResult(agentResult.stdout);
 
-      // Nav failure → replan → retry (max 1 attempt)
-      if (browseResult?.nav_failure) {
+      // Navigation failure → replan → retry (max 1 attempt)
+      if (browseResult?.nav_failure && browseResult.nav_failure.kind !== "interaction") {
         const failedStep = browseResult.nav_failure.failed_step;
         callbacks.onLog(`  ${ac.id}: nav_failure — replanning...`);
         progress.update(ac.id, "running", "replanning");

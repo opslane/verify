@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trial tooltip</title>
+    <link rel="stylesheet" href="/shared.css" />
+    <style>
+      .tooltip-shell {
+        position: relative;
+        display: grid;
+        gap: 16px;
+        justify-items: start;
+        padding: 32px;
+      }
+
+      .tooltip-layer {
+        position: relative;
+        min-height: 0;
+      }
+
+      .tooltip-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .tooltip-popover {
+        position: absolute;
+        top: calc(100% + 12px);
+        left: 0;
+        max-width: 240px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #111827;
+        color: #fff;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+        font-weight: 600;
+      }
+
+      .tooltip-trigger-blocked {
+        pointer-events: none;
+        opacity: 0.6;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="surface tooltip-shell" aria-label="Trial status">
+        <p class="muted">Billing</p>
+        <div class="tooltip-actions">
+          <button id="trial-badge" class="chip button" type="button">Trial</button>
+          <button id="trial-blocked-badge" class="chip button tooltip-trigger-blocked" type="button" aria-disabled="true">Trial blocked</button>
+        </div>
+        <div id="tooltip-layer" class="tooltip-layer" aria-live="polite"></div>
+      </section>
+    </main>
+    <script src="/shared.js"></script>
+    <script>
+      (function () {
+        const trigger = document.getElementById("trial-badge");
+        const layer = document.getElementById("tooltip-layer");
+        const tooltipMessage = ["14", "days left in your trial"].join(" ");
+        let tooltip = null;
+
+        function hideTooltip() {
+          if (!tooltip) {
+            return;
+          }
+
+          tooltip.remove();
+          tooltip = null;
+          trigger.removeAttribute("aria-describedby");
+        }
+
+        function showTooltip() {
+          if (tooltip) {
+            return;
+          }
+
+          tooltip = document.createElement("div");
+          tooltip.id = "trial-tooltip";
+          tooltip.className = "tooltip-popover";
+          tooltip.setAttribute("role", "tooltip");
+          tooltip.textContent = tooltipMessage;
+          layer.appendChild(tooltip);
+          trigger.setAttribute("aria-describedby", tooltip.id);
+        }
+
+        trigger.addEventListener("mouseenter", showTooltip);
+        trigger.addEventListener("focus", showTooltip);
+        trigger.addEventListener("mouseleave", hideTooltip);
+        trigger.addEventListener("blur", hideTooltip);
+      })();
+    </script>
+  </body>
+</html>
