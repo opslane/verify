@@ -1,0 +1,19 @@
+{
+  "criteria": [
+    {
+      "id": "ac1",
+      "group": "group-a",
+      "description": "The event types page opens the duplicate dialog from the menu.",
+      "url": "/event-types",
+      "steps": [
+        "Navigate to /event-types",
+        "Wait for page load",
+        "Open the action menu",
+        "Click the duplicate action",
+        "Take screenshot"
+      ],
+      "screenshot_at": ["duplicate_dialog_visible"],
+      "timeout_seconds": 120
+    }
+  ]
+}

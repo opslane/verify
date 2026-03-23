@@ -56,16 +56,14 @@ describe("browse dom eval runner", () => {
   });
 
   it("discovers DOM case directories in sorted order and filters by case id", () => {
-    writeCase(tmpRoot, "b-case");
-    writeCase(tmpRoot, "a-case");
-
-    const discovered = discoverCaseDirs(tmpRoot);
+    const caseRoot = join(__dirname, "..", "evals", "browse-dom-harness", "cases");
+    const discovered = discoverCaseDirs(caseRoot);
 
     expect(discovered).toEqual([
-      join(tmpRoot, "a-case"),
-      join(tmpRoot, "b-case"),
+      join(caseRoot, "dialog-css-required"),
+      join(caseRoot, "tooltip-hover-success"),
     ]);
-    expect(selectCaseDirs(discovered, "b-case")).toEqual([join(tmpRoot, "b-case")]);
+    expect(selectCaseDirs(discovered, "tooltip-hover-success")).toEqual([join(caseRoot, "tooltip-hover-success")]);
   });
 
   it("creates a trace wrapper that forwards to the trace shim", () => {
