@@ -78,6 +78,32 @@ describe("browse dom harness server", () => {
     expect(await jsResponse.text()).not.toBe("");
   });
 
+  it("serves the trial tooltip page with only its trigger state initially", async () => {
+    const started = await startBrowseDomHarnessServer({ port: 0 });
+    server = started.server;
+
+    const response = await fetch(`http://127.0.0.1:${started.port}/trial`);
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("Trial");
+    expect(html).toContain("trial-badge");
+    expect(html).not.toContain("14 days left in your trial");
+  });
+
+  it("serves the event types dialog page with only its trigger state initially", async () => {
+    const started = await startBrowseDomHarnessServer({ port: 0 });
+    server = started.server;
+
+    const response = await fetch(`http://127.0.0.1:${started.port}/event-types`);
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("More");
+    expect(html).toContain("more-actions-button");
+    expect(html).not.toContain("Duplicate event type");
+  });
+
   it("returns 404 for unknown routes", async () => {
     const started = await startBrowseDomHarnessServer({ port: 0 });
     server = started.server;

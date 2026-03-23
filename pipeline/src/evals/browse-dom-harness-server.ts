@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(moduleDir, "..", "..", "evals", "browse-dom-harness", "public");
+const routeAliases: Record<string, string> = {
+  "/event-types": "dialog.html",
+  "/trial": "tooltip.html",
+};
 
 type StartBrowseDomHarnessServerOptions = {
   port?: number;
@@ -45,6 +49,14 @@ function send(res: ServerResponse, statusCode: number, body: string, headers?: R
 
 function resolveStaticFile(urlPath: string): string | null {
   const decodedPath = decodeURIComponent(urlPath);
+  const aliasedFile = routeAliases[decodedPath];
+
+  if (aliasedFile) {
+    const aliasPath = resolve(publicDir, aliasedFile);
+
+    return existsSync(aliasPath) ? aliasPath : null;
+  }
+
   const relativePath = decodedPath === "/" ? "/index.html" : decodedPath.endsWith("/") ? `${decodedPath}index.html` : decodedPath;
   const resolvedPath = resolve(publicDir, `.${relativePath}`);
   const normalizedPublicDir = publicDir.endsWith(sep) ? publicDir : `${publicDir}${sep}`;
