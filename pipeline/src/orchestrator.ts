@@ -223,8 +223,8 @@ export async function runPipeline(
         for (let attempt = 1; attempt <= MAX_SETUP_ATTEMPTS; attempt++) {
           // Build prompt — original on first attempt, retry with error context after
           const setupPrompt = attempt === 1
-            ? buildSetupWriterPrompt(groupId, condition, projectRoot)
-            : buildSetupWriterRetryPrompt(groupId, condition, projectRoot, lastRetryContext!);
+            ? buildSetupWriterPrompt(groupId, condition, projectRoot, config.auth?.email)
+            : buildSetupWriterRetryPrompt(groupId, condition, projectRoot, lastRetryContext!, config.auth?.email);
           const stageName = attempt === 1
             ? `setup-${groupId}`
             : `setup-${groupId}-retry${attempt - 1}`;
