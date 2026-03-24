@@ -43,7 +43,7 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
   return new Promise<RunClaudeResult>((resolve) => {
     const claudeBin = process.env.CLAUDE_BIN ?? "claude";
     const child = spawn(claudeBin, args, {
-      env: { ...process.env },
+      env: { ...process.env, ...opts.env },
       stdio: ["pipe", "pipe", "pipe"],
       ...(cwd ? { cwd } : {}),
     });

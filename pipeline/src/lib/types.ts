@@ -164,6 +164,7 @@ export interface RunClaudeOptions {
   effort?: "low" | "medium" | "high" | "max";
   settingSources?: string;              // defaults to "" (no hooks/skills); set "user,project" to opt in
   onProgress?: (event: StageProgressEvent) => void;
+  env?: Record<string, string>;         // extra env vars merged into subprocess (e.g. BROWSE_STATE_FILE)
 }
 
 export interface RunClaudeResult {
