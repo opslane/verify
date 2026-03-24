@@ -22,7 +22,8 @@ import type { SetupRetryContext } from "./stages/setup-writer.js";
 import { buildBrowseAgentPrompt, parseBrowseResult, buildReplanPrompt, parseReplanOutput } from "./stages/browse-agent.js";
 import { collectEvidencePaths, buildJudgePrompt, parseJudgeOutput } from "./stages/judge.js";
 import { buildLearnerPrompt, backupAndRestore, validateLearnings } from "./stages/learner.js";
-import { resolveBrowseBin, resetPage } from "./lib/browse.js";
+import { resolveBrowseBin, resetPage, startGroupDaemon, stopGroupDaemon, stopAllGroupDaemons } from "./lib/browse.js";
+import { loginOnDaemon } from "./init.js";
 import { extractTableNames, snapshotTables, restoreSnapshot } from "./lib/db-snapshot.js";
 import { findAndRenameVideo } from "./lib/video.js";
 import { formatTerminalReport, formatTimingSummary } from "./report.js";
@@ -149,7 +150,6 @@ export async function runPipeline(
   // ── Stage 3 + 4: Setup + Browse Agents ────────────────────────────────
   callbacks.onLog("Stage 3-4: Executing browser agents...");
   const browseBin = resolveBrowseBin();
-  const abortController = new AbortController();
   const projectEnv = loadProjectEnv(projectRoot);
 
   // Collect seed IDs from app.json to protect from destructive setup/teardown
@@ -186,10 +186,31 @@ export async function runPipeline(
 
   const maxParallel = config.maxParallelGroups ?? 5;
 
-  async function executeGroup(groupId: string): Promise<void> {
+  async function executeGroup(groupId: string, sharedDaemonEnv?: Record<string, string>): Promise<void> {
     const groupAcs = groupMap.get(groupId)!;
     const condition = groupConditions.get(groupId);
 
+    // Per-group browse daemon isolation
+    const ownsDaemon = !sharedDaemonEnv;
+    const { env: groupEnv, stateDir: groupStateDir } = sharedDaemonEnv
+      ? { env: sharedDaemonEnv, stateDir: "" }
+      : startGroupDaemon(groupId, runDir);
+    const groupAbort = new AbortController();
+
+    if (ownsDaemon) {
+      const loginResult = loginOnDaemon(config, groupEnv);
+      if (!loginResult.ok) {
+        callbacks.onLog(`  ${groupId}: login failed — ${loginResult.error}`);
+        for (const ac of groupAcs) {
+          allVerdicts.push({ ac_id: ac.id, verdict: "login_failed", confidence: "high", reasoning: loginResult.error ?? "Login failed" });
+          progress.update(ac.id, "error", "login_failed");
+        }
+        stopGroupDaemon(groupStateDir);
+        return;
+      }
+    }
+
+    try {
     // Setup (if group has a condition requiring data state)
     let snapshotPath: string | null = null;
     let snapshotTableList: string[] = [];
@@ -273,8 +294,8 @@ export async function runPipeline(
 
     // Run browse agents sequentially within group
     for (const ac of groupAcs) {
-      if (abortController.signal.aborted) {
-        allVerdicts.push({ ac_id: ac.id, verdict: "auth_expired", confidence: "high", reasoning: "Aborted: auth session expired" });
+      if (groupAbort.signal.aborted) {
+        allVerdicts.push({ ac_id: ac.id, verdict: "auth_expired", confidence: "high", reasoning: "Aborted: auth session expired in group" });
         progress.update(ac.id, "skipped", "auth_expired");
         continue;
       }
@@ -293,7 +314,7 @@ export async function runPipeline(
       });
       const agentResult = await runClaude({
         prompt: agentPrompt, model: "sonnet", timeoutMs: computeTimeoutMs(enrichedAc.steps),
-        stage: `browse-agent-${ac.id}`, runDir, ...perms("browse-agent"),
+        stage: `browse-agent-${ac.id}`, runDir, env: groupEnv, ...perms("browse-agent"),
       });
 
       // Collect video evidence if present
@@ -345,7 +366,7 @@ export async function runPipeline(
           const retryResult = await runClaude({
             prompt: retryPrompt, model: "sonnet",
             timeoutMs: computeTimeoutMs(retryAc.steps),
-            stage: `browse-agent-${ac.id}-retry`, runDir, ...perms("browse-agent"),
+            stage: `browse-agent-${ac.id}-retry`, runDir, env: groupEnv, ...perms("browse-agent"),
           });
 
           findAndRenameVideo(evidenceDir);
@@ -385,10 +406,10 @@ export async function runPipeline(
       if (browseResult) {
         writeFileSync(join(evidenceDir, "result.json"), JSON.stringify(browseResult, null, 2));
 
-        // Circuit breaker: auth failure kills all agents
-        if (isAuthFailure(browseResult.observed)) {
-          callbacks.onError("Auth session expired. Run /verify-setup to re-authenticate.");
-          abortController.abort();
+        // Circuit breaker: auth failure kills this group's remaining agents
+        if (isAuthFailure(browseResult.observed, ac.url)) {
+          callbacks.onError(`Auth session expired in group ${groupId}.`);
+          groupAbort.abort();
           allVerdicts.push({ ac_id: ac.id, verdict: "auth_expired", confidence: "high", reasoning: "Auth redirect detected" });
           progress.update(ac.id, "error", "auth_expired");
           resetPage();
@@ -411,6 +432,9 @@ export async function runPipeline(
         callbacks.onLog(`  ⚠ Snapshot restore failed: ${restoreResult.error}`);
       }
     }
+    } finally {
+      if (ownsDaemon) stopGroupDaemon(groupStateDir);
+    }
   }
 
   // Split groups into setup (needs DB mutation) and pure-UI (no setup)
@@ -427,34 +451,39 @@ export async function runPipeline(
 
   callbacks.onLog(`  Execution: ${setupGroupIds.length} setup (serial) + ${pureUIGroupIds.length} pure-UI (parallel)`);
 
-  // Execute setup groups SEQUENTIALLY (they share the same DB)
-  // and pure-UI groups IN PARALLEL (no DB mutations)
+  // Execute setup groups SEQUENTIALLY (they share the same DB and one daemon)
+  // and pure-UI groups IN PARALLEL (each gets its own daemon)
   const setupChainPromise = (async () => {
-    for (const groupId of setupGroupIds) {
-      if (abortController.signal.aborted) break;
-      await executeGroup(groupId);
+    if (setupGroupIds.length === 0) return;
+    // Setup groups share one daemon (they run serially — no contention)
+    const { env: setupEnv, stateDir: setupStateDir } = startGroupDaemon("setup-shared", runDir);
+    const loginResult = loginOnDaemon(config, setupEnv);
+    if (!loginResult.ok) {
+      callbacks.onLog(`  setup-shared: login failed — ${loginResult.error}`);
+      for (const groupId of setupGroupIds) {
+        for (const ac of groupMap.get(groupId)!) {
+          allVerdicts.push({ ac_id: ac.id, verdict: "login_failed", confidence: "high", reasoning: loginResult.error ?? "Login failed" });
+          progress.update(ac.id, "error", "login_failed");
+        }
+      }
+      stopGroupDaemon(setupStateDir);
+      return;
+    }
+    try {
+      for (const groupId of setupGroupIds) {
+        await executeGroup(groupId, setupEnv);
+      }
+    } finally {
+      stopGroupDaemon(setupStateDir);
     }
   })();
 
-  const pureUIPromises = pureUIGroupIds.map((groupId) => {
-    if (abortController.signal.aborted) return Promise.resolve();
-    return executeGroup(groupId);
-  });
+  const pureUIPromises = pureUIGroupIds.map((groupId) => executeGroup(groupId));
 
   await Promise.all([setupChainPromise, ...pureUIPromises]);
 
-  // Handle aborted groups
-  if (abortController.signal.aborted) {
-    for (const groupId of groupMap.keys()) {
-      const groupAcs = groupMap.get(groupId) ?? [];
-      for (const ac of groupAcs) {
-        if (!allVerdicts.some(v => v.ac_id === ac.id)) {
-          allVerdicts.push({ ac_id: ac.id, verdict: "auth_expired", confidence: "high", reasoning: "Skipped: auth session expired" });
-          progress.update(ac.id, "skipped", "auth_expired");
-        }
-      }
-    }
-  }
+  // Safety net: kill any group daemons that survived (crash, exception)
+  stopAllGroupDaemons(runDir);
 
   // ── Stage 5: Judge ────────────────────────────────────────────────────
   const evidenceRefs = collectEvidencePaths(runDir);

@@ -39,6 +39,12 @@ vi.mock("../src/lib/browse.js", () => ({
   healthCheck: vi.fn(() => true),
   stopDaemon: vi.fn(),
   resetPage: vi.fn(),
+  startGroupDaemon: vi.fn((groupId: string, runDir: string) => ({
+    env: { BROWSE_STATE_FILE: `${runDir}/.browse-${groupId}/browse.json` },
+    stateDir: `${runDir}/.browse-${groupId}`,
+  })),
+  stopGroupDaemon: vi.fn(),
+  stopAllGroupDaemons: vi.fn(),
 }));
 
 // ── Mock video helper ───────────────────────────────────────────────────────
@@ -49,6 +55,7 @@ vi.mock("../src/lib/video.js", () => ({
 // ── Mock init/preflight ──────────────────────────────────────────────────────
 vi.mock("../src/init.js", () => ({
   runPreflight: vi.fn(async () => ({ ok: true, errors: [] })),
+  loginOnDaemon: vi.fn(() => ({ ok: true })),
 }));
 
 // ── Mock setup-writer execution ─────────────────────────────────────────────
