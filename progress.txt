@@ -467,3 +467,37 @@ Task 4: Final verification
 
 ### Status
 238 tests passing (25 files), typecheck clean
+
+---
+
+## parallel-browse-daemons (plan: docs/plans/2026-03-23-parallel-browse-daemons-implementation.md)
+
+### Completed
+- [x] Task 1: Make isAuthFailure() context-aware + add login_failed verdict (commit: 05343bd)
+  - Files: pipeline/src/lib/types.ts, pipeline/test/auth-failure.test.ts
+  - AUTH_PAGE_PATTERNS with boundary-aware matching, 6 new tests
+- [x] Task 2: Refine browse agent CRITICAL RULE 3 (commit: 0b5c6cf)
+  - Files: pipeline/src/prompts/browse-agent.txt
+  - Auth redirect rule distinguishes unexpected vs intentional auth page visits
+- [x] Task 3: Add env to RunClaudeOptions (commit: 281b741)
+  - Files: pipeline/src/lib/types.ts, pipeline/src/run-claude.ts
+  - env?: Record<string, string> merged into subprocess spawn
+- [x] Task 4: Add group daemon helpers to browse.ts (commit: fb0b524)
+  - Files: pipeline/src/lib/browse.ts, pipeline/test/browse.test.ts
+  - startGroupDaemon, stopGroupDaemon, stopAllGroupDaemons, 5 new tests
+- [x] Task 5: Extract loginOnDaemon() from loginWithCredentials() (commit: 46ba7c8)
+  - Files: pipeline/src/init.ts, pipeline/test/init.test.ts
+  - loginOnDaemon accepts extraEnv for per-group daemon targeting, 2 new tests
+- [x] Task 6: Wire per-group daemons into orchestrator.ts (commit: 1df4a46)
+  - Files: pipeline/src/orchestrator.ts, pipeline/test/orchestrator.test.ts
+  - Per-group daemon lifecycle, group-scoped abort, isAuthFailure with ac.url
+  - Setup groups share one daemon (serial), pure-UI groups each get own daemon
+- [x] Task 7: Integration test — parallel daemon isolation (commit: 3c9fc5c)
+  - Files: pipeline/test/browse-parallel.test.ts
+  - 2 daemons, different pages, verified no cross-contamination
+- [x] Task 8: Full verification
+  - Typecheck: PASS
+  - Tests: 335/335 passing across 32 files
+
+### Status
+COMPLETE — all 8 tasks done, typecheck clean, 335 tests passing (97 new/updated)
