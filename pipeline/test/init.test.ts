@@ -1,5 +1,5 @@
 // pipeline/test/init.test.ts — Preflight check tests
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from "vitest";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -330,5 +330,54 @@ describe("loginWithCredentials", () => {
     const result = loginWithCredentials(config, "/tmp");
     expect(result.ok).toBe(false);
     expect(result.error).toContain("still on login page");
+  });
+});
+
+describe("loginOnDaemon", () => {
+  const mockExec = vi.mocked(execFileSync);
+
+  beforeEach(() => {
+    mockExec.mockReset();
+    mockExec.mockReturnValue(Buffer.from("@e1 [link] Dashboard"));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("passes BROWSE_STATE_FILE to execFileSync via extraEnv", async () => {
+    const { loginOnDaemon } = await import("../src/init.js");
+    const config = {
+      baseUrl: "http://localhost:3000",
+      auth: {
+        email: "test@test.com",
+        password: "pass",
+        loginSteps: [{ action: "goto" as const, url: "/login" }],
+      },
+    };
+    loginOnDaemon(config, { BROWSE_STATE_FILE: "/tmp/test-state/browse.json" });
+
+    // Verify execFileSync was called with env containing BROWSE_STATE_FILE
+    const calls = (execFileSync as unknown as MockInstance).mock.calls;
+    const gotoCall = calls.find((c: unknown[]) => c[1]?.[0] === "goto");
+    expect(gotoCall).toBeDefined();
+    expect(gotoCall![2]?.env?.BROWSE_STATE_FILE).toBe("/tmp/test-state/browse.json");
+  });
+
+  it("works identically to loginWithCredentials when no extraEnv", async () => {
+    const { loginOnDaemon } = await import("../src/init.js");
+    const config = {
+      baseUrl: "http://localhost:3000",
+      auth: {
+        email: "a@b.com",
+        password: "x",
+        loginSteps: [
+          { action: "goto" as const, url: "/login" },
+          { action: "click" as const, selector: "#btn" },
+        ],
+      },
+    };
+    const result = loginOnDaemon(config);
+    expect(result.ok).toBe(true);
   });
 });

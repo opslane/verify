@@ -31,25 +31,18 @@ export function checkSpecFile(specPath: string): CheckResult {
 }
 
 /**
- * Replay saved login steps from config.json.
- * Caller must ensure no prior about:blank navigation — it breaks cookie persistence.
- * The first goto in login steps starts the daemon implicitly if needed.
+ * Login on a specific browse daemon identified by env vars (e.g., BROWSE_STATE_FILE).
+ * Reusable for both the primary daemon (preflight) and per-group daemons.
  * No LLM, no regex — pure mechanical replay of steps discovered during /verify-setup.
  */
-export function loginWithCredentials(config: VerifyConfig, _projectRoot?: string): CheckResult {
+export function loginOnDaemon(config: VerifyConfig, extraEnv: Record<string, string> = {}): CheckResult {
   if (!config.auth || !config.auth.email || !config.auth.password || !config.auth.loginSteps?.length) {
     return { ok: false, error: "No auth config — run /verify-setup to configure login" };
   }
 
   const bin = resolveBrowseBin();
   const { email, password, loginSteps } = config.auth;
-
-  // Kill zombie browse daemons that hold the port but don't respond.
-  // browse stop hangs ~30s, so we use pkill. This targets only verify's browse daemons
-  // (the .cache/verify path), not gstack skill daemons at other paths.
-  try { execSync("pkill -f 'bun run.*/\\.cache/verify/.*browse/src/server\\.ts'", { timeout: 3_000, stdio: "ignore" }); } catch { /* none running */ }
-  // Brief pause for port release after kill
-  try { execFileSync("sleep", ["1"], { timeout: 3_000, stdio: "ignore" }); } catch { /* ignore */ }
+  const spawnEnv: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
 
   try {
     for (const step of loginSteps) {
@@ -58,7 +51,7 @@ export function loginWithCredentials(config: VerifyConfig, _projectRoot?: string
           const url = step.url.startsWith("http://") || step.url.startsWith("https://")
             ? step.url
             : `${config.baseUrl}${step.url}`;
-          execFileSync(bin, ["goto", url], { timeout: 10_000, stdio: "ignore" });
+          execFileSync(bin, ["goto", url], { timeout: 10_000, stdio: "ignore", env: spawnEnv });
           // Wait for page load + React hydration before subsequent fill/click steps.
           // Without this, fills hit native HTML inputs before React mounts event handlers,
           // causing form submission to send stale/empty data.
@@ -69,11 +62,11 @@ export function loginWithCredentials(config: VerifyConfig, _projectRoot?: string
           const value = step.value
             .replaceAll("{{email}}", email)
             .replaceAll("{{password}}", password);
-          execFileSync(bin, ["fill", step.selector, value], { timeout: 5_000, stdio: "ignore" });
+          execFileSync(bin, ["fill", step.selector, value], { timeout: 5_000, stdio: "ignore", env: spawnEnv });
           break;
         }
         case "click":
-          execFileSync(bin, ["click", step.selector], { timeout: 5_000, stdio: "ignore" });
+          execFileSync(bin, ["click", step.selector], { timeout: 5_000, stdio: "ignore", env: spawnEnv });
           break;
         case "sleep": {
           const seconds = Math.min(Math.ceil(step.ms / 1000), 30); // cap at 30s to prevent hangs
@@ -87,10 +80,25 @@ export function loginWithCredentials(config: VerifyConfig, _projectRoot?: string
     // Without this delay, the first poll's goto races with the auth redirect and sees the login page.
     execFileSync("sleep", ["3"], { timeout: 5_000, stdio: "ignore" });
 
-    return waitForAuth(config.baseUrl, bin);
+    return waitForAuth(config.baseUrl, bin, 10_000, 500, spawnEnv);
   } catch (err: unknown) {
     return { ok: false, error: `Login replay failed: ${err instanceof Error ? err.message : String(err)}. Re-run /verify-setup.` };
   }
+}
+
+/**
+ * Replay saved login steps from config.json on the primary (default) daemon.
+ * Kills zombie daemons first, then delegates to loginOnDaemon.
+ */
+export function loginWithCredentials(config: VerifyConfig, _projectRoot?: string): CheckResult {
+  // Kill zombie browse daemons that hold the port but don't respond.
+  // browse stop hangs ~30s, so we use pkill. This targets only verify's browse daemons
+  // (the .cache/verify path), not gstack skill daemons at other paths.
+  try { execSync("pkill -f 'bun run.*/\\.cache/verify/.*browse/src/server\\.ts'", { timeout: 3_000, stdio: "ignore" }); } catch { /* none running */ }
+  // Brief pause for port release after kill
+  try { execFileSync("sleep", ["1"], { timeout: 3_000, stdio: "ignore" }); } catch { /* ignore */ }
+
+  return loginOnDaemon(config);
 }
 
 /**
@@ -102,13 +110,14 @@ function waitForAuth(
   bin: string,
   maxWait = 10_000,
   interval = 500,
+  spawnEnv: NodeJS.ProcessEnv = process.env,
 ): CheckResult {
   const deadline = Date.now() + maxWait;
 
   while (Date.now() < deadline) {
     try {
-      execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore" });
-      const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8" });
+      execFileSync(bin, ["goto", baseUrl], { timeout: 10_000, stdio: "ignore", env: spawnEnv });
+      const snapshot = execFileSync(bin, ["snapshot", "-i"], { timeout: 5_000, encoding: "utf-8", env: spawnEnv });
 
       // Detect login page: password field (by label or masked dots), or sign-in/log-in button
       const isLoginPage =
