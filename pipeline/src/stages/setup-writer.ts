@@ -9,7 +9,7 @@ import { loadAppIndex } from "../lib/app-index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-export function buildSetupWriterPrompt(groupId: string, condition: string, projectRoot: string): string {
+export function buildSetupWriterPrompt(groupId: string, condition: string, projectRoot: string, authEmail?: string): string {
   const verifyDir = join(projectRoot, ".verify");
   const appIndex = loadAppIndex(verifyDir);
   const dbUrlEnv = appIndex?.db_url_env ?? "DATABASE_URL";
@@ -37,11 +37,24 @@ export function buildSetupWriterPrompt(groupId: string, condition: string, proje
     ? `\nLEARNINGS FROM PAST RUNS (apply these corrections):\n${learnings}\n`
     : "";
 
+  // Build auth context section if email is available
+  const authContextBlock = authEmail
+    ? `
+AUTH CONTEXT:
+The logged-in user's email is: ${authEmail}
+When the CONDITION refers to "the logged-in user", "their team", or "their personal team":
+1. First query to find this user's ID from the "User" table using their email
+2. Then discover their team(s) by following FK relationships in the SCHEMA above
+3. Scope ALL subsequent queries and INSERTs to that user's team
+Do NOT use data from other users or teams.
+`
+    : "";
+
   return `You are a setup writer. Generate MINIMAL SQL to put the database into the required state.
 
 GROUP: ${groupId}
 CONDITION: ${condition}
-
+${authContextBlock}
 DATABASE ACCESS:
 Use Bash to run psql commands to query the database and understand current state.
 Connection: ${psqlCmd} -c "SELECT ..."
@@ -98,8 +111,9 @@ export type SetupRetryContext =
 export function buildSetupWriterRetryPrompt(
   groupId: string, condition: string, projectRoot: string,
   retryContext: SetupRetryContext,
+  authEmail?: string,
 ): string {
-  const base = buildSetupWriterPrompt(groupId, condition, projectRoot);
+  const base = buildSetupWriterPrompt(groupId, condition, projectRoot, authEmail);
 
   let retryBlock: string;
   if (retryContext.type === "exec_error") {

@@ -26,6 +26,28 @@ describe("buildSetupWriterPrompt", () => {
     expect(prompt).toContain("DATABASE_URL");
   });
 
+  it("includes AUTH CONTEXT section when authEmail is provided", () => {
+    const prompt = buildSetupWriterPrompt("group-a", "org in trialing state", projectDir, "test@example.com");
+    expect(prompt).toContain("AUTH CONTEXT");
+    expect(prompt).toContain("test@example.com");
+    expect(prompt).toContain("logged-in user");
+  });
+
+  it("AUTH CONTEXT appears before DATABASE ACCESS", () => {
+    const prompt = buildSetupWriterPrompt("group-a", "trialing state", projectDir, "test@example.com");
+    const authIdx = prompt.indexOf("AUTH CONTEXT");
+    const dbIdx = prompt.indexOf("DATABASE ACCESS");
+    expect(authIdx).toBeGreaterThan(-1);
+    expect(authIdx).toBeLessThan(dbIdx);
+  });
+
+  it("works without authEmail (backwards compatible)", () => {
+    const prompt = buildSetupWriterPrompt("group-a", "org in trialing state", projectDir);
+    expect(prompt).not.toContain("AUTH CONTEXT");
+    expect(prompt).toContain("group-a");
+    expect(prompt).toContain("org in trialing state");
+  });
+
   it("includes schema from app.json when available", () => {
     mkdirSync(join(projectDir, ".verify"), { recursive: true });
     writeFileSync(join(projectDir, ".verify", "app.json"), JSON.stringify({
@@ -66,6 +88,17 @@ describe("buildSetupWriterRetryPrompt", () => {
     const errorIdx = prompt.indexOf("YOUR PREVIOUS SQL FAILED");
     const outputIdx = prompt.lastIndexOf("Output ONLY the JSON");
     expect(errorIdx).toBeLessThan(outputIdx);
+  });
+
+  it("passes authEmail through to base prompt", () => {
+    const prompt = buildSetupWriterRetryPrompt("group-a", "trialing state", projectDir, {
+      type: "exec_error",
+      failedCommands: ["psql -c 'SELECT 1'"],
+      error: "connection refused",
+    }, "test@example.com");
+    expect(prompt).toContain("AUTH CONTEXT");
+    expect(prompt).toContain("test@example.com");
+    expect(prompt).toContain("YOUR PREVIOUS SQL FAILED");
   });
 
   it("includes parse error message for parse_error", () => {
