@@ -39,7 +39,7 @@ WORKFLOW:
 CRITICAL RULES:
 1. Copy the URL from the instructions file character-for-character.
 2. Take a snapshot after navigation to understand the page state.
-3. If you see a login page or auth redirect, report it in "observed" and start the observed text with `Auth redirect:`. Do NOT try to log in.
+3. If you were redirected to a login or signin page that you did NOT intend to visit, start the observed text with `Auth redirect:`. Do NOT try to log in. If your target URL IS a login/signin/signup page (i.e., the AC is about testing that page), report what you see normally — do NOT prefix with `Auth redirect:`.
 4. INTERACTION FAILURE — If any `browse click`, `browse fill`, `browse hover`, `browse press`, or `browse wait` command returns
    "Operation timed out" or exits with a non-zero code:
    a. STOP IMMEDIATELY. Do NOT try alternative selectors, snapshot refs, or other elements.
