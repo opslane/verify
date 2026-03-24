@@ -97,7 +97,7 @@ export interface BrowseResult {
 
 export type Verdict = "pass" | "fail" | "error" | "timeout" | "skipped"
   | "setup_failed" | "setup_unsupported" | "plan_error" | "auth_expired"
-  | "spec_unclear";
+  | "login_failed" | "spec_unclear";
 
 export type Confidence = "high" | "medium" | "low";
 
@@ -220,8 +220,16 @@ export const AUTH_FAILURE_PATTERNS = [
   /sign in to continue/i,
 ] as const;
 
-export function isAuthFailure(observed: string, url?: string): boolean {
-  if (AUTH_FAILURE_PATTERNS.some(p => p.test(observed))) return true;
-  if (url && /\/login|\/signin|\/auth/.test(url)) return true;
-  return false;
+/** Auth page URL patterns — ACs testing these pages should not trigger the circuit breaker.
+ *  Uses boundary-aware matching to avoid false matches on /authorize, /author, etc. */
+const AUTH_PAGE_PATTERNS = /\/login(?:\/|$|\?)|\/signin(?:\/|$|\?)|\/signup(?:\/|$|\?)|\/auth(?:\/|$|\?)|\/forgot-password/i;
+
+export function isAuthFailure(observed: string, acTargetUrl?: string): boolean {
+  // If this AC intentionally targets an auth page, don't trigger on auth patterns
+  // in the observed text — the agent was supposed to be on that page.
+  if (acTargetUrl && AUTH_PAGE_PATTERNS.test(acTargetUrl)) {
+    return false;
+  }
+
+  return AUTH_FAILURE_PATTERNS.some(p => p.test(observed));
 }
