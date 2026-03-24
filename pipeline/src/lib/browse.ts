@@ -1,6 +1,6 @@
 // pipeline/src/lib/browse.ts — Browse daemon lifecycle management
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -43,5 +43,58 @@ export function resetPage(): void {
   // Intentionally a no-op. Navigating to about:blank between ACs breaks cookie persistence
   // in gstack/browse, causing login cookies to be lost for subsequent browse agents.
   // The browse agent's first goto step handles navigation to the correct page.
+}
+
+// ── Per-group daemon isolation ─────────────────────────────────────────────
+
+export interface GroupDaemonEnv {
+  env: Record<string, string>;
+  stateDir: string;
+}
+
+/**
+ * Create an isolated state directory for a group's browse daemon.
+ * The daemon auto-starts on the first `browse goto` command that uses this env.
+ */
+export function startGroupDaemon(groupId: string, runDir: string): GroupDaemonEnv {
+  const stateDir = join(runDir, `.browse-${groupId}`);
+  mkdirSync(stateDir, { recursive: true });
+  const stateFile = join(stateDir, "browse.json");
+  return {
+    env: { BROWSE_STATE_FILE: stateFile },
+    stateDir,
+  };
+}
+
+/**
+ * Kill a group daemon by reading its PID from the state file.
+ * Uses process.kill directly — avoids `browse stop` which can hang.
+ */
+export function stopGroupDaemon(stateDir: string): void {
+  const stateFile = join(stateDir, "browse.json");
+  try {
+    const state = JSON.parse(readFileSync(stateFile, "utf-8")) as Record<string, unknown>;
+    if (typeof state.pid === "number") {
+      try { process.kill(state.pid, "SIGTERM"); } catch { /* already dead */ }
+    }
+  } catch {
+    // State file missing or unparseable — daemon was never started or already cleaned up
+  }
+}
+
+/**
+ * Kill all group daemons under a run directory. Safety net for cleanup.
+ */
+export function stopAllGroupDaemons(runDir: string): void {
+  try {
+    const entries = readdirSync(runDir);
+    for (const entry of entries) {
+      if (entry.startsWith(".browse-")) {
+        stopGroupDaemon(join(runDir, entry));
+      }
+    }
+  } catch {
+    // runDir doesn't exist or can't be read — nothing to clean up
+  }
 }
 
