@@ -43,6 +43,9 @@ export function resolveParam(
   ctx: RouteResolverContext,
   dataModel: AppIndex["data_model"],
 ): string | null {
+  // Guard against SQL injection — userId and teamId must be numeric
+  if (!/^\d+$/.test(ctx.userId) || !/^\d+$/.test(ctx.teamId)) return null;
+
   // ── Known params from context ──
   if (paramName === "teamUrl") return ctx.teamUrl;
 
