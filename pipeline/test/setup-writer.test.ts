@@ -48,6 +48,47 @@ describe("buildSetupWriterPrompt", () => {
     expect(prompt).toContain("org in trialing state");
   });
 
+  it("includes ROLE ASSIGNMENT when app.json has role enums", () => {
+    mkdirSync(join(projectDir, ".verify"), { recursive: true });
+    writeFileSync(join(projectDir, ".verify", "app.json"), JSON.stringify({
+      indexed_at: "", routes: {}, pages: {}, fixtures: {},
+      db_url_env: "DATABASE_URL", feature_flags: [], seed_ids: {},
+      json_type_annotations: {}, example_urls: {},
+      data_model: {
+        User: {
+          table_name: "users",
+          columns: { id: "id", email: "email", role: "role" },
+          enums: { Role: ["ADMIN", "USER", "MEMBER"] },
+          source: "prisma/schema.prisma:1",
+          manual_id_columns: [],
+        },
+      },
+    }));
+    const prompt = buildSetupWriterPrompt("group-a", "some condition", projectDir);
+    expect(prompt).toContain("ROLE ASSIGNMENT");
+    expect(prompt).toContain("Role: ADMIN, USER, MEMBER");
+  });
+
+  it("omits ROLE ASSIGNMENT when app.json has no role enums", () => {
+    mkdirSync(join(projectDir, ".verify"), { recursive: true });
+    writeFileSync(join(projectDir, ".verify", "app.json"), JSON.stringify({
+      indexed_at: "", routes: {}, pages: {}, fixtures: {},
+      db_url_env: "DATABASE_URL", feature_flags: [], seed_ids: {},
+      json_type_annotations: {}, example_urls: {},
+      data_model: {
+        User: {
+          table_name: "users",
+          columns: { id: "id", email: "email" },
+          enums: {},
+          source: "prisma/schema.prisma:1",
+          manual_id_columns: [],
+        },
+      },
+    }));
+    const prompt = buildSetupWriterPrompt("group-a", "some condition", projectDir);
+    expect(prompt).not.toContain("ROLE ASSIGNMENT");
+  });
+
   it("includes schema from app.json when available", () => {
     mkdirSync(join(projectDir, ".verify"), { recursive: true });
     writeFileSync(join(projectDir, ".verify", "app.json"), JSON.stringify({

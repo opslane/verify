@@ -149,25 +149,43 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
       const stderrStr = Buffer.concat(stderrChunks).toString("utf-8");
       const exitCode = timedOut ? 124 : (code ?? 1);
 
-      // Extract final result text from stream-json events
+      // Extract final result text from stream-json events.
+      // Claude CLI v2.1.83+ returns result:"" when tool calls are involved,
+      // so we fall back to the last assistant text block.
       let finalText = "";
+      let lastAssistantText = "";
+      let parseFailures = 0;
+
       for (const line of rawStream.split("\n")) {
         if (!line) continue;
         try {
-          const evt = JSON.parse(line) as { type?: string; result?: string };
-          if (evt.type === "result" && typeof evt.result === "string") {
+          const evt = JSON.parse(line) as Record<string, unknown>;
+          if (evt.type === "result" && typeof evt.result === "string" && evt.result) {
             finalText = evt.result;
           }
+          if (evt.type === "assistant") {
+            const msg = evt.message as { content?: Array<{ type: string; text?: string }> } | undefined;
+            if (msg?.content) {
+              for (const block of msg.content) {
+                if (block.type === "text" && block.text) {
+                  lastAssistantText = block.text;
+                }
+              }
+            }
+          }
         } catch {
-          // skip non-JSON lines
+          parseFailures++;
         }
+      }
+      if (!finalText && lastAssistantText) {
+        finalText = lastAssistantText;
       }
 
       diag(`close: code=${code} signal=${signal} killed=${child.killed} timedOut=${timedOut}`);
       diag(`duration: ${durationMs}ms`);
       diag(`stream events: ${eventCount}, last type: ${lastEventType}`);
       diag(`raw stream: ${rawStream.length} bytes`);
-      diag(`extracted text: ${finalText.length} bytes`);
+      diag(`extracted text: ${finalText.length} bytes (fallback=${!finalText && lastAssistantText ? "yes" : "no"}, parseFailures=${parseFailures})`);
       diag(`stderr: ${stderrStr.length} bytes`);
       if (spawnError) diag(`spawnError: ${spawnError.message}`);
       if (exitCode !== 0 && !timedOut) {

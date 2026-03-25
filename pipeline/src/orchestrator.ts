@@ -406,14 +406,44 @@ export async function runPipeline(
         if (browseResult) {
           writeFileSync(join(evidenceDir, "result.json"), JSON.stringify(browseResult, null, 2));
 
-          // Circuit breaker: auth failure kills this group's remaining agents
+          // Circuit breaker: auth failure → attempt re-login + inline retry before aborting
           if (isAuthFailure(browseResult.observed, ac.url)) {
-            callbacks.onError(`Auth session expired in group ${groupId}.`);
-            groupAbort.abort();
-            allVerdicts.push({ ac_id: ac.id, verdict: "auth_expired", confidence: "high", reasoning: "Auth redirect detected" });
-            progress.update(ac.id, "error", "auth_expired");
-            resetPage();
-            continue;
+            callbacks.onLog(`  ${ac.id}: auth failure detected, attempting re-login...`);
+            let relogin: { ok: boolean; error?: string };
+            try {
+              relogin = loginOnDaemon(config, groupEnv);
+            } catch (err: unknown) {
+              relogin = { ok: false, error: err instanceof Error ? err.message : String(err) };
+            }
+            if (relogin.ok) {
+              callbacks.onLog(`  ${ac.id}: re-login succeeded, retrying AC`);
+              resetPage();
+              const retryResult = await runClaude({
+                prompt: agentPrompt, model: "sonnet", timeoutMs: computeTimeoutMs(enrichedAc.steps),
+                stage: `browse-agent-${ac.id}`, runDir, env: groupEnv, ...perms("browse-agent"),
+              });
+              const retryBrowse = parseBrowseResult(retryResult.stdout);
+              if (retryBrowse && !isAuthFailure(retryBrowse.observed, ac.url)) {
+                browseResult = retryBrowse;
+                writeFileSync(join(evidenceDir, "result.json"), JSON.stringify(browseResult, null, 2));
+                // Fall through to normal verdict path below
+              } else {
+                callbacks.onError(`Auth session expired in group ${groupId} (persists after re-login).`);
+                groupAbort.abort();
+                allVerdicts.push({ ac_id: ac.id, verdict: "auth_expired", confidence: "high", reasoning: "Auth redirect persists after re-login" });
+                progress.update(ac.id, "error", "auth_expired");
+                resetPage();
+                continue;
+              }
+            } else {
+              callbacks.onLog(`  ${ac.id}: re-login failed — ${relogin.error}`);
+              callbacks.onError(`Auth session expired in group ${groupId}.`);
+              groupAbort.abort();
+              allVerdicts.push({ ac_id: ac.id, verdict: "auth_expired", confidence: "high", reasoning: `Re-login failed: ${relogin.error}` });
+              progress.update(ac.id, "error", "auth_expired");
+              resetPage();
+              continue;
+            }
           }
         } else {
           allVerdicts.push({ ac_id: ac.id, verdict: "error", confidence: "high", reasoning: "Browse agent produced no parseable output" });

@@ -220,6 +220,70 @@ describe("orchestrator", () => {
       const authVerdicts = result.verdicts!.verdicts.filter(v => v.verdict === "auth_expired");
       expect(authVerdicts.length).toBeGreaterThanOrEqual(1);
     });
+
+    it("retries AC with inline re-login when auth failure detected", async () => {
+      const specPath = join(verifyDir, "spec.md");
+      writeFileSync(specPath, "# Test spec");
+
+      const acs: ACGeneratorOutput = {
+        groups: [
+          { id: "group-a", condition: null, acs: [{ id: "ac1", description: "Check A" }] },
+        ],
+        skipped: [],
+      };
+      const plan: PlannerOutput = {
+        criteria: [
+          { id: "ac1", group: "group-a", description: "Check A", url: "/a", steps: ["Go"], screenshot_at: [], timeout_seconds: 90 },
+        ],
+      };
+
+      mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(acs) });
+      mockRunClaudeResult("planner", { stdout: JSON.stringify(plan) });
+
+      // First browse call returns auth failure, second (retry) returns success
+      let browseCallCount = 0;
+      const { runClaude: mockedRunClaude } = await import("../src/run-claude.js");
+      vi.mocked(mockedRunClaude).mockImplementation(async (opts: RunClaudeOptions): Promise<RunClaudeResult> => {
+        runClaudeCalls.push(opts);
+        if (opts.stage === "browse-agent-ac1") {
+          browseCallCount++;
+          if (browseCallCount === 1) {
+            return { stdout: JSON.stringify({ ac_id: "ac1", observed: "Auth redirect to /login detected", screenshots: [], commands_run: [] }), stderr: "", exitCode: 0, durationMs: 1000, timedOut: false };
+          }
+          return { stdout: JSON.stringify({ ac_id: "ac1", observed: "Dashboard loaded OK", screenshots: ["s1.png"], commands_run: [] }), stderr: "", exitCode: 0, durationMs: 1000, timedOut: false };
+        }
+        return defaultRunClaudeResult(opts);
+      });
+
+      // Judge returns a pass verdict for ac1
+      mockRunClaudeResult("judge", { stdout: JSON.stringify({ verdicts: [{ ac_id: "ac1", verdict: "pass", confidence: "high", reasoning: "OK" }] }) });
+      mockRunClaudeResult("learner", { stdout: "" });
+
+      const { callbacks } = makeCallbacks();
+      const { runPipeline } = await import("../src/orchestrator.js");
+
+      const restore = () => {
+        vi.mocked(mockedRunClaude).mockImplementation(async (opts: RunClaudeOptions): Promise<RunClaudeResult> => {
+          runClaudeCalls.push(opts);
+          return defaultRunClaudeResult(opts);
+        });
+      };
+
+      try {
+        const result = await runPipeline(specPath, verifyDir, callbacks);
+
+        // ac1 should NOT be auth_expired — re-login succeeded and retry passed
+        const authVerdicts = result.verdicts!.verdicts.filter(v => v.verdict === "auth_expired");
+        expect(authVerdicts.length).toBe(0);
+        expect(browseCallCount).toBe(2);
+
+        // loginOnDaemon called twice: once at group init, once for re-login
+        const { loginOnDaemon: mockLogin } = await import("../src/init.js");
+        expect(vi.mocked(mockLogin)).toHaveBeenCalledTimes(2);
+      } finally {
+        restore();
+      }
+    });
   });
 
   describe("stage failure handling", () => {
