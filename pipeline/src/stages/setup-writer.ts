@@ -24,6 +24,27 @@ export function buildSetupWriterPrompt(groupId: string, condition: string, proje
     }
   }
 
+  // Extract role-like enums for elevated test user permissions
+  const roleEnumLines: string[] = [];
+  if (appIndex) {
+    for (const [, info] of Object.entries(appIndex.data_model)) {
+      for (const [enumName, values] of Object.entries(info.enums)) {
+        if (/role/i.test(enumName)) {
+          roleEnumLines.push(`${enumName}: ${values.join(", ")}`);
+        }
+      }
+    }
+  }
+
+  const roleBlock = roleEnumLines.length > 0
+    ? `
+ROLE ASSIGNMENT:
+The app has role-based access control. Assign the test user the highest-privilege role available.
+Role enums found: ${roleEnumLines.join("; ")}.
+Use the most privileged value (typically ADMIN, OWNER, or similar) to ensure the test user can access all pages.
+`
+    : "";
+
   // Resolve the actual DB URL so the LLM doesn't need env var expansion
   const projectEnv = loadProjectEnv(projectRoot);
   const dbUrl = projectEnv[dbUrlEnv] ?? projectEnv.DATABASE_URL ?? projectEnv.DATABASE_URI ?? "";
@@ -54,7 +75,7 @@ Do NOT use data from other users or teams.
 
 GROUP: ${groupId}
 CONDITION: ${condition}
-${authContextBlock}
+${authContextBlock}${roleBlock}
 DATABASE ACCESS:
 Use Bash to run psql commands to query the database and understand current state.
 Connection: ${psqlCmd} -c "SELECT ..."
@@ -95,6 +116,7 @@ RULES:
 6. Keep it to 1-5 commands max.
 7. Do NOT read files or explore the codebase. Only use psql.
 8. If the condition is null or empty, output empty arrays.
+9. NEVER invent IDs or tokens for foreign key columns. If a column references another table, you MUST first SELECT a valid value from that table or INSERT a new row into it. Use gen_random_uuid() only for primary key columns, never for FK references to existing data.
 
 Output ONLY the JSON. No explanation, no markdown fences.`;
 }
