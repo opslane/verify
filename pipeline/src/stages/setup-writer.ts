@@ -84,9 +84,15 @@ SCHEMA (model -> table, columns):
 ${schemaLines.join("\n")}
 ${learningsBlock}
 PROCESS:
-1. Run 2-3 psql SELECT queries to understand current data relevant to the CONDITION
-2. Write the minimal SQL (1-5 commands) to achieve the condition
-3. Output ONLY the JSON below — nothing else
+1. Run 2-3 psql SELECT queries to check if the CONDITION is ALREADY SATISFIED by existing data
+2. If existing data satisfies the condition: output empty setup_commands (no changes needed)
+3. If NOT satisfied: write minimal SQL (1-5 commands) using existing record IDs from your SELECT results
+4. Output ONLY the JSON below — nothing else
+
+CRITICAL: The database is pre-seeded with realistic test data. Most conditions are ALREADY satisfied.
+Your FIRST job is to CHECK, not to INSERT. Query the relevant tables scoped to the logged-in user's team.
+If you find existing records that match the condition, return empty setup_commands.
+Only INSERT when you have confirmed via SELECT that no matching data exists.
 
 IMPORTANT: You have a strict time limit. Do NOT explore extensively.
 Run at most 3-4 SELECT queries, then output the JSON immediately.
@@ -94,7 +100,7 @@ Do NOT read files, grep, or explore the codebase.
 
 COLUMN NAMES: Schema shows "prismaName->pgName" for mapped columns. Always use the Postgres name in SQL.
 
-MANUAL ID COLUMNS: If a model shows [manual IDs: ...], provide an explicit value for those columns in INSERTs (e.g., gen_random_uuid() or 'verify-test-${groupId}-001').
+MANUAL ID COLUMNS: If a model shows [manual IDs: ...] AND you must INSERT a new row (only after confirming via SELECT that no matching row exists), use gen_random_uuid() for the ID. Do NOT use hardcoded IDs like 'verify-test-001' — they create hollow records with no associated data.
 
 OUTPUT: Valid JSON to stdout:
 
@@ -116,7 +122,7 @@ RULES:
 6. Keep it to 1-5 commands max.
 7. Do NOT read files or explore the codebase. Only use psql.
 8. If the condition is null or empty, output empty arrays.
-9. NEVER invent IDs or tokens for foreign key columns. If a column references another table, you MUST first SELECT a valid value from that table or INSERT a new row into it. Use gen_random_uuid() only for primary key columns, never for FK references to existing data.
+9. NEVER invent IDs, tokens, or slugs. Always SELECT existing values first. If a record already exists that satisfies the condition, use its real ID — do NOT create a duplicate. If you must INSERT, use gen_random_uuid() for IDs, never hardcoded strings like 'verify-test-001' or 'seedtoken001'. Hardcoded IDs create hollow records with no associated data (no PDF, no pages, no recipients), causing 404s.
 
 Output ONLY the JSON. No explanation, no markdown fences.`;
 }
