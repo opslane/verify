@@ -14,6 +14,52 @@ function routeToRegex(route: string): RegExp {
   return new RegExp(`^${pattern}$`);
 }
 
+/**
+ * Extract param segments from a route pattern and a concrete URL.
+ * E.g., route="/o/:orgUrl/settings", url="/o/test-org/settings"
+ * → { orgUrl: "test-org" }
+ */
+export function extractParamValues(route: string, url: string): Record<string, string> {
+  const routeParts = route.split("/");
+  const urlParts = url.split("/");
+  const params: Record<string, string> = {};
+  for (let i = 0; i < routeParts.length; i++) {
+    if (routeParts[i].startsWith(":") && urlParts[i]) {
+      params[routeParts[i].slice(1)] = urlParts[i];
+    }
+  }
+  return params;
+}
+
+/**
+ * Check if a URL's parameter values match the example_urls entry for its route.
+ * Returns null if valid, or an error message if invented params are detected.
+ */
+export function validateParamValues(
+  url: string,
+  matchedRoute: string,
+  exampleUrls: Record<string, string>,
+): string | null {
+  // Only validate parameterized routes that have example URLs
+  if (!matchedRoute.includes(":")) return null;
+  const exampleUrl = exampleUrls[matchedRoute];
+  if (!exampleUrl) return null;
+
+  const actualParams = extractParamValues(matchedRoute, url);
+  const expectedParams = extractParamValues(matchedRoute, exampleUrl);
+
+  const mismatches: string[] = [];
+  for (const [param, actual] of Object.entries(actualParams)) {
+    const expected = expectedParams[param];
+    if (expected && actual !== expected) {
+      mismatches.push(`'${param}' is '${actual}' but should be '${expected}'`);
+    }
+  }
+
+  if (mismatches.length === 0) return null;
+  return `URL "${url}" uses invented parameter values (${mismatches.join(", ")}). Use the example URL: ${exampleUrl}`;
+}
+
 export function validatePlan(
   plan: PlannerOutput,
   appIndex: AppIndex | null
@@ -39,14 +85,18 @@ export function validatePlan(
 
     if (appIndex && !TEMPLATE_VAR_RE.test(ac.url) && !ABSOLUTE_URL_RE.test(ac.url)) {
       const urlBase = ac.url.split("?")[0];
-      const routeExists = routePatterns.some(
-        ({ re }) => re.test(urlBase)
-      );
-      if (!routeExists) {
+      const matchedPattern = routePatterns.find(({ re }) => re.test(urlBase));
+      if (!matchedPattern) {
         errors.push({
           acId: ac.id, field: "url",
           message: `URL "${ac.url}" not found in app index routes — verify it exists`,
         });
+      } else {
+        // Validate parameter values against example_urls
+        const paramError = validateParamValues(urlBase, matchedPattern.route, appIndex.example_urls);
+        if (paramError) {
+          errors.push({ acId: ac.id, field: "url", message: paramError });
+        }
       }
     }
 

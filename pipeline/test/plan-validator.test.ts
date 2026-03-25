@@ -139,4 +139,107 @@ describe("validatePlan", () => {
     const result = validatePlan(plan, appIndex);
     expect(result.valid).toBe(true);
   });
+
+  it("catches invented parameter values when example_urls are available", () => {
+    const appIndex: AppIndex = {
+      ...mockAppIndex,
+      routes: { "/o/:orgUrl/settings/members": { component: "members.tsx" } },
+      example_urls: { "/o/:orgUrl/settings/members": "/o/org_real123/settings/members" },
+    };
+    const plan: PlannerOutput = {
+      criteria: [{
+        id: "ac1", group: "group-a",
+        description: "test",
+        url: "/o/test-org/settings/members",
+        steps: ["Navigate to members"],
+        screenshot_at: [],
+        timeout_seconds: 90,
+      }],
+    };
+    const result = validatePlan(plan, appIndex);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0].message).toContain("org_real123");
+    expect(result.errors[0].message).toContain("test-org");
+  });
+
+  it("passes when URL uses correct example_urls values", () => {
+    const appIndex: AppIndex = {
+      ...mockAppIndex,
+      routes: { "/o/:orgUrl/settings/members": { component: "members.tsx" } },
+      example_urls: { "/o/:orgUrl/settings/members": "/o/org_real123/settings/members" },
+    };
+    const plan: PlannerOutput = {
+      criteria: [{
+        id: "ac1", group: "group-a",
+        description: "test",
+        url: "/o/org_real123/settings/members",
+        steps: ["Navigate to members"],
+        screenshot_at: [],
+        timeout_seconds: 90,
+      }],
+    };
+    const result = validatePlan(plan, appIndex);
+    expect(result.valid).toBe(true);
+  });
+
+  it("allows different param values for routes without example_urls", () => {
+    const appIndex: AppIndex = {
+      ...mockAppIndex,
+      routes: { "/t/:teamUrl/settings": { component: "settings.tsx" } },
+      example_urls: {},
+    };
+    const plan: PlannerOutput = {
+      criteria: [{
+        id: "ac1", group: "group-a",
+        description: "test",
+        url: "/t/any_team_url/settings",
+        steps: ["Navigate"],
+        screenshot_at: [],
+        timeout_seconds: 90,
+      }],
+    };
+    const result = validatePlan(plan, appIndex);
+    expect(result.valid).toBe(true);
+  });
+
+  it("catches invented ID in multi-param route", () => {
+    const appIndex: AppIndex = {
+      ...mockAppIndex,
+      routes: { "/t/:teamUrl/documents/:id/edit": { component: "edit.tsx" } },
+      example_urls: { "/t/:teamUrl/documents/:id/edit": "/t/personal_abc/documents/real-doc-42/edit" },
+    };
+    const plan: PlannerOutput = {
+      criteria: [{
+        id: "ac1", group: "group-a",
+        description: "test",
+        url: "/t/personal_abc/documents/1/edit",
+        steps: ["Navigate to editor"],
+        screenshot_at: [],
+        timeout_seconds: 90,
+      }],
+    };
+    const result = validatePlan(plan, appIndex);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0].message).toContain("real-doc-42");
+  });
+
+  it("skips param validation for static routes", () => {
+    const appIndex: AppIndex = {
+      ...mockAppIndex,
+      routes: { "/settings": { component: "settings.tsx" } },
+      example_urls: {},
+    };
+    const plan: PlannerOutput = {
+      criteria: [{
+        id: "ac1", group: "group-a",
+        description: "test",
+        url: "/settings",
+        steps: ["Navigate"],
+        screenshot_at: [],
+        timeout_seconds: 90,
+      }],
+    };
+    const result = validatePlan(plan, appIndex);
+    expect(result.valid).toBe(true);
+  });
 });
