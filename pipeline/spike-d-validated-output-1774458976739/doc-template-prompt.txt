@@ -1,0 +1,165 @@
+You are a setup writer. Generate MINIMAL SQL to put the database into the required state.
+
+GROUP: spike-d-doc-template
+CONDITION: A template exists for the logged-in user's personal team
+
+AUTH CONTEXT:
+The logged-in user's email is: ac1-test@test.documenso.com
+When the CONDITION refers to "the logged-in user", "their team", or "their personal team":
+1. First query to find this user's ID from the "User" table using their email
+2. Then discover their team(s) by following FK relationships in the SCHEMA above
+3. Scope ALL subsequent queries and INSERTs to that user's team
+Do NOT use data from other users or teams.
+
+ROLE ASSIGNMENT:
+The app has role-based access control. Assign the test user the highest-privilege role available.
+Role enums found: Role: ADMIN, USER; RecipientRole: CC, SIGNER, VIEWER, APPROVER, ASSISTANT; OrganisationMemberRole: ADMIN, MANAGER, MEMBER; OrganisationMemberRole: ADMIN, MANAGER, MEMBER; TeamMemberRole: ADMIN, MANAGER, MEMBER; OrganisationMemberRole: ADMIN, MANAGER, MEMBER.
+Use the most privileged value (typically ADMIN, OWNER, or similar) to ensure the test user can access all pages.
+
+DATABASE ACCESS:
+Use Bash to run psql commands to query the database and understand current state.
+Connection: psql "postgresql://documenso:password@localhost:54320/documenso" -c "SELECT ..."
+
+SCHEMA (model -> table, columns):
+User ("User"): id, name, email, emailVerified, password, source, signature, createdAt, updatedAt, lastSignedIn, identityProvider, avatarImageId, disabled, twoFactorSecret, twoFactorEnabled, twoFactorBackupCodes
+TeamProfile ("TeamProfile"): id, enabled, teamId, bio
+UserSecurityAuditLog ("UserSecurityAuditLog"): id, userId, createdAt, type, userAgent, ipAddress
+PasswordResetToken ("PasswordResetToken"): id, token, createdAt, expiry, userId
+Passkey ("Passkey"): id, userId, name, createdAt, updatedAt, lastUsedAt, credentialId, credentialPublicKey, counter, credentialDeviceType, credentialBackedUp
+AnonymousVerificationToken ("AnonymousVerificationToken"): id, token, expiresAt, createdAt
+VerificationToken ("VerificationToken"): id, secondaryId, identifier, token, completed, expires, createdAt, metadata, userId
+Webhook ("Webhook"): id, webhookUrl, secret, enabled, createdAt, updatedAt, userId, teamId
+WebhookCall ("WebhookCall"): id, status, url, event, requestBody, responseCode, responseHeaders, responseBody, createdAt, webhookId
+ApiToken ("ApiToken"): id, name, token, algorithm, expires, createdAt, userId, teamId
+Subscription ("Subscription"): id, status, planId, priceId, periodEnd, createdAt, updatedAt, cancelAtPeriodEnd, customerId, organisationId
+SubscriptionClaim ("SubscriptionClaim"): id, createdAt, updatedAt, name, locked, teamCount, memberCount, envelopeItemCount, flags
+OrganisationClaim ("OrganisationClaim"): id, createdAt, updatedAt, originalSubscriptionClaimId, teamCount, memberCount, envelopeItemCount, flags [manual IDs: id]
+Account ("Account"): id, createdAt, userId, type, provider, providerAccountId, refresh_token, access_token, expires_at, created_at, ext_expires_in, token_type, scope, id_token, session_state, password
+Session ("Session"): id, sessionToken, userId, ipAddress, userAgent, expiresAt, createdAt, updatedAt
+Folder ("Folder"): id, name, userId, teamId, pinned, parentId, createdAt, updatedAt, visibility, type
+Envelope ("Envelope"): id, secondaryId, externalId, type, createdAt, updatedAt, completedAt, deletedAt, title, status, source, qrToken, internalVersion, useLegacyFieldInsertion, authOptions, formValues, visibility, templateType, publicTitle, publicDescription, templateId, userId, teamId, folderId, documentMetaId [manual IDs: id]
+EnvelopeItem ("EnvelopeItem"): id, title, order, documentDataId, envelopeId [manual IDs: id]
+DocumentAuditLog ("DocumentAuditLog"): id, envelopeId, createdAt, type, data, name, email, userId, userAgent, ipAddress
+DocumentData ("DocumentData"): id, type, data, initialData
+DocumentMeta ("DocumentMeta"): id, subject, message, timezone, dateFormat, redirectUrl, signingOrder, allowDictateNextSigner, typedSignatureEnabled, uploadSignatureEnabled, drawSignatureEnabled, language, distributionMethod, emailSettings, emailReplyTo, emailId, envelopeExpirationPeriod
+EnvelopeAttachment ("EnvelopeAttachment"): id, type, label, data, createdAt, updatedAt, envelopeId
+Recipient ("Recipient"): id, envelopeId, email, name, token, documentDeletedAt, expired, expiresAt, expirationNotifiedAt, signedAt, authOptions, signingOrder, rejectionReason, role, readStatus, signingStatus, sendStatus
+Field ("Field"): id, secondaryId, envelopeId, envelopeItemId, recipientId, type, page, positionX, positionY, width, height, customText, inserted, fieldMeta
+Signature ("Signature"): id, created, recipientId, fieldId, signatureImageAsBase64, typedSignature
+DocumentShareLink ("DocumentShareLink"): id, email, slug, envelopeId, createdAt, updatedAt
+Organisation ("Organisation"): id, createdAt, updatedAt, type, name, url, avatarImageId, customerId, organisationClaimId, ownerUserId, organisationGlobalSettingsId, organisationAuthenticationPortalId [manual IDs: id]
+OrganisationMember ("OrganisationMember"): id, createdAt, updatedAt, userId, organisationId [manual IDs: id]
+OrganisationMemberInvite ("OrganisationMemberInvite"): id, createdAt, email, token, status, organisationId, organisationRole [manual IDs: id]
+OrganisationGroup ("OrganisationGroup"): id, name, type, organisationRole, organisationId [manual IDs: id]
+OrganisationGroupMember ("OrganisationGroupMember"): id, groupId, organisationMemberId [manual IDs: id]
+TeamGroup ("TeamGroup"): id, organisationGroupId, teamRole, teamId [manual IDs: id]
+OrganisationGlobalSettings ("OrganisationGlobalSettings"): id, documentVisibility, documentLanguage, includeSenderDetails, includeSigningCertificate, includeAuditLog, documentTimezone, documentDateFormat, delegateDocumentOwnership, typedSignatureEnabled, uploadSignatureEnabled, drawSignatureEnabled, defaultRecipients, emailId, emailReplyTo, emailDocumentSettings, brandingEnabled, brandingLogo, brandingUrl, brandingCompanyDetails, envelopeExpirationPeriod, aiFeaturesEnabled [manual IDs: id]
+TeamGlobalSettings ("TeamGlobalSettings"): id, documentVisibility, documentLanguage, documentTimezone, documentDateFormat, delegateDocumentOwnership, includeSenderDetails, includeSigningCertificate, includeAuditLog, typedSignatureEnabled, uploadSignatureEnabled, drawSignatureEnabled, defaultRecipients, emailId, emailReplyTo, emailDocumentSettings, brandingEnabled, brandingLogo, brandingUrl, brandingCompanyDetails, envelopeExpirationPeriod, aiFeaturesEnabled [manual IDs: id]
+Team ("Team"): id, name, url, createdAt, avatarImageId, organisationId, teamGlobalSettingsId
+TeamEmail ("TeamEmail"): teamId, createdAt, name, email [manual IDs: teamId]
+TeamEmailVerification ("TeamEmailVerification"): teamId, name, email, token, completed, expiresAt, createdAt [manual IDs: teamId]
+TemplateDirectLink ("TemplateDirectLink"): id, envelopeId, token, createdAt, enabled, directTemplateRecipientId
+SiteSettings ("SiteSettings"): id, enabled, data, lastModifiedByUserId, lastModifiedAt [manual IDs: id]
+BackgroundJob ("BackgroundJob"): id, status, payload, retried, maxRetries, jobId, name, version, submittedAt, updatedAt, completedAt, lastRetriedAt
+BackgroundJobTask ("BackgroundJobTask"): id, name, status, result, retried, maxRetries, createdAt, updatedAt, completedAt, jobId [manual IDs: id]
+AvatarImage ("AvatarImage"): id, bytes
+EmailDomain ("EmailDomain"): id, createdAt, updatedAt, status, selector, domain, publicKey, privateKey, lastVerifiedAt, organisationId [manual IDs: id]
+OrganisationEmail ("OrganisationEmail"): id, createdAt, updatedAt, email, emailName, emailDomainId, organisationId [manual IDs: id]
+OrganisationAuthenticationPortal ("OrganisationAuthenticationPortal"): id, enabled, clientId, clientSecret, wellKnownUrl, defaultOrganisationRole, autoProvisionUsers [manual IDs: id]
+Counter ("Counter"): id, value [manual IDs: id]
+RateLimit ("RateLimit"): key, action, bucket, count, createdAt
+
+LEARNINGS FROM PAST RUNS (apply these corrections):
+# Documenso Verify Learnings
+
+## SQL Corrections
+- ERROR: null value in column "documentMetaId" of relation "Envelope" violates not-null constraint
+  FIX: Include a valid "documentMetaId" (FK to "DocumentMeta") in every INSERT into "Envelope"
+
+## Column Mappings
+_(No column mapping errors recorded yet.)_
+
+## Required Fields
+- Envelope.documentMetaId: NOT NULL — a valid DocumentMeta id is required on every INSERT into "Envelope" (confirmed by constraint violation in run 2026-03-24-0219-spec)
+
+## Timing
+Average stage durations (updated 2026-03-25, this run: 2026-03-25-1708-spec):
+- ac-generator: 37s (151 runs)
+- planner: 104s (148 runs)
+- planner-retry: 102s (21 runs)
+- setup-group-a: 34s (113 runs)
+- setup-group-a-retry1: 15s (6 runs)
+- setup-group-a-retry2: 17s (3 runs)
+- setup-group-b: 29s (33 runs)
+- setup-group-b-retry1: 19s (4 runs)
+- setup-group-b-retry2: 24s (3 runs)
+- setup-group-c: 36s (7 runs)
+- setup-group-d: 38s (1 run)
+- introspection: 8s (2 runs)
+- browse-agent: 36s (348 agent runs)
+- replan: 8s (30 runs)
+- judge: 35s (122 runs)
+- learner: 81s (2 runs)
+
+## Navigation
+- `/share/{invalid_token}` — redirects to the Documents dashboard (HTTP 200, no 500 error) when the QR share token does not exist in the database (confirmed via ac1 and ac2 verdicts, run 2026-03-24-2321-spec; reconfirmed via ac1 and ac2 verdicts, run 2026-03-25-1607-spec).
+- `/t/{teamSlug}/documents/{docId}/edit` — returns 404 "Team not found" or "Organisation not found" when the team slug does not exist in the database (confirmed via nav_failure in ac2/replan-input.json run 1; reconfirmed via ac3 verdict run 2026-03-24-2105-spec).
+- `/t/{teamSlug}/documents/{docId}/edit` — returns 404 "Document not found" when the document ID does not exist in the database (confirmed across many runs; reconfirmed via all 4 ACs, run 2026-03-25-0518-spec; reconfirmed via ac1 and ac2 verdicts, run 2026-03-25-0524-spec; reconfirmed via ac1 and ac2 verdicts, run 2026-03-25-0537-spec).
+- `/t/{teamSlug}/documents/{docId}` — returns 404 "Team not found" or "Document not found" when the team slug or document ID does not exist in the database (confirmed via ac1–ac4 verdicts, run 2026-03-25-0400-spec).
+- `/t/{teamSlug}/documents/{docId}/logs` — returns 404 "Document not found" when the document ID does not exist in the database (confirmed via ac5–ac6 verdicts, run 2026-03-25-0400-spec).
+- `/documents/{docId}/edit` — returns 404 "Oops! Something went wrong" when the document ID does not exist in the database (confirmed via browse-agent-ac1 and browse-agent-ac2, run 2026-03-24-1719-approach-d-pr-2584; reconfirmed via ac4 spec_unclear verdict, run 2026-03-25-0252-spec; reconfirmed via ac1 and ac2 verdicts, run 2026-03-25-1628-spec).
+- `/documents/{docId}` — returns 404 "Document not found" when the document ID does not exist in the database (confirmed via all 4 ACs, run 2026-03-24-2323-spec; reconfirmed via ac1 and ac2 verdicts, run 2026-03-25-0426-spec; reconfirmed via ac1 verdict run 2026-03-25-0456-spec; reconfirmed via all 3 ACs, run 2026-03-25-1534-spec; reconfirmed via all 5 ACs, run 2026-03-25-1556-spec).
+- `/documents/{docId}/logs` — returns 404 "Document not found" when the document ID does not exist in the database (confirmed via ac4 verdict, run 2026-03-24-2323-spec).
+- `/o/{orgSlug}/settings/members?tab=invites` — returns 404 "Organisation not found" when the org slug does not exist in the database (confirmed via nav_failure in ac1/replan-input.json run 5; reconfirmed via all ACs run 2026-03-24-2110-spec; reconfirmed via all ACs run 2026-03-25-0511-spec).
+- `/embed/v0/direct/{token}` — returns 404 when the direct signing token does not exist in the database (confirmed via browse-agent-ac1 and browse-agent-ac2 outputs, run 2026-03-23-2343-spec and run 2026-03-24-1835-spec; reconfirmed via all 3 ACs, run 2026-03-24-2149-spec, run 2026-03-25-0450-spec, and run 2026-03-25-0517-spec).
+- `/t/{teamSlug}/documents` — documents table can show "Something went wrong." regardless of whether documents exist; occurs when the underlying tRPC query fails at runtime (confirmed via all 3 browse agents, run 2026-03-24-0004-spec and ac3 replan-input.json run 2026-03-24-0054-spec; reconfirmed run 2026-03-24-2209-spec, all 3 ACs run 2026-03-25-0310-spec, ac2 verdict run 2026-03-25-0414-spec, all 3 ACs run 2026-03-25-0526-spec, ac2 verdict run 2026-03-25-0543-spec, all 3 ACs run 2026-03-25-0544-spec, all 3 ACs run 2026-03-25-0552-spec, and ac2 verdict run 2026-03-25-1708-spec).
+- `/documents` (personal level, including folder sub-views) — documents table shows "Something went wrong." with "Showing 0 results." when tRPC query fails; affects both root list and folder-filtered views (confirmed via all 4 ACs, run 2026-03-25-0549-spec; reconfirmed via ac1 verdict, run 2026-03-25-0604-spec).
+- `/templates` — data table area shows "Something went wrong." when tRPC query fails; page heading (h1 "Templates") and navigation still render correctly (confirmed via ac3 verdict, run 2026-03-25-1636-spec).
+- `/settings/webhooks` — renders the user Profile page (sidebar: Profile, Organisations, Security only); webhooks are a team-level feature located at `/t/{teamSlug}/settings/webhooks` (confirmed via ac1 verdict and ac2 pass, run 2026-03-24-0054-spec).
+- `/dashboard` — documents table shows "Something went wrong." after page refresh (F5) when documents data fails to load; page structure (nav, folders, tabs) still renders correctly with no 404 error (confirmed via ac2 and ac3 judge verdicts, run 2026-03-24-0102-spec; reconfirmed via ac2 verdict, run 2026-03-24-1353-spec).
+- `/admin` — redirects to the standard user Documents page; admin content not served at this route (confirmed via browse-agent-ac1, run 2026-03-24-0120-spec; reconfirmed via ac1 verdict, run 2026-03-24-2251-spec).
+- `/admin/stats` — redirects to the standard user Documents page for non-admin users (confirmed via browse-agent-ac1, run 2026-03-24-0120-spec; reconfirmed via ac2 verdict, run 2026-03-24-0237-spec). For authenticated admin users, page loads and displays stats (Total Users, Total Documents, App Version) plus a License section showing "No License Configured" with a 'Learn more' link when no license is configured (confirmed via ac1 verdict, run 2026-03-25-1529-spec).
+- `/admin/site-settings` — redirects to the standard user Documents page; no admin or license-related content served at this route (confirmed via browse-agent-ac2 and browse-agent-ac3, run 2026-03-24-0120-spec; reconfirmed via ac2 verdict, run 2026-03-24-2251-spec).
+- `/settings/organisations` — redirects to sign-in page when auth session is expired (confirmed via ac1 verdict, run 2026-03-24-1803-eval-pr-2636; reconfirmed via ac4 verdict, run 2026-03-24-2218-spec; reconfirmed via all 4 ACs, run 2026-03-25-0331-spec).
+- `/t/{teamSlug}/settings/email` — shows 8 standard email notification checkboxes; no "direct template link" notification checkbox exists (confirmed via ac2 verdict, run 2026-03-24-2050-spec; reconfirmed via ac1 verdict, run 2026-03-24-2218-spec).
+- `/o/{orgSlug}/settings/email` — shows 8 standard email notification checkboxes under "Default Email Settings"; no "direct template link" notification checkbox exists (confirmed via ac4 verdict, run 2026-03-24-2050-spec).
+- `/documents` — shows "We're all empty" state when no documents exist in the test environment; browse agents cannot navigate to document detail pages without seed data (confirmed via all ac2–ac8 verdicts, run 2026-03-24-2153-spec).
+- `/settings/profile` — no locale/language selector UI element exists on this page; page shows Profile, Organisations, and Security sections only (confirmed via ac2 spec_unclear verdict, run 2026-03-25-1536-spec).
+- file upload via `input[accept='application/pdf']` — browse agent `fill` on this hidden file input times out; all 3 ACs failed at this step (confirmed via all 3 browse-agent verdicts, run 2026-03-25-0552-spec).
+
+PROCESS:
+1. Run 2-3 psql SELECT queries to understand current data relevant to the CONDITION
+2. Write the minimal SQL (1-5 commands) to achieve the condition
+3. Output ONLY the JSON below — nothing else
+
+IMPORTANT: You have a strict time limit. Do NOT explore extensively.
+Run at most 3-4 SELECT queries, then output the JSON immediately.
+Do NOT read files, grep, or explore the codebase.
+
+COLUMN NAMES: Schema shows "prismaName->pgName" for mapped columns. Always use the Postgres name in SQL.
+
+MANUAL ID COLUMNS: If a model shows [manual IDs: ...], provide an explicit value for those columns in INSERTs (e.g., gen_random_uuid() or 'verify-test-spike-d-doc-template-001').
+
+OUTPUT: Valid JSON to stdout:
+
+{
+  "group_id": "spike-d-doc-template",
+  "condition": "A template exists for the logged-in user's personal team",
+  "setup_commands": [
+    "psql "postgresql://documenso:password@localhost:54320/documenso" --set ON_ERROR_STOP=1 -c \"UPDATE ...\""
+  ],
+  "teardown_commands": []
+}
+
+RULES:
+1. Use `psql "postgresql://documenso:password@localhost:54320/documenso" --set ON_ERROR_STOP=1 -c "..."` for setup commands.
+2. Prefer UPDATE on existing rows. Use INSERT only when new rows are needed.
+3. Use Postgres column names (not Prisma field names) in all SQL.
+4. Minimal changes — only what's needed for the condition.
+5. teardown_commands must be empty — orchestrator handles DB restoration.
+6. Keep it to 1-5 commands max.
+7. Do NOT read files or explore the codebase. Only use psql.
+8. If the condition is null or empty, output empty arrays.
+9. NEVER invent IDs or tokens for foreign key columns. If a column references another table, you MUST first SELECT a valid value from that table or INSERT a new row into it. Use gen_random_uuid() only for primary key columns, never for FK references to existing data.
+
+Output ONLY the JSON. No explanation, no markdown fences.

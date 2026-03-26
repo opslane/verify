@@ -1,0 +1,166 @@
+{
+  "ApiTokenAlgorithm": [
+    "SHA512"
+  ],
+  "BackgroundJobStatus": [
+    "PENDING",
+    "PROCESSING",
+    "COMPLETED",
+    "FAILED"
+  ],
+  "BackgroundJobTaskStatus": [
+    "PENDING",
+    "COMPLETED",
+    "FAILED"
+  ],
+  "DocumentDataType": [
+    "S3_PATH",
+    "BYTES",
+    "BYTES_64"
+  ],
+  "DocumentDistributionMethod": [
+    "EMAIL",
+    "NONE"
+  ],
+  "DocumentSigningOrder": [
+    "PARALLEL",
+    "SEQUENTIAL"
+  ],
+  "DocumentSource": [
+    "DOCUMENT",
+    "TEMPLATE",
+    "TEMPLATE_DIRECT_LINK"
+  ],
+  "DocumentStatus": [
+    "DRAFT",
+    "PENDING",
+    "COMPLETED",
+    "REJECTED"
+  ],
+  "DocumentVisibility": [
+    "EVERYONE",
+    "MANAGER_AND_ABOVE",
+    "ADMIN"
+  ],
+  "EmailDomainStatus": [
+    "PENDING",
+    "ACTIVE"
+  ],
+  "EnvelopeType": [
+    "DOCUMENT",
+    "TEMPLATE"
+  ],
+  "FieldType": [
+    "SIGNATURE",
+    "FREE_SIGNATURE",
+    "DATE",
+    "TEXT",
+    "NAME",
+    "EMAIL",
+    "NUMBER",
+    "RADIO",
+    "CHECKBOX",
+    "DROPDOWN",
+    "INITIALS"
+  ],
+  "FolderType": [
+    "DOCUMENT",
+    "TEMPLATE"
+  ],
+  "IdentityProvider": [
+    "DOCUMENSO",
+    "GOOGLE",
+    "OIDC"
+  ],
+  "OrganisationGroupType": [
+    "INTERNAL_ORGANISATION",
+    "INTERNAL_TEAM",
+    "CUSTOM"
+  ],
+  "OrganisationMemberInviteStatus": [
+    "ACCEPTED",
+    "PENDING",
+    "DECLINED"
+  ],
+  "OrganisationMemberRole": [
+    "ADMIN",
+    "MANAGER",
+    "MEMBER"
+  ],
+  "OrganisationType": [
+    "PERSONAL",
+    "ORGANISATION"
+  ],
+  "ReadStatus": [
+    "NOT_OPENED",
+    "OPENED"
+  ],
+  "RecipientRole": [
+    "CC",
+    "SIGNER",
+    "VIEWER",
+    "APPROVER",
+    "ASSISTANT"
+  ],
+  "Role": [
+    "ADMIN",
+    "USER"
+  ],
+  "SendStatus": [
+    "NOT_SENT",
+    "SENT"
+  ],
+  "SigningStatus": [
+    "NOT_SIGNED",
+    "SIGNED",
+    "REJECTED"
+  ],
+  "SubscriptionStatus": [
+    "ACTIVE",
+    "INACTIVE",
+    "PAST_DUE"
+  ],
+  "TeamMemberRole": [
+    "ADMIN",
+    "MANAGER",
+    "MEMBER"
+  ],
+  "TemplateType": [
+    "PUBLIC",
+    "PRIVATE"
+  ],
+  "UserSecurityAuditLogType": [
+    "ACCOUNT_PROFILE_UPDATE",
+    "ACCOUNT_SSO_LINK",
+    "AUTH_2FA_DISABLE",
+    "AUTH_2FA_ENABLE",
+    "PASSWORD_RESET",
+    "PASSWORD_UPDATE",
+    "SIGN_OUT",
+    "SIGN_IN",
+    "SIGN_IN_FAIL",
+    "SIGN_IN_2FA_FAIL",
+    "PASSKEY_CREATED",
+    "PASSKEY_DELETED",
+    "PASSKEY_UPDATED",
+    "SIGN_IN_PASSKEY_FAIL",
+    "SESSION_REVOKED",
+    "ACCOUNT_SSO_UNLINK",
+    "ORGANISATION_SSO_LINK",
+    "ORGANISATION_SSO_UNLINK"
+  ],
+  "WebhookCallStatus": [
+    "SUCCESS",
+    "FAILED"
+  ],
+  "WebhookTriggerEvents": [
+    "DOCUMENT_CREATED",
+    "DOCUMENT_SIGNED",
+    "DOCUMENT_SENT",
+    "DOCUMENT_OPENED",
+    "DOCUMENT_COMPLETED",
+    "DOCUMENT_REJECTED",
+    "DOCUMENT_CANCELLED",
+    "RECIPIENT_EXPIRED"
+  ]
+}

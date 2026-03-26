@@ -1,0 +1,13 @@
+No existing envelopes. I need to create a DocumentData, DocumentMeta, Envelope, and Recipient.
+
+{
+  "group_id": "spike-6-doc-hardened",
+  "condition": "A draft document exists for the logged-in user's personal team, with at least one recipient added",
+  "setup_commands": [
+    "psql \"postgresql://documenso:password@localhost:54320/documenso\" --set ON_ERROR_STOP=1 -c \"INSERT INTO \\\"DocumentData\\\" (id, type, data, \\\"initialData\\\") VALUES (gen_random_uuid(), 'BYTES_64', '', '')\"",
+    "psql \"postgresql://documenso:password@localhost:54320/documenso\" --set ON_ERROR_STOP=1 -c \"INSERT INTO \\\"DocumentMeta\\\" (id, subject, message, timezone, \\\"dateFormat\\\", \\\"signingOrder\\\") VALUES (gen_random_uuid(), '', '', 'UTC', 'yyyy-MM-dd', 'PARALLEL')\"",
+    "psql \"postgresql://documenso:password@localhost:54320/documenso\" --set ON_ERROR_STOP=1 -c \"WITH dd AS (SELECT id FROM \\\"DocumentData\\\" ORDER BY id DESC LIMIT 1), dm AS (SELECT id FROM \\\"DocumentMeta\\\" ORDER BY id DESC LIMIT 1) INSERT INTO \\\"Envelope\\\" (id, \\\"secondaryId\\\", type, title, status, source, \\\"userId\\\", \\\"teamId\\\", \\\"documentMetaId\\\") SELECT gen_random_uuid(), gen_random_uuid(), 'DOCUMENT', 'Draft Test Document', 'DRAFT', 'DOCUMENT', 9, 7, dm.id FROM dd, dm\"",
+    "psql \"postgresql://documenso:password@localhost:54320/documenso\" --set ON_ERROR_STOP=1 -c \"INSERT INTO \\\"Recipient\\\" (\\\"envelopeId\\\", email, name, token, role, \\\"readStatus\\\", \\\"signingStatus\\\", \\\"sendStatus\\\") SELECT e.id, 'recipient@test.com', 'Test Recipient', gen_random_uuid()::text, 'SIGNER', 'NOT_OPENED', 'NOT_SIGNED', 'NOT_SENT' FROM \\\"Envelope\\\" e WHERE e.\\\"userId\\\" = 9 AND e.\\\"teamId\\\" = 7 AND e.status = 'DRAFT' LIMIT 1\""
+  ],
+  "teardown_commands": []
+}

@@ -1,0 +1,101 @@
+{
+  "timestamp": "2026-03-25T17:14:50.077Z",
+  "summary": {
+    "total": 6,
+    "met_by_seed": 4,
+    "not_met": 2,
+    "seed_coverage_pct": 67,
+    "mutations_tested": 1,
+    "mutations_ok": 1
+  },
+  "schemas": {
+    "documenso": {
+      "Envelope": "id|text|NO\nsecondaryId|text|NO\nexternalId|text|YES\ntype|USER-DEFINED|NO\ncreatedAt|timestamp without time zone|NO\nupdatedAt|timestamp without time zone|NO\ncompletedAt|timestamp without time zone|YES\ndeletedAt|timestamp without time zone|YES\ntitle|text|NO\nstatus|USER-DEFINED|NO\nsource|USER-DEFINED|NO\nqrToken|text|YES\ninternalVersion|integer|NO\nuseLegacyFieldInsertion|boolean|NO\nauthOptions|jsonb|YES\nformValues|jsonb|YES\nvisibility|USER-DEFINED|NO\ntemplateType|USER-DEFINED|NO\npublicTitle|text|NO\npublicDescription|text|NO\ntemplateId|integer|YES\nuserId|integer|NO\nteamId|integer|NO\nfolderId|text|YES\ndocumentMetaId|text|NO",
+      "Recipient": "id|integer|NO\nemail|character varying|NO\nname|character varying|NO\ntoken|text|NO\nexpired|timestamp without time zone|YES\nreadStatus|USER-DEFINED|NO\nsigningStatus|USER-DEFINED|NO\nsendStatus|USER-DEFINED|NO\nsignedAt|timestamp without time zone|YES\nrole|USER-DEFINED|NO\nauthOptions|jsonb|YES\ndocumentDeletedAt|timestamp without time zone|YES\nsigningOrder|integer|YES\nrejectionReason|text|YES\nenvelopeId|text|NO\nexpirationNotifiedAt|timestamp without time zone|YES\nexpiresAt|timestamp without time zone|YES",
+      "Template": "",
+      "Team": "id|integer|NO\nname|text|NO\nurl|text|NO\ncreatedAt|timestamp without time zone|NO\navatarImageId|text|YES\norganisationId|text|NO\nteamGlobalSettingsId|text|NO",
+      "TeamMember": "",
+      "DocumentMeta": "id|text|NO\nmessage|text|YES\nsubject|text|YES\ndateFormat|text|YES\ntimezone|text|YES\nredirectUrl|text|YES\nsigningOrder|USER-DEFINED|NO\ntypedSignatureEnabled|boolean|NO\nlanguage|text|NO\ndistributionMethod|USER-DEFINED|NO\nemailSettings|jsonb|YES\ndrawSignatureEnabled|boolean|NO\nuploadSignatureEnabled|boolean|NO\nallowDictateNextSigner|boolean|NO\nemailId|text|YES\nemailReplyTo|text|YES\nenvelopeExpirationPeriod|jsonb|YES"
+    },
+    "calcom": {
+      "_all_tables": "AIPhoneCallConfiguration\nAccessCode\nAccessToken\nAccount\nAgent\nApiKey\nApp\nApp_RoutingForms_Form\nApp_RoutingForms_FormResponse\nApp_RoutingForms_IncompleteBookingActions\nApp_RoutingForms_QueuedFormResponse\nAssignmentReason\nAttendee\nAttribute\nAttributeOption\nAttributeSyncFieldMapping\nAttributeSyncRule\nAttributeToUser\nAuditActor\nAvailability\nBooking\nBookingAudit\nBookingDenormalized\nBookingInternalNote\nBookingReference\nBookingReport\nBookingSeat\nCalAiPhoneNumber\nCalVideoSettings\nCalendarCache\nCalendarCacheEvent\nCredential\nCreditBalance\nCreditExpenseLog\nCreditPurchaseLog\nDSyncData\nDSyncTeamGroupMapping\nDelegationCredential\nDeployment\nDestinationCalendar\nDomainWideDelegation\nEventType\nEventTypeCustomInput\nEventTypeTranslation\nFeature\nFeedback\nFilterSegment\nHashedLink\nHolidayCache\nHost\nHostGroup\nHostLocation\nImpersonations\nInstantMeetingToken\nIntegrationAttributeSync\nInternalNotePreset\nManagedOrganization\nMembership\nMonthlyProration\nNotificationsSubscriptions\nOAuthClient\nOrganizationBilling\nOrganizationOnboarding\nOrganizationSettings\nOutOfOfficeEntry\nOutOfOfficeReason\nPayment\nPendingRoutingTrace\nPlatformAuthorizationToken\nPlatformBilling\nPlatformOAuthClient\nProfile\nRateLimit\nRefreshToken\nReminderMail\nResetPasswordRequest\nRole\nRolePermission\nRoutingFormResponseDenormalized\nRoutingFormResponseField\nRoutingTrace\nSchedule\nSeatChangeLog\nSecondaryEmail\nSelectedCalendar\nSelectedSlots\nSession\nTask\nTeam\nTeamBilling\nTeamFeatures\nTempOrgRedirect\nTracking\nTravelSchedule\nUserFeatures\nUserFilterSegmentPreference\nUserHolidaySettings\nUserPassword\nVerificationToken\nVerifiedEmail\nVerifiedNumber\nVideoCallGuest\nWatchlist\nWatchlistAudit\nWatchlistEventAudit\nWebhook\nWebhookScheduledTriggers\nWorkflow\nWorkflowOptOutContact\nWorkflowReminder\nWorkflowStep\nWorkflowStepTranslation\nWorkflowsOnEventTypes\nWorkflowsOnRoutingForms\nWorkflowsOnTeams\nWorkspacePlatform\nWrongAssignmentReport\n_PlatformOAuthClientToUser\n_prisma_migrations\n_user_eventtype\navatars\nusers",
+      "users": "id|integer|NO\nusername|text|YES\nname|text|YES\nemail|text|NO\nbio|text|YES\ntimeZone|text|NO\nweekStart|text|NO\ncreated|timestamp without time zone|NO\nbufferTime|integer|NO\nemailVerified|timestamp without time zone|YES\nhideBranding|boolean|NO\ntheme|text|YES\ncompletedOnboarding|boolean|NO\ntwoFactorEnabled|boolean|NO\ntwoFactorSecret|text|YES\nlocale|text|YES\nbrandColor|text|YES\nidentityProvider|USER-DEFINED|NO\nidentityProviderId|text|YES\ninvitedTo|integer|YES\nmetadata|jsonb|YES\nverified|boolean|YES\ntimeFormat|integer|YES\ndarkBrandColor|text|YES\ntrialEndsAt|timestamp without time zone|YES\ndefaultScheduleId|integer|YES\nallowDynamicBooking|boolean|YES\nrole|USER-DEFINED|NO\ndisableImpersonation|boolean|NO\norganizationId|integer|YES\nallowSEOIndexing|boolean|YES\nbackupCodes|text|YES\nreceiveMonthlyDigestEmail|boolean|YES\navatarUrl|text|YES\nlocked|boolean|NO\nappTheme|text|YES\nmovedToProfileId|integer|YES\nisPlatformManaged|boolean|NO\nsmsLockState|USER-DEFINED|NO\nsmsLockReviewedByAdmin|boolean|NO\nreferralLinkId|text|YES\nlastActiveAt|timestamp without time zone|YES\ncreationSource|USER-DEFINED|YES\nwhitelistWorkflows|boolean|NO\nrequiresBookerEmailVerification|boolean|YES\nuuid|uuid|NO\nautoOptInFeatures|boolean|NO",
+      "EventType": "id|integer|NO\ntitle|text|NO\nslug|text|NO\ndescription|text|YES\nlocations|jsonb|YES\nlength|integer|NO\nhidden|boolean|NO\nuserId|integer|YES\neventName|text|YES\ntimeZone|text|YES\nperiodCountCalendarDays|boolean|YES\nperiodDays|integer|YES\nperiodEndDate|timestamp without time zone|YES\nperiodStartDate|timestamp without time zone|YES\nrequiresConfirmation|boolean|NO\nminimumBookingNotice|integer|NO\ncurrency|text|NO\nprice|integer|NO\nschedulingType|USER-DEFINED|YES\nteamId|integer|YES\ndisableGuests|boolean|NO\nposition|integer|NO\nperiodType|USER-DEFINED|NO\nslotInterval|integer|YES\nmetadata|jsonb|YES\nafterEventBuffer|integer|NO\nbeforeEventBuffer|integer|NO\nhideCalendarNotes|boolean|NO\nsuccessRedirectUrl|text|YES\nseatsPerTimeSlot|integer|YES\nrecurringEvent|jsonb|YES\nscheduleId|integer|YES\nbookingLimits|jsonb|YES\nseatsShowAttendees|boolean|YES\nbookingFields|jsonb|YES\ndurationLimits|jsonb|YES\nparentId|integer|YES\noffsetStart|integer|NO\nrequiresBookerEmailVerification|boolean|NO\nseatsShowAvailabilityCount|boolean|YES\nlockTimeZoneToggleOnBookingPage|boolean|NO\nonlyShowFirstAvailableSlot|boolean|NO\nisInstantEvent|boolean|NO\nassignAllTeamMembers|boolean|NO\nprofileId|integer|YES\nuseEventTypeDestinationCalendarEmail|boolean|NO\nsecondaryEmailId|integer|YES\nforwardParamsSuccessRedirect|boolean|YES\ninstantMeetingExpiryTimeOffsetInSeconds|integer|NO\nisRRWeightsEnabled|boolean|NO\nrescheduleWithSameRoundRobinHost|boolean|NO\neventTypeColor|jsonb|YES\nrequiresConfirmationWillBlockSlot|boolean|NO\ninstantMeetingScheduleId|integer|YES\nshowOptimizedSlots|boolean|YES\nhideCalendarEventDetails|boolean|NO\nassignRRMembersUsingSegment|boolean|NO\nrrSegmentQueryValue|jsonb|YES\nmaxLeadThreshold|integer|YES\ninstantMeetingParameters|ARRAY|YES\nautoTranslateDescriptionEnabled|boolean|NO\nrequiresConfirmationForFreeEmail|boolean|NO\nuseEventLevelSelectedCalendars|boolean|NO\nallowReschedulingPastBookings|boolean|NO\ninterfaceLanguage|text|YES\ncanSendCalVideoTranscriptionEmails|boolean|NO\ndisableCancelling|boolean|YES\ndisableRescheduling|boolean|YES\ncustomReplyToEmail|text|YES\nhideOrganizerEmail|boolean|NO\nincludeNoShowInRRCalculation|boolean|NO\nrestrictionScheduleId|integer|YES\nuseBookerTimezone|boolean|NO\nallowReschedulingCancelledBookings|boolean|YES\nmaxActiveBookingsPerBooker|integer|YES\nmaxActiveBookingPerBookerOfferReschedule|boolean|NO\nlockedTimeZone|text|YES\nbookingRequiresAuthentication|boolean|NO\ncreatedAt|timestamp without time zone|YES\nupdatedAt|timestamp without time zone|YES\nautoTranslateInstantMeetingTitleEnabled|boolean|NO\nminimumRescheduleNotice|integer|YES\nrrHostSubsetEnabled|boolean|NO\nrequiresCancellationReason|USER-DEFINED|YES\nenablePerHostLocations|boolean|NO\nredirectUrlOnNoRoutingFormResponse|text|YES",
+      "event_types": "",
+      "Booking": "id|integer|NO\nuid|text|NO\nuserId|integer|YES\neventTypeId|integer|YES\ntitle|text|NO\ndescription|text|YES\nstartTime|timestamp without time zone|NO\nendTime|timestamp without time zone|NO\ncreatedAt|timestamp without time zone|NO\nupdatedAt|timestamp without time zone|YES\nlocation|text|YES\npaid|boolean|NO\nstatus|USER-DEFINED|NO\ncancellationReason|text|YES\nrejectionReason|text|YES\nfromReschedule|text|YES\nrescheduled|boolean|YES\ndynamicEventSlugRef|text|YES\ndynamicGroupSlugRef|text|YES\nrecurringEventId|text|YES\ncustomInputs|jsonb|YES\nsmsReminderNumber|text|YES\ndestinationCalendarId|integer|YES\nscheduledJobs|ARRAY|YES\nmetadata|jsonb|YES\nresponses|jsonb|YES\nisRecorded|boolean|NO\niCalSequence|integer|NO\niCalUID|text|YES\nuserPrimaryEmail|text|YES\nidempotencyKey|text|YES\nnoShowHost|boolean|YES\nrating|integer|YES\nratingFeedback|text|YES\ncancelledBy|text|YES\nrescheduledBy|text|YES\noneTimePassword|text|YES\nreassignReason|text|YES\nreassignById|integer|YES\ncreationSource|USER-DEFINED|YES",
+      "bookings": "",
+      "Webhook": "id|text|NO\nuserId|integer|YES\nsubscriberUrl|text|NO\ncreatedAt|timestamp without time zone|NO\nactive|boolean|NO\neventTriggers|ARRAY|YES\npayloadTemplate|text|YES\neventTypeId|integer|YES\nappId|text|YES\nsecret|text|YES\nteamId|integer|YES\nplatform|boolean|NO\nplatformOAuthClientId|text|YES\ntime|integer|YES\ntimeUnit|USER-DEFINED|YES\nversion|text|NO",
+      "webhooks": "",
+      "calendars": ""
+    }
+  },
+  "conditions": [
+    {
+      "repo": "documenso",
+      "id": "doc-draft-with-recipient",
+      "description": "A draft document exists for the logged-in user's personal team, with at least one recipient added",
+      "seedCount": 3,
+      "threshold": 1,
+      "metBySeed": true,
+      "mutationTested": false,
+      "mutationSuccess": false,
+      "duration_ms": 29
+    },
+    {
+      "repo": "documenso",
+      "id": "doc-3-drafts",
+      "description": "At least 3 draft documents exist for the logged-in user's personal team",
+      "seedCount": 9,
+      "threshold": 3,
+      "metBySeed": true,
+      "mutationTested": false,
+      "mutationSuccess": false,
+      "duration_ms": 27
+    },
+    {
+      "repo": "documenso",
+      "id": "doc-template",
+      "description": "A template exists for the logged-in user's personal team",
+      "seedCount": 0,
+      "threshold": 1,
+      "metBySeed": false,
+      "mutationTested": false,
+      "mutationSuccess": false,
+      "mutationError": "Check query failed: ERROR:  relation \"Template\" does not exist\nLINE 2:           SELECT COUNT(*) FROM \"Template\"\n                                       ^",
+      "duration_ms": 26
+    },
+    {
+      "repo": "calcom",
+      "id": "cal-event-type",
+      "description": "An event type exists for the logged-in user",
+      "seedCount": 1,
+      "threshold": 1,
+      "metBySeed": true,
+      "mutationTested": false,
+      "mutationSuccess": false,
+      "duration_ms": 33
+    },
+    {
+      "repo": "calcom",
+      "id": "cal-booking",
+      "description": "A booking exists for the logged-in user's event type",
+      "seedCount": 2,
+      "threshold": 1,
+      "metBySeed": true,
+      "mutationTested": false,
+      "mutationSuccess": false,
+      "duration_ms": 30
+    },
+    {
+      "repo": "calcom",
+      "id": "cal-webhook",
+      "description": "A webhook exists for the logged-in user",
+      "seedCount": 0,
+      "threshold": 1,
+      "metBySeed": false,
+      "mutationTested": true,
+      "mutationSuccess": true,
+      "duration_ms": 58
+    }
+  ]
+}

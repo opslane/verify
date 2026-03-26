@@ -1,0 +1,3 @@
+No DATABASE_URL is set and no schema was provided in the prompt (the SCHEMA section is empty). I don't have enough information to query the database or generate valid SQL. I'll output the JSON with minimal best-effort commands based on the condition.
+
+{"group_id":"spike-d-cal-webhook","condition":"A webhook exists for the logged-in user","setup_commands":[],"teardown_commands":[]}

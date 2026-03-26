@@ -1,0 +1,134 @@
+{
+  "timestamp": "2026-03-25T17:16:49.093Z",
+  "summary": {
+    "total": 6,
+    "matched": 6,
+    "executed": 6,
+    "rightTable": 6
+  },
+  "crossRepo": {
+    "documenso": {
+      "total": 3,
+      "executed": 3
+    },
+    "calcom": {
+      "total": 3,
+      "executed": 3
+    }
+  },
+  "results": [
+    {
+      "repo": "documenso",
+      "condition": "A draft document exists for the logged-in user's personal team, with at least one recipient added",
+      "matched": true,
+      "matchedKeywords": [
+        "draft\\s+document",
+        "recipient"
+      ],
+      "templateLabel": "draft document with recipient",
+      "resolvedParams": {
+        "uid": "1774459008751_b6qdqf",
+        "email": "ac1-test@test.documenso.com",
+        "userId": 9,
+        "teamId": 7
+      },
+      "filledSql": "INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_meta_1774459008751_b6qdqf');\n\n      INSERT INTO \"Envelope\" (\n        id, \"secondaryId\", type, source, title, status,\n        \"internalVersion\", \"updatedAt\", \"userId\", \"teamId\", \"documentMetaId\"\n      ) VALUES (\n        'spike_env_1774459008751_b6qdqf', 'spike_sec_1774459008751_b6qdqf',\n        'DOCUMENT', 'DOCUMENT', 'Spike test draft', 'DRAFT',\n        1, NOW(), 9, 7, 'spike_meta_1774459008751_b6qdqf'\n      );\n\n      INSERT INTO \"Recipient\" (\"email\", \"name\", \"token\", \"envelopeId\")\n      VALUES ('recipient@test.com', 'Test Recipient', 'spike_tok_1774459008751_b6qdqf', 'spike_env_1774459008751_b6qdqf');",
+      "executed": true,
+      "error": null,
+      "rightTable": true
+    },
+    {
+      "repo": "documenso",
+      "condition": "At least 3 draft documents exist for the logged-in user's personal team",
+      "matched": true,
+      "matchedKeywords": [
+        "\\d+\\s+draft\\s+documents?"
+      ],
+      "templateLabel": "multiple draft documents",
+      "resolvedParams": {
+        "uid": "1774459008839_ffx4p9",
+        "email": "ac1-test@test.documenso.com",
+        "userId": 9,
+        "teamId": 7
+      },
+      "filledSql": "INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_meta_a_1774459008839_ffx4p9');\n      INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_meta_b_1774459008839_ffx4p9');\n      INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_meta_c_1774459008839_ffx4p9');\n\n      INSERT INTO \"Envelope\" (\n        id, \"secondaryId\", type, source, title, status,\n        \"internalVersion\", \"updatedAt\", \"userId\", \"teamId\", \"documentMetaId\"\n      ) VALUES\n        ('spike_env_a_1774459008839_ffx4p9', 'spike_sec_a_1774459008839_ffx4p9', 'DOCUMENT', 'DOCUMENT', 'Draft 1', 'DRAFT', 1, NOW(), 9, 7, 'spike_meta_a_1774459008839_ffx4p9'),\n        ('spike_env_b_1774459008839_ffx4p9', 'spike_sec_b_1774459008839_ffx4p9', 'DOCUMENT', 'DOCUMENT', 'Draft 2', 'DRAFT', 1, NOW(), 9, 7, 'spike_meta_b_1774459008839_ffx4p9'),\n        ('spike_env_c_1774459008839_ffx4p9', 'spike_sec_c_1774459008839_ffx4p9', 'DOCUMENT', 'DOCUMENT', 'Draft 3', 'DRAFT', 1, NOW(), 9, 7, 'spike_meta_c_1774459008839_ffx4p9');",
+      "executed": true,
+      "error": null,
+      "rightTable": true
+    },
+    {
+      "repo": "documenso",
+      "condition": "A template exists for the logged-in user's personal team",
+      "matched": true,
+      "matchedKeywords": [
+        "template\\s+exists"
+      ],
+      "templateLabel": "template exists",
+      "resolvedParams": {
+        "uid": "1774459008878_zm38n3",
+        "email": "ac1-test@test.documenso.com",
+        "userId": 9,
+        "teamId": 7
+      },
+      "filledSql": "INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_tmpl_meta_1774459008878_zm38n3');\n\n      INSERT INTO \"Envelope\" (\n        id, \"secondaryId\", type, source, title, status,\n        \"internalVersion\", \"updatedAt\", \"userId\", \"teamId\", \"documentMetaId\"\n      ) VALUES (\n        'spike_tmpl_1774459008878_zm38n3', 'spike_tmpl_sec_1774459008878_zm38n3',\n        'TEMPLATE', 'TEMPLATE', 'Spike test template', 'DRAFT',\n        1, NOW(), 9, 7, 'spike_tmpl_meta_1774459008878_zm38n3'\n      );",
+      "executed": true,
+      "error": null,
+      "rightTable": true
+    },
+    {
+      "repo": "calcom",
+      "condition": "An event type exists for the logged-in user",
+      "matched": true,
+      "matchedKeywords": [
+        "event\\s*type\\s+exists"
+      ],
+      "templateLabel": "event type exists",
+      "resolvedParams": {
+        "uid": "1774459008912_9xyoeu",
+        "email": "pro@example.com",
+        "userId": 4
+      },
+      "filledSql": "INSERT INTO \"EventType\" (title, slug, length, \"userId\")\n      VALUES ('Spike Event', 'spike-event-1774459008912_9xyoeu', 30, 4);",
+      "executed": true,
+      "error": null,
+      "rightTable": true
+    },
+    {
+      "repo": "calcom",
+      "condition": "A booking exists for the logged-in user's event type",
+      "matched": true,
+      "matchedKeywords": [
+        "booking\\s+exists"
+      ],
+      "templateLabel": "booking exists",
+      "resolvedParams": {
+        "uid": "1774459008953_3a1avd",
+        "email": "pro@example.com",
+        "userId": 4,
+        "eventTypeId": 9001
+      },
+      "filledSql": "INSERT INTO \"Booking\" (\n        uid, \"userId\", \"eventTypeId\", title,\n        \"startTime\", \"endTime\", status\n      ) VALUES (\n        'spike_booking_1774459008953_3a1avd', 4, 9001,\n        'Spike Booking',\n        NOW() + INTERVAL '1 day',\n        NOW() + INTERVAL '1 day 30 minutes',\n        'accepted'\n      );",
+      "executed": true,
+      "error": null,
+      "rightTable": true
+    },
+    {
+      "repo": "calcom",
+      "condition": "A webhook exists for the logged-in user",
+      "matched": true,
+      "matchedKeywords": [
+        "webhook\\s+exists"
+      ],
+      "templateLabel": "webhook exists",
+      "resolvedParams": {
+        "uid": "1774459009061_h4qeq8",
+        "email": "pro@example.com",
+        "userId": 4
+      },
+      "filledSql": "INSERT INTO \"Webhook\" (\n        id, \"userId\", \"subscriberUrl\", \"eventTriggers\", active\n      ) VALUES (\n        'spike_webhook_1774459009061_h4qeq8', 4,\n        'https://spike.test/webhook-1774459009061_h4qeq8',\n        ARRAY['BOOKING_CREATED']::\"WebhookTriggerEvents\"[],\n        true\n      );",
+      "executed": true,
+      "error": null,
+      "rightTable": true
+    }
+  ]
+}

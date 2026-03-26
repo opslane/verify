@@ -501,3 +501,29 @@ Task 4: Final verification
 
 ### Status
 COMPLETE — all 8 tasks done, typecheck clean, 335 tests passing (97 new/updated)
+
+---
+
+## graph-informed-setup-writer (plan: docs/plans/2026-03-25-graph-informed-setup-writer.md)
+
+### Completed
+- [x] Task 1: Add types + shared psql helper (commit: 5b3c897)
+  - Files: types.ts, psql.ts, index-app.ts
+- [x] Task 2: Build FK graph walker (commit: 3e35c3d)
+  - Files: entity-graph.ts, entity-graph.test.ts
+  - Review fix: warn on psql errors, eliminate per-table child queries (commit: 52e4431)
+- [x] Task 3: Wire into index-app (commit: 7911b72)
+  - Files: cli.ts
+- [x] Task 4: Build graph-informed setup-writer (commit: 8728f1b)
+  - Files: graph-setup.ts, graph-setup.test.ts (9 new tests)
+  - Review fix: validate table/column names, catch SQL gen errors, remove unused param (commit: bbce10f)
+- [x] Task 5: Shared runSetupWriter + orchestrator (commit: 45ab82c)
+  - Files: run-setup-writer.ts, orchestrator.ts
+- [x] Task 6: CLI parity (commit: 947bd9b)
+  - Files: cli.ts
+- [x] Task 7: Final verification
+  - Typecheck: clean (0 new errors)
+  - Tests: 372/372 passing (15 new tests added)
+
+### Status
+COMPLETE — all 7 tasks done, 2 code review gates passed, 372 tests passing

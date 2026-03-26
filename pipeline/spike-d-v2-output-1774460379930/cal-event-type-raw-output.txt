@@ -1,0 +1,3 @@
+The user already has an event type. Output:
+
+{"group_id":"spike-d-cal-event-type","condition":"An event type exists for the logged-in user","setup_commands":[],"teardown_commands":[]}

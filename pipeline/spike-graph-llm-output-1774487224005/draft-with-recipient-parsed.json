@@ -1,0 +1,160 @@
+{
+  "inserts": [
+    {
+      "table": "User",
+      "values": {
+        "email": "testuser@example.com",
+        "identityProvider": "DOCUMENSO",
+        "createdAt": "2026-03-25T00:00:00.000Z",
+        "lastSignedIn": "2026-03-25T00:00:00.000Z",
+        "updatedAt": "2026-03-25T00:00:00.000Z",
+        "twoFactorEnabled": false,
+        "disabled": false
+      }
+    },
+    {
+      "table": "DocumentMeta",
+      "values": {
+        "id": "dm-00000000-0000-0000-0000-000000000001",
+        "signingOrder": "PARALLEL",
+        "typedSignatureEnabled": true,
+        "language": "en",
+        "distributionMethod": "EMAIL",
+        "drawSignatureEnabled": true,
+        "uploadSignatureEnabled": true,
+        "allowDictateNextSigner": false
+      }
+    },
+    {
+      "table": "TeamGlobalSettings",
+      "values": {
+        "id": "tgs-0000-0000-0000-0000-000000000001"
+      }
+    },
+    {
+      "table": "OrganisationClaim",
+      "values": {
+        "id": "oc-00000000-0000-0000-0000-000000000001",
+        "createdAt": "2026-03-25T00:00:00.000Z",
+        "updatedAt": "2026-03-25T00:00:00.000Z",
+        "teamCount": 1,
+        "memberCount": 1,
+        "flags": "{}",
+        "envelopeItemCount": 0
+      }
+    },
+    {
+      "table": "OrganisationGlobalSettings",
+      "values": {
+        "id": "ogs-0000-0000-0000-0000-000000000001",
+        "documentVisibility": "EVERYONE",
+        "documentLanguage": "en",
+        "includeSenderDetails": true,
+        "includeSigningCertificate": true,
+        "typedSignatureEnabled": true,
+        "uploadSignatureEnabled": true,
+        "drawSignatureEnabled": true,
+        "brandingEnabled": false,
+        "brandingLogo": "",
+        "brandingUrl": "",
+        "brandingCompanyDetails": "",
+        "emailDocumentSettings": "{}",
+        "documentDateFormat": "yyyy-MM-dd",
+        "includeAuditLog": true,
+        "aiFeaturesEnabled": false,
+        "delegateDocumentOwnership": false
+      }
+    },
+    {
+      "table": "OrganisationAuthenticationPortal",
+      "values": {
+        "id": "oap-0000-0000-0000-0000-000000000001",
+        "enabled": false,
+        "clientId": "",
+        "clientSecret": "",
+        "wellKnownUrl": "",
+        "defaultOrganisationRole": "MEMBER",
+        "autoProvisionUsers": false
+      }
+    },
+    {
+      "table": "DocumentData",
+      "values": {
+        "id": "dd-00000000-0000-0000-0000-000000000001",
+        "type": "S3_PATH",
+        "data": "uploads/test-document.pdf",
+        "initialData": "uploads/test-document.pdf"
+      }
+    },
+    {
+      "table": "Organisation",
+      "values": {
+        "id": "org-0000-0000-0000-0000-000000000001",
+        "createdAt": "2026-03-25T00:00:00.000Z",
+        "updatedAt": "2026-03-25T00:00:00.000Z",
+        "type": "PERSONAL",
+        "name": "Test Org",
+        "url": "test-org",
+        "ownerUserId": 9,
+        "organisationClaimId": "oc-00000000-0000-0000-0000-000000000001",
+        "organisationGlobalSettingsId": "ogs-0000-0000-0000-0000-000000000001",
+        "organisationAuthenticationPortalId": "oap-0000-0000-0000-0000-000000000001"
+      }
+    },
+    {
+      "table": "Team",
+      "values": {
+        "name": "Test Team",
+        "url": "test-team",
+        "createdAt": "2026-03-25T00:00:00.000Z",
+        "organisationId": "org-0000-0000-0000-0000-000000000001",
+        "teamGlobalSettingsId": "tgs-0000-0000-0000-0000-000000000001"
+      }
+    },
+    {
+      "table": "Envelope",
+      "values": {
+        "id": "env-0000-0000-0000-0000-000000000001",
+        "secondaryId": "gen_random_uuid()",
+        "type": "DOCUMENT",
+        "createdAt": "2026-03-25T00:00:00.000Z",
+        "updatedAt": "2026-03-25T00:00:00.000Z",
+        "title": "Test Draft Document",
+        "status": "DRAFT",
+        "source": "DOCUMENT",
+        "internalVersion": 1,
+        "useLegacyFieldInsertion": false,
+        "visibility": "EVERYONE",
+        "templateType": "PRIVATE",
+        "publicTitle": "",
+        "publicDescription": "",
+        "userId": 9,
+        "teamId": 7,
+        "documentMetaId": "dm-00000000-0000-0000-0000-000000000001"
+      }
+    },
+    {
+      "table": "Recipient",
+      "values": {
+        "email": "recipient@example.com",
+        "name": "Jane Doe",
+        "token": "gen_random_uuid()",
+        "readStatus": "NOT_OPENED",
+        "signingStatus": "NOT_SIGNED",
+        "sendStatus": "NOT_SENT",
+        "role": "SIGNER",
+        "envelopeId": "env-0000-0000-0000-0000-000000000001"
+      }
+    },
+    {
+      "table": "EnvelopeItem",
+      "values": {
+        "id": "ei-00000000-0000-0000-0000-000000000001",
+        "title": "test-document.pdf",
+        "documentDataId": "dd-00000000-0000-0000-0000-000000000001",
+        "envelopeId": "env-0000-0000-0000-0000-000000000001",
+        "order": 0
+      }
+    }
+  ]
+}

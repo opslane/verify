@@ -1,0 +1,29 @@
+You are filling in values for a database INSERT sequence.
+
+ENTITY GRAPH (tables to populate, in order):
+1. User: [email (text), identityProvider (enum: DOCUMENSO, GOOGLE, OIDC), createdAt (timestamp), lastSignedIn (timestamp), updatedAt (timestamp), twoFactorEnabled (bool), disabled (bool)]
+2. DocumentMeta: [id (text), signingOrder (enum: PARALLEL, SEQUENTIAL), typedSignatureEnabled (bool), language (text), distributionMethod (enum: EMAIL, NONE), drawSignatureEnabled (bool), uploadSignatureEnabled (bool), allowDictateNextSigner (bool)]
+3. TeamGlobalSettings: [id (text)]
+4. OrganisationClaim: [id (text), createdAt (timestamp), updatedAt (timestamp), teamCount (int), memberCount (int), flags (jsonb), envelopeItemCount (int)]
+5. OrganisationGlobalSettings: [id (text), documentVisibility (enum: EVERYONE, MANAGER_AND_ABOVE, ADMIN), documentLanguage (text), includeSenderDetails (bool), includeSigningCertificate (bool), typedSignatureEnabled (bool), uploadSignatureEnabled (bool), drawSignatureEnabled (bool), brandingEnabled (bool), brandingLogo (text), brandingUrl (text), brandingCompanyDetails (text), emailDocumentSettings (jsonb), documentDateFormat (text), includeAuditLog (bool), aiFeaturesEnabled (bool), delegateDocumentOwnership (bool)]
+6. OrganisationAuthenticationPortal: [id (text), enabled (bool), clientId (text), clientSecret (text), wellKnownUrl (text), defaultOrganisationRole (enum: ADMIN, MANAGER, MEMBER), autoProvisionUsers (bool)]
+7. DocumentData: [id (text), type (enum: S3_PATH, BYTES, BYTES_64), data (text), initialData (text)]
+8. Organisation: [id (text), createdAt (timestamp), updatedAt (timestamp), type (enum: PERSONAL, ORGANISATION), name (text), url (text), ownerUserId (int) ref:User.id, organisationClaimId (text) ref:OrganisationClaim.id, organisationGlobalSettingsId (text) ref:OrganisationGlobalSettings.id, organisationAuthenticationPortalId (text) ref:OrganisationAuthenticationPortal.id]
+9. Team: [name (text), url (text), createdAt (timestamp), organisationId (text) ref:Organisation.id, teamGlobalSettingsId (text) ref:TeamGlobalSettings.id]
+10. Envelope: [id (text), secondaryId (text), type (enum: DOCUMENT, TEMPLATE), createdAt (timestamp), updatedAt (timestamp), title (text), status (enum: DRAFT, PENDING, COMPLETED, REJECTED), source (enum: DOCUMENT, TEMPLATE, TEMPLATE_DIRECT_LINK), internalVersion (int), useLegacyFieldInsertion (bool), visibility (enum: EVERYONE, MANAGER_AND_ABOVE, ADMIN), templateType (enum: PUBLIC, PRIVATE), publicTitle (text), publicDescription (text), userId (int) ref:User.id=9, teamId (int) ref:Team.id=7, documentMetaId (text) ref:DocumentMeta.id]
+11. Recipient: [email (text), name (text), token (text), readStatus (enum: NOT_OPENED, OPENED), signingStatus (enum: NOT_SIGNED, SIGNED, REJECTED), sendStatus (enum: NOT_SENT, SENT), role (enum: CC, SIGNER, VIEWER, APPROVER, ASSISTANT), envelopeId (text) ref:Envelope.id]
+12. EnvelopeItem: [id (text), title (text), documentDataId (text) ref:DocumentData.id, envelopeId (text) ref:Envelope.id, order (int)]
+
+CONDITION: A draft document exists for the logged-in user's team with at least one recipient
+userId=9, teamId=7
+
+Output JSON with this exact shape:
+{"inserts":[{"table":"TableName","values":{"col":"val",...}},...]}}
+
+Rules:
+- Use gen_random_uuid() for uuid columns (write it as a string "gen_random_uuid()")
+- Use the first enum value if unsure
+- For FK ref columns, use the SAME gen_random_uuid() string as the referenced table's id
+- Set userId/ownerTeamId=9, teamId=7
+- For text columns, use realistic placeholder values
+- Output ONLY the JSON, no explanation

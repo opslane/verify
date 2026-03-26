@@ -1,0 +1,9 @@
+Here's the hardened setup-writer prompt for spike 6. It's a fully rendered prompt sent to the setup-writer stage with:
+
+- **Auth context** (lines 7-12): Instructs the LLM to find the logged-in user by email and scope all work to their team
+- **Schema** (lines 18-64): Full Prisma-to-Postgres column mapping for Documenso
+- **Learnings** (lines 67-113): Accumulated corrections from past runs — SQL errors, required fields, navigation behavior
+- **Process constraints** (lines 116-121): Strict time limit, max 3-4 SELECT queries
+- **FK hardening rule** (line 149, rule 9): The key spike-6 addition — prevents the LLM from inventing IDs for foreign key columns, requiring it to SELECT valid values or INSERT new rows first
+
+What would you like to do with this?

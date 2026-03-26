@@ -1,0 +1,13 @@
+Here's the hardened prompt template from spike-6. It's the setup-writer prompt for the condition "A template exists for the logged-in user's personal team" with several key features:
+
+**Auth context injection** (lines 6-12): Resolves the logged-in user's email (`ac1-test@test.documenso.com`) and instructs the LLM to follow FK relationships to scope all queries to that user's team — preventing data leakage across users/teams.
+
+**Schema** (lines 18-65): Full Prisma-to-Postgres column mapping with `[manual IDs: ...]` annotations for models that need explicit IDs in INSERTs.
+
+**Learnings** (lines 67-114): Accumulated corrections from past runs — SQL errors, navigation behaviors, required fields — acting as a feedback loop so the LLM doesn't repeat known mistakes.
+
+**FK hardening rule** (line 149, rule 9): The key spike-6 addition — explicitly forbids inventing IDs for FK columns, requiring the LLM to SELECT valid values or INSERT parent rows first. This addresses a recurring failure where setup-writer would generate random UUIDs for FK references that don't exist.
+
+**Process constraints** (lines 116-121): Strict time/query limits (3-4 SELECTs max) to prevent the LLM from exploring endlessly.
+
+What would you like to do with this?

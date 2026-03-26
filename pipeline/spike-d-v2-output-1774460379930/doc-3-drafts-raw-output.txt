@@ -1,0 +1,8 @@
+Already 9 draft documents exist for the personal team. The condition is already satisfied.
+
+{
+  "group_id": "spike-d-doc-3-drafts",
+  "condition": "At least 3 draft documents exist for the logged-in user's personal team",
+  "setup_commands": [],
+  "teardown_commands": []
+}

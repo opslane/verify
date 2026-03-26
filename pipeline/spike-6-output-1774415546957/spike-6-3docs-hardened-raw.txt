@@ -1,0 +1,9 @@
+Here's the hardened prompt for the `spike-6-3docs` setup writer. It's a prompt template that instructs a setup-writer agent to generate minimal SQL to satisfy a condition ("at least 3 draft documents exist for the logged-in user's personal team").
+
+Key elements:
+- **Auth context** (lines 7-12): Scopes all work to the logged-in user (`ac1-test@test.documenso.com`) by requiring user lookup by email, then FK-based team discovery
+- **Schema** (lines 18-65): Full Prisma-to-Postgres column mapping for all models
+- **Learnings** (lines 67-114): Accumulated fixes from past runs — NOT NULL constraints, navigation behavior, known 404 patterns
+- **Process rules** (lines 116-149): Strict guardrails — max 3-4 SELECT queries, no codebase exploration, psql only, no invented FK IDs, `--set ON_ERROR_STOP=1` for fail-fast
+
+What would you like to do with this?

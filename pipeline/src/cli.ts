@@ -24,6 +24,7 @@ const { positionals, values } = parseArgs({
     email: { type: "string" },
     password: { type: "string" },
     "browse-bin": { type: "string" },
+    legacy: { type: "boolean", default: false },
   },
 });
 
@@ -204,6 +205,7 @@ if (command === "run") {
   }
 
   // Step 3.5: Route resolver — map parameterized routes to concrete URLs deterministically
+  let psqlCmd = "";
   const paramRoutes = Object.keys(appIndex.routes).filter(r => r.includes(":"));
   if (paramRoutes.length > 0) {
     console.log(`  Resolving ${paramRoutes.length} parameterized routes...`);
@@ -212,7 +214,7 @@ if (command === "run") {
     const dbUrlEnv = appIndex.db_url_env ?? "DATABASE_URL";
     const dbUrl = (projectEnvForDump[dbUrlEnv] ?? projectEnvForDump.DATABASE_URL ?? "") as string;
     const cleanDbUrl = dbUrl.split("?")[0];
-    const psqlCmd = cleanDbUrl ? `psql "${cleanDbUrl}"` : "";
+    psqlCmd = cleanDbUrl ? `psql "${cleanDbUrl}"` : "";
 
     // Resolve auth user context for scoping
     let resolverCtx: RouteResolverContext | null = null;
@@ -242,6 +244,24 @@ if (command === "run") {
     } else {
       console.log("  Warning: could not resolve auth user context — skipping route resolution");
     }
+  }
+
+  // Ensure psqlCmd is available for entity graph discovery
+  if (!psqlCmd) {
+    const dbUrlEnv = appIndex.db_url_env ?? "DATABASE_URL";
+    const dbUrl = (projectEnvForDump[dbUrlEnv] ?? projectEnvForDump.DATABASE_URL ?? "") as string;
+    const cleanDbUrl = dbUrl.split("?")[0];
+    psqlCmd = cleanDbUrl ? `psql "${cleanDbUrl}"` : "";
+  }
+
+  // Step 4: Entity graph discovery — walk FK relationships for setup-writer
+  if (psqlCmd) {
+    console.log("  Discovering entity graphs...");
+    const { buildEntityGraphs } = await import("./lib/entity-graph.js");
+    const entityGraphs = buildEntityGraphs(psqlCmd, appIndex.data_model);
+    appIndex.entity_graphs = entityGraphs;
+    const rootTables = Object.keys(entityGraphs);
+    console.log(`  Entity graphs: ${rootTables.length} root tables`);
   }
 
   writeFileSync(outputPath, JSON.stringify(appIndex, null, 2));
@@ -312,16 +332,48 @@ if (command === "run") {
       break;
     }
     case "setup-writer": {
-      const groupId = values.group;
+      const groupId = values.group ?? "default";
       const condition = values.condition ?? "";
-      if (!groupId) { console.error("--group is required for setup-writer"); process.exit(1); }
-      const { buildSetupWriterPrompt, parseSetupWriterOutput } = await import("./stages/setup-writer.js");
-      const prompt = buildSetupWriterPrompt(groupId, condition, projectRoot, config.auth?.email);
-      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: timeoutOverrideMs ?? 90_000, stage: "setup-writer", runDir, settingSources: "", ...permissions });
-      const parsed = parseSetupWriterOutput(result.stdout);
-      if (!parsed) { console.error("Failed to parse setup writer output. Check logs:", join(runDir, "logs")); process.exit(1); }
-      writeFileSync(join(runDir, "setup.json"), JSON.stringify(parsed, null, 2));
-      console.log(`Setup writer: ${parsed.setup_commands.length} setup, ${parsed.teardown_commands.length} teardown commands`);
+
+      if (values.legacy) {
+        // Old monolithic path only
+        const { buildSetupWriterPrompt, parseSetupWriterOutput } = await import("./stages/setup-writer.js");
+        const prompt = buildSetupWriterPrompt(groupId, condition, projectRoot, config.auth?.email);
+        const result = await runClaude({ prompt, model: "sonnet", timeoutMs: 90_000, stage: stageName, runDir, ...permissions });
+        const parsed = parseSetupWriterOutput(result.stdout);
+        if (parsed) {
+          console.log(`Setup writer (legacy): ${parsed.setup_commands.length} setup commands`);
+          writeFileSync(join(runDir, "setup.json"), JSON.stringify(parsed, null, 2));
+        } else {
+          console.error("Failed to parse setup writer output");
+          process.exitCode = 1;
+        }
+      } else {
+        // Graph-informed + fallback via shared function (review fix #7)
+        const { runSetupWriter } = await import("./stages/run-setup-writer.js");
+        const { loadAppIndex } = await import("./lib/app-index.js");
+        const appIndex = loadAppIndex(join(projectRoot, ".verify"));
+        if (!appIndex) {
+          console.error("No app.json found — run index-app first");
+          process.exitCode = 1;
+          break;
+        }
+        const { loadProjectEnv } = await import("./stages/setup-writer.js");
+        const projectEnv = loadProjectEnv(projectRoot);
+        const commands = await runSetupWriter({
+          groupId, condition, appIndex, projectEnv, projectRoot,
+          authEmail: config.auth?.email, retryContext: null,
+          runDir, stageName, runClaudeFn: runClaude,
+          permissions, timeoutMs: 90_000,
+        });
+        if (commands) {
+          console.log(`Setup writer: ${commands.setup_commands.length} setup commands`);
+          writeFileSync(join(runDir, "setup.json"), JSON.stringify(commands, null, 2));
+        } else {
+          console.error("Failed to produce setup commands");
+          process.exitCode = 1;
+        }
+      }
       break;
     }
     case "browse-agent": {

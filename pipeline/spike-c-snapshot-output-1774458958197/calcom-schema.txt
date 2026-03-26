@@ -1,0 +1,1350 @@
+AIPhoneCallConfiguration|id|integer
+AIPhoneCallConfiguration|eventTypeId|integer
+AIPhoneCallConfiguration|generalPrompt|text
+AIPhoneCallConfiguration|yourPhoneNumber|text
+AIPhoneCallConfiguration|numberToCall|text
+AIPhoneCallConfiguration|guestName|text
+AIPhoneCallConfiguration|enabled|boolean
+AIPhoneCallConfiguration|beginMessage|text
+AIPhoneCallConfiguration|llmId|text
+AIPhoneCallConfiguration|guestCompany|text
+AIPhoneCallConfiguration|guestEmail|text
+AIPhoneCallConfiguration|schedulerName|text
+AIPhoneCallConfiguration|templateType|text
+AccessCode|id|integer
+AccessCode|code|text
+AccessCode|clientId|text
+AccessCode|expiresAt|timestamp without time zone
+AccessCode|scopes|ARRAY
+AccessCode|userId|integer
+AccessCode|teamId|integer
+AccessCode|codeChallenge|text
+AccessCode|codeChallengeMethod|text
+AccessToken|id|integer
+AccessToken|secret|text
+AccessToken|createdAt|timestamp without time zone
+AccessToken|expiresAt|timestamp without time zone
+AccessToken|platformOAuthClientId|text
+AccessToken|userId|integer
+Account|id|text
+Account|userId|integer
+Account|type|text
+Account|provider|text
+Account|providerAccountId|text
+Account|refresh_token|text
+Account|access_token|text
+Account|expires_at|integer
+Account|token_type|text
+Account|scope|text
+Account|id_token|text
+Account|session_state|text
+Account|providerEmail|text
+Agent|id|text
+Agent|name|text
+Agent|userId|integer
+Agent|teamId|integer
+Agent|providerAgentId|text
+Agent|enabled|boolean
+Agent|createdAt|timestamp without time zone
+Agent|updatedAt|timestamp without time zone
+Agent|inboundEventTypeId|integer
+Agent|outboundEventTypeId|integer
+ApiKey|id|text
+ApiKey|userId|integer
+ApiKey|note|text
+ApiKey|createdAt|timestamp without time zone
+ApiKey|expiresAt|timestamp without time zone
+ApiKey|lastUsedAt|timestamp without time zone
+ApiKey|hashedKey|text
+ApiKey|appId|text
+ApiKey|teamId|integer
+App|slug|text
+App|dirName|text
+App|keys|jsonb
+App|categories|ARRAY
+App|createdAt|timestamp without time zone
+App|updatedAt|timestamp without time zone
+App|enabled|boolean
+App_RoutingForms_Form|id|text
+App_RoutingForms_Form|description|text
+App_RoutingForms_Form|routes|jsonb
+App_RoutingForms_Form|createdAt|timestamp without time zone
+App_RoutingForms_Form|updatedAt|timestamp without time zone
+App_RoutingForms_Form|name|text
+App_RoutingForms_Form|fields|jsonb
+App_RoutingForms_Form|userId|integer
+App_RoutingForms_Form|disabled|boolean
+App_RoutingForms_Form|settings|jsonb
+App_RoutingForms_Form|teamId|integer
+App_RoutingForms_Form|position|integer
+App_RoutingForms_Form|updatedById|integer
+App_RoutingForms_FormResponse|id|integer
+App_RoutingForms_FormResponse|formFillerId|text
+App_RoutingForms_FormResponse|formId|text
+App_RoutingForms_FormResponse|response|jsonb
+App_RoutingForms_FormResponse|createdAt|timestamp without time zone
+App_RoutingForms_FormResponse|routedToBookingUid|text
+App_RoutingForms_FormResponse|chosenRouteId|text
+App_RoutingForms_FormResponse|updatedAt|timestamp without time zone
+App_RoutingForms_FormResponse|uuid|text
+App_RoutingForms_IncompleteBookingActions|id|integer
+App_RoutingForms_IncompleteBookingActions|formId|text
+App_RoutingForms_IncompleteBookingActions|actionType|USER-DEFINED
+App_RoutingForms_IncompleteBookingActions|data|jsonb
+App_RoutingForms_IncompleteBookingActions|enabled|boolean
+App_RoutingForms_IncompleteBookingActions|credentialId|integer
+App_RoutingForms_QueuedFormResponse|id|text
+App_RoutingForms_QueuedFormResponse|formId|text
+App_RoutingForms_QueuedFormResponse|response|jsonb
+App_RoutingForms_QueuedFormResponse|chosenRouteId|text
+App_RoutingForms_QueuedFormResponse|createdAt|timestamp without time zone
+App_RoutingForms_QueuedFormResponse|updatedAt|timestamp without time zone
+App_RoutingForms_QueuedFormResponse|actualResponseId|integer
+App_RoutingForms_QueuedFormResponse|fallbackAction|jsonb
+AssignmentReason|id|integer
+AssignmentReason|createdAt|timestamp without time zone
+AssignmentReason|bookingId|integer
+AssignmentReason|reasonEnum|USER-DEFINED
+AssignmentReason|reasonString|text
+Attendee|id|integer
+Attendee|email|text
+Attendee|name|text
+Attendee|timeZone|text
+Attendee|bookingId|integer
+Attendee|locale|text
+Attendee|phoneNumber|text
+Attendee|noShow|boolean
+Attribute|id|text
+Attribute|teamId|integer
+Attribute|type|USER-DEFINED
+Attribute|name|text
+Attribute|slug|text
+Attribute|enabled|boolean
+Attribute|usersCanEditRelation|boolean
+Attribute|createdAt|timestamp without time zone
+Attribute|updatedAt|timestamp without time zone
+Attribute|isWeightsEnabled|boolean
+Attribute|isLocked|boolean
+AttributeOption|id|text
+AttributeOption|attributeId|text
+AttributeOption|value|text
+AttributeOption|slug|text
+AttributeOption|contains|ARRAY
+AttributeOption|isGroup|boolean
+AttributeSyncFieldMapping|id|text
+AttributeSyncFieldMapping|integrationFieldName|text
+AttributeSyncFieldMapping|attributeId|text
+AttributeSyncFieldMapping|enabled|boolean
+AttributeSyncFieldMapping|integrationAttributeSyncId|text
+AttributeSyncFieldMapping|createdAt|timestamp without time zone
+AttributeSyncFieldMapping|updatedAt|timestamp without time zone
+AttributeSyncRule|id|text
+AttributeSyncRule|integrationAttributeSyncId|text
+AttributeSyncRule|rule|jsonb
+AttributeSyncRule|createdAt|timestamp without time zone
+AttributeSyncRule|updatedAt|timestamp without time zone
+AttributeToUser|id|text
+AttributeToUser|memberId|integer
+AttributeToUser|attributeOptionId|text
+AttributeToUser|weight|integer
+AttributeToUser|createdAt|timestamp without time zone
+AttributeToUser|createdByDSyncId|text
+AttributeToUser|createdById|integer
+AttributeToUser|updatedAt|timestamp without time zone
+AttributeToUser|updatedByDSyncId|text
+AttributeToUser|updatedById|integer
+AuditActor|id|uuid
+AuditActor|type|USER-DEFINED
+AuditActor|userUuid|uuid
+AuditActor|attendeeId|integer
+AuditActor|email|text
+AuditActor|phone|text
+AuditActor|name|text
+AuditActor|createdAt|timestamp without time zone
+AuditActor|credentialId|integer
+Availability|id|integer
+Availability|userId|integer
+Availability|eventTypeId|integer
+Availability|days|ARRAY
+Availability|date|date
+Availability|startTime|time without time zone
+Availability|endTime|time without time zone
+Availability|scheduleId|integer
+Booking|id|integer
+Booking|uid|text
+Booking|userId|integer
+Booking|eventTypeId|integer
+Booking|title|text
+Booking|description|text
+Booking|startTime|timestamp without time zone
+Booking|endTime|timestamp without time zone
+Booking|createdAt|timestamp without time zone
+Booking|updatedAt|timestamp without time zone
+Booking|location|text
+Booking|paid|boolean
+Booking|status|USER-DEFINED
+Booking|cancellationReason|text
+Booking|rejectionReason|text
+Booking|fromReschedule|text
+Booking|rescheduled|boolean
+Booking|dynamicEventSlugRef|text
+Booking|dynamicGroupSlugRef|text
+Booking|recurringEventId|text
+Booking|customInputs|jsonb
+Booking|smsReminderNumber|text
+Booking|destinationCalendarId|integer
+Booking|scheduledJobs|ARRAY
+Booking|metadata|jsonb
+Booking|responses|jsonb
+Booking|isRecorded|boolean
+Booking|iCalSequence|integer
+Booking|iCalUID|text
+Booking|userPrimaryEmail|text
+Booking|idempotencyKey|text
+Booking|noShowHost|boolean
+Booking|rating|integer
+Booking|ratingFeedback|text
+Booking|cancelledBy|text
+Booking|rescheduledBy|text
+Booking|oneTimePassword|text
+Booking|reassignReason|text
+Booking|reassignById|integer
+Booking|creationSource|USER-DEFINED
+BookingAudit|id|uuid
+BookingAudit|bookingUid|text
+BookingAudit|actorId|uuid
+BookingAudit|type|USER-DEFINED
+BookingAudit|action|USER-DEFINED
+BookingAudit|timestamp|timestamp without time zone
+BookingAudit|createdAt|timestamp without time zone
+BookingAudit|updatedAt|timestamp without time zone
+BookingAudit|data|jsonb
+BookingAudit|operationId|text
+BookingAudit|source|USER-DEFINED
+BookingAudit|context|jsonb
+BookingDenormalized|id|integer
+BookingDenormalized|uid|text
+BookingDenormalized|eventTypeId|integer
+BookingDenormalized|title|text
+BookingDenormalized|description|text
+BookingDenormalized|startTime|timestamp without time zone
+BookingDenormalized|endTime|timestamp without time zone
+BookingDenormalized|createdAt|timestamp without time zone
+BookingDenormalized|updatedAt|timestamp without time zone
+BookingDenormalized|location|text
+BookingDenormalized|paid|boolean
+BookingDenormalized|status|USER-DEFINED
+BookingDenormalized|rescheduled|boolean
+BookingDenormalized|userId|integer
+BookingDenormalized|teamId|integer
+BookingDenormalized|eventLength|integer
+BookingDenormalized|eventParentId|integer
+BookingDenormalized|userEmail|text
+BookingDenormalized|userName|text
+BookingDenormalized|userUsername|text
+BookingDenormalized|ratingFeedback|text
+BookingDenormalized|rating|integer
+BookingDenormalized|noShowHost|boolean
+BookingDenormalized|isTeamBooking|boolean
+BookingInternalNote|id|integer
+BookingInternalNote|notePresetId|integer
+BookingInternalNote|text|text
+BookingInternalNote|bookingId|integer
+BookingInternalNote|createdById|integer
+BookingInternalNote|createdAt|timestamp without time zone
+BookingReference|id|integer
+BookingReference|type|text
+BookingReference|uid|text
+BookingReference|bookingId|integer
+BookingReference|meetingId|text
+BookingReference|meetingPassword|text
+BookingReference|meetingUrl|text
+BookingReference|deleted|boolean
+BookingReference|externalCalendarId|text
+BookingReference|credentialId|integer
+BookingReference|thirdPartyRecurringEventId|text
+BookingReference|domainWideDelegationCredentialId|text
+BookingReference|delegationCredentialId|text
+BookingReport|id|uuid
+BookingReport|bookingUid|text
+BookingReport|bookerEmail|text
+BookingReport|reportedById|integer
+BookingReport|organizationId|integer
+BookingReport|reason|USER-DEFINED
+BookingReport|description|text
+BookingReport|cancelled|boolean
+BookingReport|createdAt|timestamp without time zone
+BookingReport|updatedAt|timestamp without time zone
+BookingReport|watchlistId|uuid
+BookingReport|status|USER-DEFINED
+BookingReport|globalWatchlistId|uuid
+BookingReport|systemStatus|USER-DEFINED
+BookingSeat|id|integer
+BookingSeat|referenceUid|text
+BookingSeat|bookingId|integer
+BookingSeat|attendeeId|integer
+BookingSeat|data|jsonb
+BookingSeat|metadata|jsonb
+BookingTimeStatus|id|integer
+BookingTimeStatus|uid|text
+BookingTimeStatus|eventTypeId|integer
+BookingTimeStatus|title|text
+BookingTimeStatus|description|text
+BookingTimeStatus|startTime|timestamp without time zone
+BookingTimeStatus|endTime|timestamp without time zone
+BookingTimeStatus|createdAt|timestamp without time zone
+BookingTimeStatus|location|text
+BookingTimeStatus|paid|boolean
+BookingTimeStatus|status|USER-DEFINED
+BookingTimeStatus|rescheduled|boolean
+BookingTimeStatus|userId|integer
+BookingTimeStatus|teamId|integer
+BookingTimeStatus|eventLength|integer
+BookingTimeStatus|timeStatus|text
+BookingTimeStatus|eventParentId|integer
+BookingTimeStatus|userEmail|text
+BookingTimeStatus|username|text
+BookingTimeStatus|ratingFeedback|text
+BookingTimeStatus|rating|integer
+BookingTimeStatus|noShowHost|boolean
+BookingTimeStatus|isTeamBooking|boolean
+BookingTimeStatusDenormalized|id|integer
+BookingTimeStatusDenormalized|uid|text
+BookingTimeStatusDenormalized|eventTypeId|integer
+BookingTimeStatusDenormalized|title|text
+BookingTimeStatusDenormalized|description|text
+BookingTimeStatusDenormalized|startTime|timestamp without time zone
+BookingTimeStatusDenormalized|endTime|timestamp without time zone
+BookingTimeStatusDenormalized|createdAt|timestamp without time zone
+BookingTimeStatusDenormalized|updatedAt|timestamp without time zone
+BookingTimeStatusDenormalized|location|text
+BookingTimeStatusDenormalized|paid|boolean
+BookingTimeStatusDenormalized|status|USER-DEFINED
+BookingTimeStatusDenormalized|rescheduled|boolean
+BookingTimeStatusDenormalized|userId|integer
+BookingTimeStatusDenormalized|teamId|integer
+BookingTimeStatusDenormalized|eventLength|integer
+BookingTimeStatusDenormalized|eventParentId|integer
+BookingTimeStatusDenormalized|userEmail|text
+BookingTimeStatusDenormalized|userName|text
+BookingTimeStatusDenormalized|userUsername|text
+BookingTimeStatusDenormalized|ratingFeedback|text
+BookingTimeStatusDenormalized|rating|integer
+BookingTimeStatusDenormalized|noShowHost|boolean
+BookingTimeStatusDenormalized|isTeamBooking|boolean
+BookingTimeStatusDenormalized|timeStatus|text
+CalAiPhoneNumber|id|integer
+CalAiPhoneNumber|userId|integer
+CalAiPhoneNumber|teamId|integer
+CalAiPhoneNumber|phoneNumber|text
+CalAiPhoneNumber|provider|text
+CalAiPhoneNumber|providerPhoneNumberId|text
+CalAiPhoneNumber|createdAt|timestamp without time zone
+CalAiPhoneNumber|updatedAt|timestamp without time zone
+CalAiPhoneNumber|stripeCustomerId|text
+CalAiPhoneNumber|stripeSubscriptionId|text
+CalAiPhoneNumber|subscriptionStatus|USER-DEFINED
+CalAiPhoneNumber|inboundAgentId|text
+CalAiPhoneNumber|outboundAgentId|text
+CalVideoSettings|eventTypeId|integer
+CalVideoSettings|disableRecordingForOrganizer|boolean
+CalVideoSettings|disableRecordingForGuests|boolean
+CalVideoSettings|redirectUrlOnExit|text
+CalVideoSettings|createdAt|timestamp without time zone
+CalVideoSettings|updatedAt|timestamp without time zone
+CalVideoSettings|enableAutomaticTranscription|boolean
+CalVideoSettings|disableTranscriptionForGuests|boolean
+CalVideoSettings|disableTranscriptionForOrganizer|boolean
+CalVideoSettings|enableAutomaticRecordingForOrganizer|boolean
+CalVideoSettings|requireEmailForGuests|boolean
+CalendarCache|key|text
+CalendarCache|value|jsonb
+CalendarCache|expiresAt|timestamp without time zone
+CalendarCache|credentialId|integer
+CalendarCache|id|text
+CalendarCache|userId|integer
+CalendarCache|updatedAt|timestamp without time zone
+CalendarCacheEvent|id|text
+CalendarCacheEvent|selectedCalendarId|text
+CalendarCacheEvent|externalId|text
+CalendarCacheEvent|externalEtag|text
+CalendarCacheEvent|iCalUID|text
+CalendarCacheEvent|iCalSequence|integer
+CalendarCacheEvent|summary|text
+CalendarCacheEvent|description|text
+CalendarCacheEvent|location|text
+CalendarCacheEvent|start|timestamp without time zone
+CalendarCacheEvent|end|timestamp without time zone
+CalendarCacheEvent|isAllDay|boolean
+CalendarCacheEvent|timeZone|text
+CalendarCacheEvent|status|USER-DEFINED
+CalendarCacheEvent|recurringEventId|text
+CalendarCacheEvent|originalStartTime|timestamp without time zone
+CalendarCacheEvent|createdAt|timestamp without time zone
+CalendarCacheEvent|updatedAt|timestamp without time zone
+CalendarCacheEvent|externalCreatedAt|timestamp without time zone
+CalendarCacheEvent|externalUpdatedAt|timestamp without time zone
+Credential|id|integer
+Credential|type|text
+Credential|key|jsonb
+Credential|userId|integer
+Credential|appId|text
+Credential|invalid|boolean
+Credential|teamId|integer
+Credential|billingCycleStart|integer
+Credential|paymentStatus|text
+Credential|subscriptionId|text
+Credential|delegationCredentialId|text
+Credential|encryptedKey|text
+CreditBalance|id|text
+CreditBalance|teamId|integer
+CreditBalance|userId|integer
+CreditBalance|additionalCredits|integer
+CreditBalance|limitReachedAt|timestamp without time zone
+CreditBalance|warningSentAt|timestamp without time zone
+CreditExpenseLog|id|text
+CreditExpenseLog|creditBalanceId|text
+CreditExpenseLog|bookingUid|text
+CreditExpenseLog|credits|integer
+CreditExpenseLog|creditType|USER-DEFINED
+CreditExpenseLog|date|timestamp without time zone
+CreditExpenseLog|smsSid|text
+CreditExpenseLog|smsSegments|integer
+CreditExpenseLog|email|text
+CreditExpenseLog|phoneNumber|text
+CreditExpenseLog|callDuration|integer
+CreditExpenseLog|externalRef|text
+CreditExpenseLog|creditFor|USER-DEFINED
+CreditPurchaseLog|id|text
+CreditPurchaseLog|creditBalanceId|text
+CreditPurchaseLog|credits|integer
+CreditPurchaseLog|createdAt|timestamp without time zone
+DSyncData|id|integer
+DSyncData|directoryId|text
+DSyncData|tenant|text
+DSyncData|organizationId|integer
+DSyncTeamGroupMapping|id|integer
+DSyncTeamGroupMapping|teamId|integer
+DSyncTeamGroupMapping|directoryId|text
+DSyncTeamGroupMapping|groupName|text
+DSyncTeamGroupMapping|organizationId|integer
+DelegationCredential|id|text
+DelegationCredential|workspacePlatformId|integer
+DelegationCredential|serviceAccountKey|jsonb
+DelegationCredential|enabled|boolean
+DelegationCredential|organizationId|integer
+DelegationCredential|domain|text
+DelegationCredential|createdAt|timestamp without time zone
+DelegationCredential|updatedAt|timestamp without time zone
+DelegationCredential|lastDisabledAt|timestamp without time zone
+DelegationCredential|lastEnabledAt|timestamp without time zone
+Deployment|id|integer
+Deployment|logo|text
+Deployment|theme|jsonb
+Deployment|licenseKey|text
+Deployment|agreedLicenseAt|timestamp without time zone
+Deployment|signatureTokenEncrypted|text
+DestinationCalendar|id|integer
+DestinationCalendar|integration|text
+DestinationCalendar|externalId|text
+DestinationCalendar|userId|integer
+DestinationCalendar|eventTypeId|integer
+DestinationCalendar|credentialId|integer
+DestinationCalendar|primaryEmail|text
+DestinationCalendar|domainWideDelegationCredentialId|text
+DestinationCalendar|delegationCredentialId|text
+DestinationCalendar|createdAt|timestamp without time zone
+DestinationCalendar|updatedAt|timestamp without time zone
+DestinationCalendar|customCalendarReminder|integer
+DomainWideDelegation|id|text
+DomainWideDelegation|workspacePlatformId|integer
+DomainWideDelegation|serviceAccountKey|jsonb
+DomainWideDelegation|enabled|boolean
+DomainWideDelegation|organizationId|integer
+DomainWideDelegation|domain|text
+DomainWideDelegation|createdAt|timestamp without time zone
+DomainWideDelegation|updatedAt|timestamp without time zone
+EventType|id|integer
+EventType|title|text
+EventType|slug|text
+EventType|description|text
+EventType|locations|jsonb
+EventType|length|integer
+EventType|hidden|boolean
+EventType|userId|integer
+EventType|eventName|text
+EventType|timeZone|text
+EventType|periodCountCalendarDays|boolean
+EventType|periodDays|integer
+EventType|periodEndDate|timestamp without time zone
+EventType|periodStartDate|timestamp without time zone
+EventType|requiresConfirmation|boolean
+EventType|minimumBookingNotice|integer
+EventType|currency|text
+EventType|price|integer
+EventType|schedulingType|USER-DEFINED
+EventType|teamId|integer
+EventType|disableGuests|boolean
+EventType|position|integer
+EventType|periodType|USER-DEFINED
+EventType|slotInterval|integer
+EventType|metadata|jsonb
+EventType|afterEventBuffer|integer
+EventType|beforeEventBuffer|integer
+EventType|hideCalendarNotes|boolean
+EventType|successRedirectUrl|text
+EventType|seatsPerTimeSlot|integer
+EventType|recurringEvent|jsonb
+EventType|scheduleId|integer
+EventType|bookingLimits|jsonb
+EventType|seatsShowAttendees|boolean
+EventType|bookingFields|jsonb
+EventType|durationLimits|jsonb
+EventType|parentId|integer
+EventType|offsetStart|integer
+EventType|requiresBookerEmailVerification|boolean
+EventType|seatsShowAvailabilityCount|boolean
+EventType|lockTimeZoneToggleOnBookingPage|boolean
+EventType|onlyShowFirstAvailableSlot|boolean
+EventType|isInstantEvent|boolean
+EventType|assignAllTeamMembers|boolean
+EventType|profileId|integer
+EventType|useEventTypeDestinationCalendarEmail|boolean
+EventType|secondaryEmailId|integer
+EventType|forwardParamsSuccessRedirect|boolean
+EventType|instantMeetingExpiryTimeOffsetInSeconds|integer
+EventType|isRRWeightsEnabled|boolean
+EventType|rescheduleWithSameRoundRobinHost|boolean
+EventType|eventTypeColor|jsonb
+EventType|requiresConfirmationWillBlockSlot|boolean
+EventType|instantMeetingScheduleId|integer
+EventType|showOptimizedSlots|boolean
+EventType|hideCalendarEventDetails|boolean
+EventType|assignRRMembersUsingSegment|boolean
+EventType|rrSegmentQueryValue|jsonb
+EventType|maxLeadThreshold|integer
+EventType|instantMeetingParameters|ARRAY
+EventType|autoTranslateDescriptionEnabled|boolean
+EventType|requiresConfirmationForFreeEmail|boolean
+EventType|useEventLevelSelectedCalendars|boolean
+EventType|allowReschedulingPastBookings|boolean
+EventType|interfaceLanguage|text
+EventType|canSendCalVideoTranscriptionEmails|boolean
+EventType|disableCancelling|boolean
+EventType|disableRescheduling|boolean
+EventType|customReplyToEmail|text
+EventType|hideOrganizerEmail|boolean
+EventType|includeNoShowInRRCalculation|boolean
+EventType|restrictionScheduleId|integer
+EventType|useBookerTimezone|boolean
+EventType|allowReschedulingCancelledBookings|boolean
+EventType|maxActiveBookingsPerBooker|integer
+EventType|maxActiveBookingPerBookerOfferReschedule|boolean
+EventType|lockedTimeZone|text
+EventType|bookingRequiresAuthentication|boolean
+EventType|createdAt|timestamp without time zone
+EventType|updatedAt|timestamp without time zone
+EventType|autoTranslateInstantMeetingTitleEnabled|boolean
+EventType|minimumRescheduleNotice|integer
+EventType|rrHostSubsetEnabled|boolean
+EventType|requiresCancellationReason|USER-DEFINED
+EventType|enablePerHostLocations|boolean
+EventType|redirectUrlOnNoRoutingFormResponse|text
+EventTypeCustomInput|id|integer
+EventTypeCustomInput|eventTypeId|integer
+EventTypeCustomInput|label|text
+EventTypeCustomInput|required|boolean
+EventTypeCustomInput|type|USER-DEFINED
+EventTypeCustomInput|placeholder|text
+EventTypeCustomInput|options|jsonb
+EventTypeTranslation|eventTypeId|integer
+EventTypeTranslation|field|USER-DEFINED
+EventTypeTranslation|translatedText|text
+EventTypeTranslation|createdAt|timestamp without time zone
+EventTypeTranslation|createdBy|integer
+EventTypeTranslation|updatedAt|timestamp without time zone
+EventTypeTranslation|updatedBy|integer
+EventTypeTranslation|sourceLocale|text
+EventTypeTranslation|targetLocale|text
+EventTypeTranslation|uid|text
+Feature|slug|text
+Feature|enabled|boolean
+Feature|description|text
+Feature|type|USER-DEFINED
+Feature|stale|boolean
+Feature|lastUsedAt|timestamp without time zone
+Feature|createdAt|timestamp without time zone
+Feature|updatedAt|timestamp without time zone
+Feature|updatedBy|integer
+Feedback|id|integer
+Feedback|date|timestamp without time zone
+Feedback|userId|integer
+Feedback|rating|text
+Feedback|comment|text
+FilterSegment|id|integer
+FilterSegment|name|text
+FilterSegment|tableIdentifier|text
+FilterSegment|scope|USER-DEFINED
+FilterSegment|activeFilters|jsonb
+FilterSegment|sorting|jsonb
+FilterSegment|columnVisibility|jsonb
+FilterSegment|columnSizing|jsonb
+FilterSegment|perPage|integer
+FilterSegment|createdAt|timestamp without time zone
+FilterSegment|updatedAt|timestamp without time zone
+FilterSegment|userId|integer
+FilterSegment|teamId|integer
+FilterSegment|searchTerm|text
+HashedLink|id|integer
+HashedLink|link|text
+HashedLink|eventTypeId|integer
+HashedLink|expiresAt|timestamp without time zone
+HashedLink|maxUsageCount|integer
+HashedLink|usageCount|integer
+HolidayCache|id|text
+HolidayCache|countryCode|text
+HolidayCache|calendarId|text
+HolidayCache|eventId|text
+HolidayCache|name|text
+HolidayCache|date|timestamp without time zone
+HolidayCache|year|integer
+HolidayCache|createdAt|timestamp without time zone
+HolidayCache|updatedAt|timestamp without time zone
+Host|userId|integer
+Host|eventTypeId|integer
+Host|isFixed|boolean
+Host|priority|integer
+Host|weight|integer
+Host|weightAdjustment|integer
+Host|scheduleId|integer
+Host|createdAt|timestamp without time zone
+Host|groupId|text
+Host|memberId|integer
+HostGroup|id|text
+HostGroup|name|text
+HostGroup|eventTypeId|integer
+HostGroup|createdAt|timestamp without time zone
+HostGroup|updatedAt|timestamp without time zone
+HostLocation|id|text
+HostLocation|userId|integer
+HostLocation|eventTypeId|integer
+HostLocation|type|text
+HostLocation|credentialId|integer
+HostLocation|link|text
+HostLocation|address|text
+HostLocation|phoneNumber|text
+HostLocation|createdAt|timestamp without time zone
+HostLocation|updatedAt|timestamp without time zone
+Impersonations|id|integer
+Impersonations|createdAt|timestamp without time zone
+Impersonations|impersonatedUserId|integer
+Impersonations|impersonatedById|integer
+InstantMeetingToken|id|integer
+InstantMeetingToken|token|text
+InstantMeetingToken|expires|timestamp without time zone
+InstantMeetingToken|teamId|integer
+InstantMeetingToken|bookingId|integer
+InstantMeetingToken|createdAt|timestamp without time zone
+InstantMeetingToken|updatedAt|timestamp without time zone
+IntegrationAttributeSync|id|text
+IntegrationAttributeSync|organizationId|integer
+IntegrationAttributeSync|name|text
+IntegrationAttributeSync|integration|text
+IntegrationAttributeSync|credentialId|integer
+IntegrationAttributeSync|enabled|boolean
+IntegrationAttributeSync|createdAt|timestamp without time zone
+IntegrationAttributeSync|updatedAt|timestamp without time zone
+InternalNotePreset|id|integer
+InternalNotePreset|name|text
+InternalNotePreset|cancellationReason|text
+InternalNotePreset|teamId|integer
+InternalNotePreset|createdAt|timestamp without time zone
+ManagedOrganization|managedOrganizationId|integer
+ManagedOrganization|managerOrganizationId|integer
+ManagedOrganization|createdAt|timestamp without time zone
+Membership|teamId|integer
+Membership|userId|integer
+Membership|accepted|boolean
+Membership|role|USER-DEFINED
+Membership|disableImpersonation|boolean
+Membership|id|integer
+Membership|createdAt|timestamp without time zone
+Membership|updatedAt|timestamp without time zone
+Membership|customRoleId|text
+MonthlyProration|id|text
+MonthlyProration|teamId|integer
+MonthlyProration|monthKey|text
+MonthlyProration|periodStart|timestamp without time zone
+MonthlyProration|periodEnd|timestamp without time zone
+MonthlyProration|seatsAtStart|integer
+MonthlyProration|seatsAdded|integer
+MonthlyProration|seatsRemoved|integer
+MonthlyProration|netSeatIncrease|integer
+MonthlyProration|seatsAtEnd|integer
+MonthlyProration|subscriptionId|text
+MonthlyProration|subscriptionItemId|text
+MonthlyProration|customerId|text
+MonthlyProration|subscriptionStart|timestamp without time zone
+MonthlyProration|subscriptionEnd|timestamp without time zone
+MonthlyProration|remainingDays|integer
+MonthlyProration|pricePerSeat|integer
+MonthlyProration|proratedAmount|integer
+MonthlyProration|invoiceItemId|text
+MonthlyProration|invoiceId|text
+MonthlyProration|status|USER-DEFINED
+MonthlyProration|chargedAt|timestamp without time zone
+MonthlyProration|failedAt|timestamp without time zone
+MonthlyProration|failureReason|text
+MonthlyProration|retryCount|integer
+MonthlyProration|metadata|jsonb
+MonthlyProration|createdAt|timestamp without time zone
+MonthlyProration|updatedAt|timestamp without time zone
+MonthlyProration|teamBillingId|text
+MonthlyProration|organizationBillingId|text
+MonthlyProration|invoiceUrl|text
+NotificationsSubscriptions|id|integer
+NotificationsSubscriptions|userId|integer
+NotificationsSubscriptions|subscription|text
+OAuthClient|clientId|text
+OAuthClient|redirectUri|text
+OAuthClient|clientSecret|text
+OAuthClient|name|text
+OAuthClient|logo|text
+OAuthClient|clientType|USER-DEFINED
+OAuthClient|isTrusted|boolean
+OAuthClient|createdAt|timestamp without time zone
+OAuthClient|purpose|text
+OAuthClient|rejectionReason|text
+OAuthClient|status|USER-DEFINED
+OAuthClient|userId|integer
+OAuthClient|websiteUrl|text
+OrganizationBilling|id|text
+OrganizationBilling|teamId|integer
+OrganizationBilling|subscriptionId|text
+OrganizationBilling|subscriptionItemId|text
+OrganizationBilling|customerId|text
+OrganizationBilling|status|text
+OrganizationBilling|planName|text
+OrganizationBilling|createdAt|timestamp without time zone
+OrganizationBilling|updatedAt|timestamp without time zone
+OrganizationBilling|subscriptionEnd|timestamp without time zone
+OrganizationBilling|subscriptionStart|timestamp without time zone
+OrganizationBilling|subscriptionTrialEnd|timestamp without time zone
+OrganizationBilling|billingPeriod|USER-DEFINED
+OrganizationBilling|pricePerSeat|integer
+OrganizationBilling|paidSeats|integer
+OrganizationBilling|highWaterMark|integer
+OrganizationBilling|highWaterMarkPeriodStart|timestamp without time zone
+OrganizationBilling|billingMode|USER-DEFINED
+OrganizationOnboarding|id|text
+OrganizationOnboarding|createdById|integer
+OrganizationOnboarding|createdAt|timestamp without time zone
+OrganizationOnboarding|orgOwnerEmail|text
+OrganizationOnboarding|error|text
+OrganizationOnboarding|updatedAt|timestamp without time zone
+OrganizationOnboarding|organizationId|integer
+OrganizationOnboarding|billingPeriod|USER-DEFINED
+OrganizationOnboarding|pricePerSeat|double precision
+OrganizationOnboarding|seats|integer
+OrganizationOnboarding|isPlatform|boolean
+OrganizationOnboarding|name|text
+OrganizationOnboarding|slug|text
+OrganizationOnboarding|logo|text
+OrganizationOnboarding|bio|text
+OrganizationOnboarding|isDomainConfigured|boolean
+OrganizationOnboarding|stripeCustomerId|text
+OrganizationOnboarding|stripeSubscriptionId|text
+OrganizationOnboarding|stripeSubscriptionItemId|text
+OrganizationOnboarding|invitedMembers|jsonb
+OrganizationOnboarding|teams|jsonb
+OrganizationOnboarding|isComplete|boolean
+OrganizationOnboarding|bannerUrl|text
+OrganizationOnboarding|brandColor|text
+OrganizationSettings|id|integer
+OrganizationSettings|organizationId|integer
+OrganizationSettings|isOrganizationConfigured|boolean
+OrganizationSettings|isOrganizationVerified|boolean
+OrganizationSettings|orgAutoAcceptEmail|text
+OrganizationSettings|lockEventTypeCreationForUsers|boolean
+OrganizationSettings|isAdminReviewed|boolean
+OrganizationSettings|adminGetsNoSlotsNotification|boolean
+OrganizationSettings|isAdminAPIEnabled|boolean
+OrganizationSettings|allowSEOIndexing|boolean
+OrganizationSettings|orgProfileRedirectsToVerifiedDomain|boolean
+OrganizationSettings|disablePhoneOnlySMSNotifications|boolean
+OrganizationSettings|disableAutofillOnBookingPage|boolean
+OrganizationSettings|orgAutoJoinOnSignup|boolean
+OrganizationSettings|disableAttendeeAwaitingPaymentEmail|boolean
+OrganizationSettings|disableAttendeeCancellationEmail|boolean
+OrganizationSettings|disableAttendeeConfirmationEmail|boolean
+OrganizationSettings|disableAttendeeLocationChangeEmail|boolean
+OrganizationSettings|disableAttendeeNewEventEmail|boolean
+OrganizationSettings|disableAttendeeReassignedEmail|boolean
+OrganizationSettings|disableAttendeeRequestEmail|boolean
+OrganizationSettings|disableAttendeeRescheduleRequestEmail|boolean
+OrganizationSettings|disableAttendeeRescheduledEmail|boolean
+OutOfOfficeEntry|id|integer
+OutOfOfficeEntry|uuid|text
+OutOfOfficeEntry|start|timestamp without time zone
+OutOfOfficeEntry|end|timestamp without time zone
+OutOfOfficeEntry|userId|integer
+OutOfOfficeEntry|toUserId|integer
+OutOfOfficeEntry|createdAt|timestamp without time zone
+OutOfOfficeEntry|updatedAt|timestamp without time zone
+OutOfOfficeEntry|reasonId|integer
+OutOfOfficeEntry|notes|text
+OutOfOfficeEntry|showNotePublicly|boolean
+OutOfOfficeReason|id|integer
+OutOfOfficeReason|emoji|text
+OutOfOfficeReason|reason|text
+OutOfOfficeReason|enabled|boolean
+OutOfOfficeReason|userId|integer
+Payment|id|integer
+Payment|uid|text
+Payment|bookingId|integer
+Payment|amount|integer
+Payment|fee|integer
+Payment|currency|text
+Payment|success|boolean
+Payment|refunded|boolean
+Payment|data|jsonb
+Payment|externalId|text
+Payment|appId|text
+Payment|paymentOption|USER-DEFINED
+PendingRoutingTrace|id|text
+PendingRoutingTrace|createdAt|timestamp without time zone
+PendingRoutingTrace|trace|jsonb
+PendingRoutingTrace|formResponseId|integer
+PendingRoutingTrace|queuedFormResponseId|text
+PlatformAuthorizationToken|id|text
+PlatformAuthorizationToken|platformOAuthClientId|text
+PlatformAuthorizationToken|userId|integer
+PlatformAuthorizationToken|createdAt|timestamp without time zone
+PlatformBilling|id|integer
+PlatformBilling|customerId|text
+PlatformBilling|plan|text
+PlatformBilling|subscriptionId|text
+PlatformBilling|billingCycleStart|integer
+PlatformBilling|billingCycleEnd|integer
+PlatformBilling|overdue|boolean
+PlatformBilling|managerBillingId|integer
+PlatformBilling|priceId|text
+PlatformOAuthClient|id|text
+PlatformOAuthClient|name|text
+PlatformOAuthClient|secret|text
+PlatformOAuthClient|permissions|integer
+PlatformOAuthClient|logo|text
+PlatformOAuthClient|redirectUris|ARRAY
+PlatformOAuthClient|organizationId|integer
+PlatformOAuthClient|createdAt|timestamp without time zone
+PlatformOAuthClient|areEmailsEnabled|boolean
+PlatformOAuthClient|bookingCancelRedirectUri|text
+PlatformOAuthClient|bookingRedirectUri|text
+PlatformOAuthClient|bookingRescheduleRedirectUri|text
+PlatformOAuthClient|areDefaultEventTypesEnabled|boolean
+PlatformOAuthClient|areCalendarEventsEnabled|boolean
+Profile|id|integer
+Profile|uid|text
+Profile|userId|integer
+Profile|organizationId|integer
+Profile|username|text
+Profile|createdAt|timestamp without time zone
+Profile|updatedAt|timestamp without time zone
+RateLimit|id|text
+RateLimit|name|text
+RateLimit|apiKeyId|text
+RateLimit|ttl|integer
+RateLimit|limit|integer
+RateLimit|blockDuration|integer
+RateLimit|createdAt|timestamp without time zone
+RateLimit|updatedAt|timestamp without time zone
+RefreshToken|id|integer
+RefreshToken|secret|text
+RefreshToken|createdAt|timestamp without time zone
+RefreshToken|expiresAt|timestamp without time zone
+RefreshToken|platformOAuthClientId|text
+RefreshToken|userId|integer
+ReminderMail|id|integer
+ReminderMail|referenceId|integer
+ReminderMail|reminderType|USER-DEFINED
+ReminderMail|elapsedMinutes|integer
+ReminderMail|createdAt|timestamp without time zone
+ResetPasswordRequest|id|text
+ResetPasswordRequest|createdAt|timestamp without time zone
+ResetPasswordRequest|updatedAt|timestamp without time zone
+ResetPasswordRequest|email|text
+ResetPasswordRequest|expires|timestamp without time zone
+Role|id|text
+Role|name|text
+Role|description|text
+Role|teamId|integer
+Role|createdAt|timestamp without time zone
+Role|updatedAt|timestamp without time zone
+Role|type|USER-DEFINED
+Role|color|text
+RolePermission|id|text
+RolePermission|roleId|text
+RolePermission|resource|text
+RolePermission|action|text
+RolePermission|createdAt|timestamp without time zone
+RoutingFormResponse|id|integer
+RoutingFormResponse|response|jsonb
+RoutingFormResponse|responseLowercase|jsonb
+RoutingFormResponse|formId|text
+RoutingFormResponse|formName|text
+RoutingFormResponse|formTeamId|integer
+RoutingFormResponse|formUserId|integer
+RoutingFormResponse|bookingUid|text
+RoutingFormResponse|bookingStatus|USER-DEFINED
+RoutingFormResponse|bookingStatusOrder|integer
+RoutingFormResponse|bookingCreatedAt|timestamp without time zone
+RoutingFormResponse|bookingStartTime|timestamp without time zone
+RoutingFormResponse|bookingEndTime|timestamp without time zone
+RoutingFormResponse|bookingAttendees|json
+RoutingFormResponse|bookingUserId|integer
+RoutingFormResponse|bookingUserName|text
+RoutingFormResponse|bookingUserEmail|text
+RoutingFormResponse|bookingUserAvatarUrl|text
+RoutingFormResponse|bookingAssignmentReason|text
+RoutingFormResponse|bookingAssignmentReasonLowercase|text
+RoutingFormResponse|createdAt|timestamp without time zone
+RoutingFormResponse|utm_source|text
+RoutingFormResponse|utm_medium|text
+RoutingFormResponse|utm_campaign|text
+RoutingFormResponse|utm_term|text
+RoutingFormResponse|utm_content|text
+RoutingFormResponseDenormalized|id|integer
+RoutingFormResponseDenormalized|formId|text
+RoutingFormResponseDenormalized|formName|text
+RoutingFormResponseDenormalized|formTeamId|integer
+RoutingFormResponseDenormalized|formUserId|integer
+RoutingFormResponseDenormalized|bookingUid|text
+RoutingFormResponseDenormalized|bookingId|integer
+RoutingFormResponseDenormalized|bookingStatus|USER-DEFINED
+RoutingFormResponseDenormalized|bookingStatusOrder|integer
+RoutingFormResponseDenormalized|bookingCreatedAt|timestamp without time zone
+RoutingFormResponseDenormalized|bookingStartTime|timestamp without time zone
+RoutingFormResponseDenormalized|bookingEndTime|timestamp without time zone
+RoutingFormResponseDenormalized|bookingUserId|integer
+RoutingFormResponseDenormalized|bookingUserName|text
+RoutingFormResponseDenormalized|bookingUserEmail|text
+RoutingFormResponseDenormalized|bookingUserAvatarUrl|text
+RoutingFormResponseDenormalized|bookingAssignmentReason|text
+RoutingFormResponseDenormalized|eventTypeId|integer
+RoutingFormResponseDenormalized|eventTypeParentId|integer
+RoutingFormResponseDenormalized|eventTypeSchedulingType|text
+RoutingFormResponseDenormalized|createdAt|timestamp without time zone
+RoutingFormResponseDenormalized|utm_source|text
+RoutingFormResponseDenormalized|utm_medium|text
+RoutingFormResponseDenormalized|utm_campaign|text
+RoutingFormResponseDenormalized|utm_term|text
+RoutingFormResponseDenormalized|utm_content|text
+RoutingFormResponseDenormalized|uuid|text
+RoutingFormResponseField|id|integer
+RoutingFormResponseField|responseId|integer
+RoutingFormResponseField|fieldId|text
+RoutingFormResponseField|valueString|text
+RoutingFormResponseField|valueNumber|numeric
+RoutingFormResponseField|valueStringArray|ARRAY
+RoutingTrace|id|text
+RoutingTrace|createdAt|timestamp without time zone
+RoutingTrace|trace|jsonb
+RoutingTrace|formResponseId|integer
+RoutingTrace|queuedFormResponseId|text
+RoutingTrace|bookingUid|text
+RoutingTrace|assignmentReasonId|integer
+Schedule|id|integer
+Schedule|userId|integer
+Schedule|name|text
+Schedule|timeZone|text
+SeatChangeLog|id|text
+SeatChangeLog|teamId|integer
+SeatChangeLog|changeType|USER-DEFINED
+SeatChangeLog|seatCount|integer
+SeatChangeLog|userId|integer
+SeatChangeLog|triggeredBy|integer
+SeatChangeLog|changeDate|timestamp without time zone
+SeatChangeLog|monthKey|text
+SeatChangeLog|processedInProrationId|text
+SeatChangeLog|metadata|jsonb
+SeatChangeLog|createdAt|timestamp without time zone
+SeatChangeLog|teamBillingId|text
+SeatChangeLog|organizationBillingId|text
+SeatChangeLog|operationId|text
+SecondaryEmail|id|integer
+SecondaryEmail|userId|integer
+SecondaryEmail|email|text
+SecondaryEmail|emailVerified|timestamp without time zone
+SelectedCalendar|userId|integer
+SelectedCalendar|integration|text
+SelectedCalendar|externalId|text
+SelectedCalendar|credentialId|integer
+SelectedCalendar|googleChannelExpiration|text
+SelectedCalendar|googleChannelId|text
+SelectedCalendar|googleChannelKind|text
+SelectedCalendar|googleChannelResourceId|text
+SelectedCalendar|googleChannelResourceUri|text
+SelectedCalendar|domainWideDelegationCredentialId|text
+SelectedCalendar|id|text
+SelectedCalendar|eventTypeId|integer
+SelectedCalendar|error|text
+SelectedCalendar|channelId|text
+SelectedCalendar|channelKind|text
+SelectedCalendar|channelResourceId|text
+SelectedCalendar|channelResourceUri|text
+SelectedCalendar|channelExpiration|timestamp without time zone
+SelectedCalendar|syncSubscribedAt|timestamp without time zone
+SelectedCalendar|syncToken|text
+SelectedCalendar|syncedAt|timestamp without time zone
+SelectedCalendar|syncErrorAt|timestamp without time zone
+SelectedCalendar|syncErrorCount|integer
+SelectedCalendar|delegationCredentialId|text
+SelectedCalendar|lastErrorAt|timestamp without time zone
+SelectedCalendar|maxAttempts|integer
+SelectedCalendar|unwatchAttempts|integer
+SelectedCalendar|watchAttempts|integer
+SelectedCalendar|createdAt|timestamp without time zone
+SelectedCalendar|updatedAt|timestamp without time zone
+SelectedCalendar|syncSubscribedErrorAt|timestamp without time zone
+SelectedCalendar|syncSubscribedErrorCount|integer
+SelectedSlots|id|integer
+SelectedSlots|eventTypeId|integer
+SelectedSlots|userId|integer
+SelectedSlots|slotUtcStartDate|timestamp without time zone
+SelectedSlots|slotUtcEndDate|timestamp without time zone
+SelectedSlots|uid|text
+SelectedSlots|releaseAt|timestamp without time zone
+SelectedSlots|isSeat|boolean
+Session|id|text
+Session|sessionToken|text
+Session|userId|integer
+Session|expires|timestamp without time zone
+Task|id|text
+Task|createdAt|timestamp without time zone
+Task|updatedAt|timestamp without time zone
+Task|scheduledAt|timestamp without time zone
+Task|succeededAt|timestamp without time zone
+Task|type|text
+Task|payload|text
+Task|attempts|integer
+Task|maxAttempts|integer
+Task|lastError|text
+Task|lastFailedAttemptAt|timestamp without time zone
+Task|referenceUid|text
+Team|id|integer
+Team|name|text
+Team|slug|text
+Team|bio|text
+Team|hideBranding|boolean
+Team|createdAt|timestamp without time zone
+Team|metadata|jsonb
+Team|hideBookATeamMember|boolean
+Team|brandColor|text
+Team|darkBrandColor|text
+Team|theme|text
+Team|appLogo|text
+Team|appIconLogo|text
+Team|parentId|integer
+Team|timeFormat|integer
+Team|timeZone|text
+Team|weekStart|text
+Team|isPrivate|boolean
+Team|logoUrl|text
+Team|calVideoLogo|text
+Team|pendingPayment|boolean
+Team|isOrganization|boolean
+Team|bannerUrl|text
+Team|isPlatform|boolean
+Team|smsLockState|USER-DEFINED
+Team|createdByOAuthClientId|text
+Team|smsLockReviewedByAdmin|boolean
+Team|bookingLimits|jsonb
+Team|includeManagedEventsInLimits|boolean
+Team|rrResetInterval|USER-DEFINED
+Team|hideTeamProfileLink|boolean
+Team|rrTimestampBasis|USER-DEFINED
+Team|autoOptInFeatures|boolean
+TeamBilling|id|text
+TeamBilling|teamId|integer
+TeamBilling|subscriptionId|text
+TeamBilling|subscriptionItemId|text
+TeamBilling|customerId|text
+TeamBilling|status|text
+TeamBilling|planName|text
+TeamBilling|createdAt|timestamp without time zone
+TeamBilling|updatedAt|timestamp without time zone
+TeamBilling|subscriptionEnd|timestamp without time zone
+TeamBilling|subscriptionStart|timestamp without time zone
+TeamBilling|subscriptionTrialEnd|timestamp without time zone
+TeamBilling|billingPeriod|USER-DEFINED
+TeamBilling|pricePerSeat|integer
+TeamBilling|paidSeats|integer
+TeamBilling|highWaterMark|integer
+TeamBilling|highWaterMarkPeriodStart|timestamp without time zone
+TeamBilling|billingMode|USER-DEFINED
+TeamFeatures|teamId|integer
+TeamFeatures|featureId|text
+TeamFeatures|assignedAt|timestamp without time zone
+TeamFeatures|assignedBy|text
+TeamFeatures|updatedAt|timestamp without time zone
+TeamFeatures|enabled|boolean
+TempOrgRedirect|id|integer
+TempOrgRedirect|from|text
+TempOrgRedirect|fromOrgId|integer
+TempOrgRedirect|type|USER-DEFINED
+TempOrgRedirect|toUrl|text
+TempOrgRedirect|enabled|boolean
+TempOrgRedirect|createdAt|timestamp without time zone
+TempOrgRedirect|updatedAt|timestamp without time zone
+Tracking|id|integer
+Tracking|bookingId|integer
+Tracking|utm_source|text
+Tracking|utm_medium|text
+Tracking|utm_campaign|text
+Tracking|utm_term|text
+Tracking|utm_content|text
+TravelSchedule|id|integer
+TravelSchedule|userId|integer
+TravelSchedule|timeZone|text
+TravelSchedule|startDate|timestamp without time zone
+TravelSchedule|endDate|timestamp without time zone
+TravelSchedule|prevTimeZone|text
+UserFeatures|userId|integer
+UserFeatures|featureId|text
+UserFeatures|assignedAt|timestamp without time zone
+UserFeatures|assignedBy|text
+UserFeatures|updatedAt|timestamp without time zone
+UserFeatures|enabled|boolean
+UserFilterSegmentPreference|id|integer
+UserFilterSegmentPreference|userId|integer
+UserFilterSegmentPreference|tableIdentifier|text
+UserFilterSegmentPreference|segmentId|integer
+UserFilterSegmentPreference|createdAt|timestamp without time zone
+UserFilterSegmentPreference|updatedAt|timestamp without time zone
+UserFilterSegmentPreference|systemSegmentId|text
+UserHolidaySettings|id|integer
+UserHolidaySettings|userId|integer
+UserHolidaySettings|countryCode|text
+UserHolidaySettings|disabledIds|ARRAY
+UserHolidaySettings|createdAt|timestamp without time zone
+UserHolidaySettings|updatedAt|timestamp without time zone
+UserPassword|hash|text
+UserPassword|userId|integer
+VerificationToken|id|integer
+VerificationToken|identifier|text
+VerificationToken|token|text
+VerificationToken|expires|timestamp without time zone
+VerificationToken|createdAt|timestamp without time zone
+VerificationToken|updatedAt|timestamp without time zone
+VerificationToken|expiresInDays|integer
+VerificationToken|teamId|integer
+VerificationToken|secondaryEmailId|integer
+VerifiedEmail|id|integer
+VerifiedEmail|userId|integer
+VerifiedEmail|teamId|integer
+VerifiedEmail|email|text
+VerifiedNumber|id|integer
+VerifiedNumber|userId|integer
+VerifiedNumber|phoneNumber|text
+VerifiedNumber|teamId|integer
+VideoCallGuest|id|text
+VideoCallGuest|bookingUid|text
+VideoCallGuest|email|text
+VideoCallGuest|name|text
+VideoCallGuest|joinedAt|timestamp without time zone
+VideoCallGuest|createdAt|timestamp without time zone
+VideoCallGuest|updatedAt|timestamp without time zone
+Watchlist|type|USER-DEFINED
+Watchlist|value|text
+Watchlist|description|text
+Watchlist|action|USER-DEFINED
+Watchlist|organizationId|integer
+Watchlist|id|uuid
+Watchlist|isGlobal|boolean
+Watchlist|lastUpdatedAt|timestamp without time zone
+Watchlist|source|USER-DEFINED
+WatchlistAudit|id|uuid
+WatchlistAudit|type|USER-DEFINED
+WatchlistAudit|value|text
+WatchlistAudit|description|text
+WatchlistAudit|action|USER-DEFINED
+WatchlistAudit|changedAt|timestamp without time zone
+WatchlistAudit|changedByUserId|integer
+WatchlistAudit|watchlistId|uuid
+WatchlistEventAudit|id|uuid
+WatchlistEventAudit|watchlistId|uuid
+WatchlistEventAudit|eventTypeId|integer
+WatchlistEventAudit|actionTaken|USER-DEFINED
+WatchlistEventAudit|timestamp|timestamp without time zone
+Webhook|id|text
+Webhook|userId|integer
+Webhook|subscriberUrl|text
+Webhook|createdAt|timestamp without time zone
+Webhook|active|boolean
+Webhook|eventTriggers|ARRAY
+Webhook|payloadTemplate|text
+Webhook|eventTypeId|integer
+Webhook|appId|text
+Webhook|secret|text
+Webhook|teamId|integer
+Webhook|platform|boolean
+Webhook|platformOAuthClientId|text
+Webhook|time|integer
+Webhook|timeUnit|USER-DEFINED
+Webhook|version|text
+WebhookScheduledTriggers|id|integer
+WebhookScheduledTriggers|jobName|text
+WebhookScheduledTriggers|subscriberUrl|text
+WebhookScheduledTriggers|payload|text
+WebhookScheduledTriggers|startAfter|timestamp without time zone
+WebhookScheduledTriggers|retryCount|integer
+WebhookScheduledTriggers|createdAt|timestamp without time zone
+WebhookScheduledTriggers|webhookId|text
+WebhookScheduledTriggers|appId|text
+WebhookScheduledTriggers|bookingId|integer
+Workflow|id|integer
+Workflow|name|text
+Workflow|userId|integer
+Workflow|trigger|USER-DEFINED
+Workflow|time|integer
+Workflow|timeUnit|USER-DEFINED
+Workflow|teamId|integer
+Workflow|position|integer
+Workflow|isActiveOnAll|boolean
+Workflow|type|USER-DEFINED
+WorkflowOptOutContact|id|integer
+WorkflowOptOutContact|type|USER-DEFINED
+WorkflowOptOutContact|value|text
+WorkflowOptOutContact|optedOut|boolean
+WorkflowOptOutContact|createdAt|timestamp without time zone
+WorkflowOptOutContact|updatedAt|timestamp without time zone
+WorkflowReminder|id|integer
+WorkflowReminder|bookingUid|text
+WorkflowReminder|method|USER-DEFINED
+WorkflowReminder|scheduledDate|timestamp without time zone
+WorkflowReminder|referenceId|text
+WorkflowReminder|scheduled|boolean
+WorkflowReminder|workflowStepId|integer
+WorkflowReminder|cancelled|boolean
+WorkflowReminder|seatReferenceId|text
+WorkflowReminder|isMandatoryReminder|boolean
+WorkflowReminder|retryCount|integer
+WorkflowReminder|uuid|text
+WorkflowStep|id|integer
+WorkflowStep|stepNumber|integer
+WorkflowStep|action|USER-DEFINED
+WorkflowStep|workflowId|integer
+WorkflowStep|sendTo|text
+WorkflowStep|reminderBody|text
+WorkflowStep|emailSubject|text
+WorkflowStep|template|USER-DEFINED
+WorkflowStep|numberRequired|boolean
+WorkflowStep|sender|text
+WorkflowStep|numberVerificationPending|boolean
+WorkflowStep|includeCalendarEvent|boolean
+WorkflowStep|verifiedAt|timestamp without time zone
+WorkflowStep|agentId|text
+WorkflowStep|inboundAgentId|text
+WorkflowStep|autoTranslateEnabled|boolean
+WorkflowStep|sourceLocale|text
+WorkflowStepTranslation|uid|text
+WorkflowStepTranslation|workflowStepId|integer
+WorkflowStepTranslation|field|USER-DEFINED
+WorkflowStepTranslation|sourceLocale|text
+WorkflowStepTranslation|targetLocale|text
+WorkflowStepTranslation|translatedText|text
+WorkflowStepTranslation|createdAt|timestamp without time zone
+WorkflowStepTranslation|updatedAt|timestamp without time zone
+WorkflowsOnEventTypes|id|integer
+WorkflowsOnEventTypes|workflowId|integer
+WorkflowsOnEventTypes|eventTypeId|integer
+WorkflowsOnRoutingForms|id|integer
+WorkflowsOnRoutingForms|workflowId|integer
+WorkflowsOnRoutingForms|routingFormId|text
+WorkflowsOnTeams|id|integer
+WorkflowsOnTeams|workflowId|integer
+WorkflowsOnTeams|teamId|integer
+WorkspacePlatform|id|integer
+WorkspacePlatform|slug|text
+WorkspacePlatform|name|text
+WorkspacePlatform|description|text
+WorkspacePlatform|defaultServiceAccountKey|jsonb
+WorkspacePlatform|createdAt|timestamp without time zone
+WorkspacePlatform|updatedAt|timestamp without time zone
+WorkspacePlatform|enabled|boolean
+WrongAssignmentReport|id|uuid
+WrongAssignmentReport|bookingUid|text
+WrongAssignmentReport|reportedById|integer
+WrongAssignmentReport|correctAssignee|text
+WrongAssignmentReport|additionalNotes|text
+WrongAssignmentReport|teamId|integer
+WrongAssignmentReport|routingFormId|text
+WrongAssignmentReport|status|USER-DEFINED
+WrongAssignmentReport|createdAt|timestamp without time zone
+WrongAssignmentReport|updatedAt|timestamp without time zone
+WrongAssignmentReport|reviewedAt|timestamp without time zone
+WrongAssignmentReport|reviewedById|integer
+_PlatformOAuthClientToUser|A|text
+_PlatformOAuthClientToUser|B|integer
+_prisma_migrations|id|character varying
+_prisma_migrations|checksum|character varying
+_prisma_migrations|finished_at|timestamp with time zone
+_prisma_migrations|migration_name|character varying
+_prisma_migrations|logs|text
+_prisma_migrations|rolled_back_at|timestamp with time zone
+_prisma_migrations|started_at|timestamp with time zone
+_prisma_migrations|applied_steps_count|integer
+_user_eventtype|A|integer
+_user_eventtype|B|integer
+avatars|teamId|integer
+avatars|userId|integer
+avatars|data|text
+avatars|objectKey|text
+avatars|isBanner|boolean
+users|id|integer
+users|username|text
+users|name|text
+users|email|text
+users|bio|text
+users|timeZone|text
+users|weekStart|text
+users|created|timestamp without time zone
+users|bufferTime|integer
+users|emailVerified|timestamp without time zone
+users|hideBranding|boolean
+users|theme|text
+users|completedOnboarding|boolean
+users|twoFactorEnabled|boolean
+users|twoFactorSecret|text
+users|locale|text
+users|brandColor|text
+users|identityProvider|USER-DEFINED
+users|identityProviderId|text
+users|invitedTo|integer
+users|metadata|jsonb
+users|verified|boolean
+users|timeFormat|integer
+users|darkBrandColor|text
+users|trialEndsAt|timestamp without time zone
+users|defaultScheduleId|integer
+users|allowDynamicBooking|boolean
+users|role|USER-DEFINED
+users|disableImpersonation|boolean
+users|organizationId|integer
+users|allowSEOIndexing|boolean
+users|backupCodes|text
+users|receiveMonthlyDigestEmail|boolean
+users|avatarUrl|text
+users|locked|boolean
+users|appTheme|text
+users|movedToProfileId|integer
+users|isPlatformManaged|boolean
+users|smsLockState|USER-DEFINED
+users|smsLockReviewedByAdmin|boolean
+users|referralLinkId|text
+users|lastActiveAt|timestamp without time zone
+users|creationSource|USER-DEFINED
+users|whitelistWorkflows|boolean
+users|requiresBookerEmailVerification|boolean
+users|uuid|uuid
+users|autoOptInFeatures|boolean

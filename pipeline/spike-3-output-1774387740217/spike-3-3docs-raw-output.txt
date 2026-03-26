@@ -1,0 +1,3 @@
+The condition is already satisfied — there are 4 draft documents in team 7 for user 9. No changes needed.
+
+{"group_id":"spike-3-3docs","condition":"At least 3 draft documents exist in team with url='personal_mwiasvikdmkwinfh' (teamId=7) so the documents list is non-empty. The logged-in user is ac1-test@test.documenso.com (userId=9). All queries MUST be scoped to this team.","setup_commands":[],"teardown_commands":[]}

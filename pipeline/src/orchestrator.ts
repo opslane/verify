@@ -24,6 +24,7 @@ import { collectEvidencePaths, buildJudgePrompt, parseJudgeOutput } from "./stag
 import { buildLearnerPrompt, backupAndRestore, validateLearnings } from "./stages/learner.js";
 import { resolveBrowseBin, resetPage, startGroupDaemon, stopGroupDaemon, stopAllGroupDaemons } from "./lib/browse.js";
 import { loginOnDaemon } from "./init.js";
+import { runSetupWriter } from "./stages/run-setup-writer.js";
 import { extractTableNames, snapshotTables, restoreSnapshot } from "./lib/db-snapshot.js";
 import { findAndRenameVideo } from "./lib/video.js";
 import { formatTerminalReport, formatTimingSummary } from "./report.js";
@@ -221,20 +222,18 @@ export async function runPipeline(
         let lastRetryContext: SetupRetryContext | null = null;
 
         for (let attempt = 1; attempt <= MAX_SETUP_ATTEMPTS; attempt++) {
-          // Build prompt — original on first attempt, retry with error context after
-          const setupPrompt = attempt === 1
-            ? buildSetupWriterPrompt(groupId, condition, projectRoot, config.auth?.email)
-            : buildSetupWriterRetryPrompt(groupId, condition, projectRoot, lastRetryContext!, config.auth?.email);
           const stageName = attempt === 1
             ? `setup-${groupId}`
             : `setup-${groupId}-retry${attempt - 1}`;
           const timeoutMs = attempt === 1 ? 120_000 : 90_000;
 
-          const setupResult = await runClaude({
-            prompt: setupPrompt, model: "sonnet", timeoutMs,
-            stage: stageName, runDir, ...perms("setup-writer"),
+          const commands = await runSetupWriter({
+            groupId, condition, appIndex, projectEnv, projectRoot,
+            authEmail: config.auth?.email, retryContext: lastRetryContext,
+            runDir, stageName, runClaudeFn: runClaude,
+            permissions: perms("setup-writer"), timeoutMs,
           });
-          const commands = parseSetupWriterOutput(setupResult.stdout);
+
           if (!commands) {
             lastRetryContext = { type: "parse_error" };
             callbacks.onLog(`  Setup attempt ${attempt}/${MAX_SETUP_ATTEMPTS} for ${groupId}: parse error, ${attempt < MAX_SETUP_ATTEMPTS ? "retrying..." : "giving up"}`);
@@ -250,7 +249,7 @@ export async function runPipeline(
             }
           }
 
-          // Snapshot affected tables (first attempt or re-snapshot on retry)
+          // Snapshot affected tables — use affected_tables from graph path, or parse from commands (review decision C3)
           snapshotTableList = extractTableNames(commands.setup_commands);
           const snapshotDir = join(runDir, "setup", groupId);
           mkdirSync(snapshotDir, { recursive: true });

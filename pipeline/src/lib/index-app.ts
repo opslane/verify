@@ -243,5 +243,6 @@ export function mergeIndexResults(
     seed_ids: seedIds,
     json_type_annotations: jsonAnnotations ?? {},
     example_urls: exampleUrls,
+    entity_graphs: {},
   };
 }

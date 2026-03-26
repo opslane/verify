@@ -1,0 +1,336 @@
+{
+  "AccessScope": [
+    "READ_BOOKING",
+    "READ_PROFILE"
+  ],
+  "AppCategories": [
+    "calendar",
+    "messaging",
+    "other",
+    "payment",
+    "video",
+    "web3",
+    "automation",
+    "analytics",
+    "conferencing",
+    "crm"
+  ],
+  "AssignmentReasonEnum": [
+    "ROUTING_FORM_ROUTING",
+    "ROUTING_FORM_ROUTING_FALLBACK",
+    "REASSIGNED",
+    "REROUTED",
+    "SALESFORCE_ASSIGNMENT",
+    "RR_REASSIGNED"
+  ],
+  "AttributeType": [
+    "TEXT",
+    "NUMBER",
+    "SINGLE_SELECT",
+    "MULTI_SELECT"
+  ],
+  "AuditActorType": [
+    "user",
+    "guest",
+    "attendee",
+    "system",
+    "app"
+  ],
+  "BillingMode": [
+    "SEATS",
+    "ACTIVE_USERS"
+  ],
+  "BillingPeriod": [
+    "MONTHLY",
+    "ANNUALLY"
+  ],
+  "BookingAuditAction": [
+    "created",
+    "cancelled",
+    "accepted",
+    "rejected",
+    "pending",
+    "awaiting_host",
+    "rescheduled",
+    "attendee_added",
+    "attendee_removed",
+    "reassignment",
+    "location_changed",
+    "no_show_updated",
+    "reschedule_requested",
+    "seat_booked",
+    "seat_rescheduled"
+  ],
+  "BookingAuditSource": [
+    "api_v1",
+    "api_v2",
+    "webapp",
+    "webhook",
+    "unknown",
+    "magic_link",
+    "system"
+  ],
+  "BookingAuditType": [
+    "record_created",
+    "record_updated",
+    "record_deleted"
+  ],
+  "BookingReportReason": [
+    "SPAM",
+    "dont_know_person",
+    "OTHER"
+  ],
+  "BookingReportStatus": [
+    "PENDING",
+    "DISMISSED",
+    "BLOCKED"
+  ],
+  "BookingStatus": [
+    "cancelled",
+    "accepted",
+    "rejected",
+    "pending",
+    "awaiting_host"
+  ],
+  "CalendarCacheEventStatus": [
+    "confirmed",
+    "tentative",
+    "cancelled"
+  ],
+  "CancellationReasonRequirement": [
+    "MANDATORY_BOTH",
+    "MANDATORY_HOST_ONLY",
+    "MANDATORY_ATTENDEE_ONLY",
+    "OPTIONAL_BOTH"
+  ],
+  "CreationSource": [
+    "api_v1",
+    "api_v2",
+    "webapp"
+  ],
+  "CreditType": [
+    "MONTHLY",
+    "ADDITIONAL"
+  ],
+  "CreditUsageType": [
+    "SMS",
+    "CAL_AI_PHONE_CALL"
+  ],
+  "EventTypeAutoTranslatedField": [
+    "DESCRIPTION",
+    "TITLE"
+  ],
+  "EventTypeCustomInputType": [
+    "text",
+    "textLong",
+    "number",
+    "bool",
+    "phone",
+    "radio"
+  ],
+  "FeatureType": [
+    "RELEASE",
+    "EXPERIMENT",
+    "OPERATIONAL",
+    "KILL_SWITCH",
+    "PERMISSION"
+  ],
+  "FilterSegmentScope": [
+    "USER",
+    "TEAM"
+  ],
+  "IdentityProvider": [
+    "CAL",
+    "GOOGLE",
+    "SAML",
+    "AZUREAD"
+  ],
+  "IncompleteBookingActionType": [
+    "SALESFORCE"
+  ],
+  "MembershipRole": [
+    "MEMBER",
+    "OWNER",
+    "ADMIN"
+  ],
+  "OAuthClientStatus": [
+    "pending",
+    "approved",
+    "rejected"
+  ],
+  "OAuthClientType": [
+    "confidential",
+    "public"
+  ],
+  "PaymentOption": [
+    "ON_BOOKING",
+    "HOLD"
+  ],
+  "PeriodType": [
+    "unlimited",
+    "rolling",
+    "range",
+    "rolling_window"
+  ],
+  "PhoneNumberSubscriptionStatus": [
+    "ACTIVE",
+    "PAST_DUE",
+    "CANCELLED",
+    "INCOMPLETE",
+    "INCOMPLETE_EXPIRED",
+    "TRIALING",
+    "UNPAID"
+  ],
+  "ProrationStatus": [
+    "PENDING",
+    "INVOICE_CREATED",
+    "CHARGED",
+    "FAILED",
+    "CANCELLED"
+  ],
+  "RRResetInterval": [
+    "MONTH",
+    "DAY"
+  ],
+  "RRTimestampBasis": [
+    "CREATED_AT",
+    "START_TIME"
+  ],
+  "RedirectType": [
+    "user-event-type",
+    "team-event-type",
+    "user",
+    "team"
+  ],
+  "ReminderType": [
+    "PENDING_BOOKING_CONFIRMATION"
+  ],
+  "RoleType": [
+    "SYSTEM",
+    "CUSTOM"
+  ],
+  "SMSLockState": [
+    "LOCKED",
+    "UNLOCKED",
+    "REVIEW_NEEDED"
+  ],
+  "SchedulingType": [
+    "roundRobin",
+    "collective",
+    "managed"
+  ],
+  "SeatChangeType": [
+    "ADDITION",
+    "REMOVAL"
+  ],
+  "SystemReportStatus": [
+    "PENDING",
+    "BLOCKED",
+    "DISMISSED"
+  ],
+  "TimeUnit": [
+    "day",
+    "hour",
+    "minute"
+  ],
+  "UserPermissionRole": [
+    "USER",
+    "ADMIN"
+  ],
+  "WatchlistAction": [
+    "REPORT",
+    "BLOCK",
+    "ALERT"
+  ],
+  "WatchlistSource": [
+    "MANUAL",
+    "FREE_DOMAIN_POLICY",
+    "SIGNUP"
+  ],
+  "WatchlistType": [
+    "EMAIL",
+    "DOMAIN",
+    "USERNAME"
+  ],
+  "WebhookTriggerEvents": [
+    "BOOKING_CREATED",
+    "BOOKING_RESCHEDULED",
+    "BOOKING_CANCELLED",
+    "FORM_SUBMITTED",
+    "MEETING_ENDED",
+    "RECORDING_READY",
+    "BOOKING_PAID",
+    "BOOKING_REQUESTED",
+    "BOOKING_REJECTED",
+    "BOOKING_PAYMENT_INITIATED",
+    "MEETING_STARTED",
+    "INSTANT_MEETING",
+    "OOO_CREATED",
+    "BOOKING_NO_SHOW_UPDATED",
+    "RECORDING_TRANSCRIPTION_GENERATED",
+    "AFTER_HOSTS_CAL_VIDEO_NO_SHOW",
+    "AFTER_GUESTS_CAL_VIDEO_NO_SHOW",
+    "FORM_SUBMITTED_NO_EVENT",
+    "DELEGATION_CREDENTIAL_ERROR",
+    "WRONG_ASSIGNMENT_REPORT",
+    "ROUTING_FORM_FALLBACK_HIT"
+  ],
+  "WorkflowActions": [
+    "EMAIL_HOST",
+    "EMAIL_ATTENDEE",
+    "SMS_ATTENDEE",
+    "SMS_NUMBER",
+    "EMAIL_ADDRESS",
+    "WHATSAPP_ATTENDEE",
+    "WHATSAPP_NUMBER",
+    "CAL_AI_PHONE_CALL"
+  ],
+  "WorkflowContactType": [
+    "PHONE",
+    "EMAIL"
+  ],
+  "WorkflowMethods": [
+    "EMAIL",
+    "SMS",
+    "WHATSAPP",
+    "AI_PHONE_CALL"
+  ],
+  "WorkflowStepAutoTranslatedField": [
+    "REMINDER_BODY",
+    "EMAIL_SUBJECT"
+  ],
+  "WorkflowTemplates": [
+    "REMINDER",
+    "CUSTOM",
+    "CANCELLED",
+    "RESCHEDULED",
+    "COMPLETED",
+    "RATING"
+  ],
+  "WorkflowTriggerEvents": [
+    "BEFORE_EVENT",
+    "EVENT_CANCELLED",
+    "NEW_EVENT",
+    "RESCHEDULE_EVENT",
+    "AFTER_EVENT",
+    "AFTER_HOSTS_CAL_VIDEO_NO_SHOW",
+    "AFTER_GUESTS_CAL_VIDEO_NO_SHOW",
+    "BOOKING_REJECTED",
+    "BOOKING_REQUESTED",
+    "BOOKING_PAYMENT_INITIATED",
+    "BOOKING_PAID",
+    "BOOKING_NO_SHOW_UPDATED",
+    "FORM_SUBMITTED",
+    "FORM_SUBMITTED_NO_EVENT"
+  ],
+  "WorkflowType": [
+    "EVENT_TYPE",
+    "ROUTING_FORM"
+  ],
+  "WrongAssignmentReportStatus": [
+    "PENDING",
+    "REVIEWED",
+    "RESOLVED",
+    "DISMISSED"
+  ]
+}

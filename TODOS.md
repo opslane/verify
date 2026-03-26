@@ -110,8 +110,22 @@ Deferred work captured from plan reviews. Each item includes enough context to p
 
 **Why:** eval-set-v1.json assumes combined AC extraction + plan generation in a single planner call. v2 splits this into two stages with different inputs and outputs. The old eval set won't work with the new stage interfaces, and attempting to port it 1:1 would miss the new stage boundaries (e.g., AC grouping logic, plan validator checks).
 
-**Context:** For each stage, define 2-3 eval scenarios: known input → expected output shape + key assertions. Priority stages: (1) Planner — most failure-prone in v1, (2) Judge — highest-stakes verdicts, (3) AC Generator — grouping logic is new. Setup Writer and Learner are lower priority (deterministic checks catch most issues).
+**Context:** For each stage, define 2-3 eval scenarios: known input → expected output shape + key assertions. Priority stages: (1) **Setup Writer (graph-informed)** — test root table selection accuracy, value generation quality, SQL execution success rate across entity types (eng review 2026-03-25), (2) Planner — most failure-prone in v1, (3) Judge — highest-stakes verdicts, (4) AC Generator — grouping logic is new.
 
 **Depends on:** Pipeline v2 shipping first. Eval infrastructure (how to run evals) should be decided during implementation.
 
 **Effort:** M human → S with CC+gstack
+
+---
+
+## P3 — Multi-condition entity graph merging for setup-writer
+
+**What:** When a condition group references entities across multiple root tables (e.g., "a document exists AND a template with a direct link"), the graph-informed setup-writer only picks one root table via LLM. Need to merge graphs from multiple roots.
+
+**Why:** Some acceptance criteria naturally span multiple entity types. The planner groups ACs by related entity, which should minimize this, but edge cases exist. If the planner doesn't scope well enough, setup will fail on multi-entity conditions.
+
+**Context:** The graph-informed setup-writer (docs/plans/2026-03-25-graph-informed-setup-writer.md) uses a micro-LLM-prompt to pick a single root table, then loads that table's entity graph. To handle multi-root conditions: (1) ask the LLM for multiple root tables, (2) merge their graphs (union of tables, union of insert orders with cross-graph FK resolution), (3) build a combined prompt. Monitor whether single-root-table fails on real conditions before implementing.
+
+**Depends on:** Graph-informed setup-writer shipping first.
+
+**Effort:** S human → XS with CC+gstack

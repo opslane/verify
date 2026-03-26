@@ -1,0 +1,3 @@
+[
+  "psql \"${DATABASE_URL%%\\?*}\" --set ON_ERROR_STOP=1 -c \"INSERT INTO \\\"Webhook\\\" (id, \\\"userId\\\", \\\"subscriberUrl\\\", active) VALUES ('verify-test-spike-d-cal-webhook-001', 4, 'https://example.com/webhook', true)\""
+]

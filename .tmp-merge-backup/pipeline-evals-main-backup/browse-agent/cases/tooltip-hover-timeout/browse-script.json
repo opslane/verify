@@ -1,0 +1,29 @@
+{
+  "steps": [
+    {
+      "match": "goto ",
+      "stdout": "Navigated to billing page.\n",
+      "exitCode": 0
+    },
+    {
+      "match": "snapshot",
+      "stdout": "@e1 [button] \"Trial\"\n@e2 [text] \"14 days left in your trial\"\n",
+      "exitCode": 0
+    },
+    {
+      "match": "hover @e70",
+      "stderr": "Operation timed out: hover: Timeout 5000ms exceeded.\n",
+      "exitCode": 1
+    },
+    {
+      "match": "snapshot",
+      "stdout": "@e1 [button] \"Trial\"\n@e2 [text] \"14 days left in your trial\"\n",
+      "exitCode": 0
+    },
+    {
+      "match": "screenshot ",
+      "stdout": "Screenshot saved.\n",
+      "exitCode": 0
+    }
+  ]
+}

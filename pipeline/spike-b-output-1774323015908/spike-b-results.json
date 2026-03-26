@@ -1,0 +1,63 @@
+[
+  {
+    "pr": 2626,
+    "title": "fix(ui): add scroll to date format dropdown",
+    "ground_truth": [
+      "The setup script should create (or verify the existence of) a test document and use its actual ID in the navigation URL before running browse agents.",
+      "Ensure the setup script creates at least one document in the personal workspace and uses its actual ID in the navigation URL, rather than assuming document ID 1 exists.",
+      "The setup writer should create a test document via SQL or API before the browse agent runs, rather than relying on a hardcoded document ID that may not exist in the test environment."
+    ],
+    "llm_prerequisites": [],
+    "match": "miss"
+  },
+  {
+    "pr": 2636,
+    "title": "fix: prevent managers from deleting admin invitations",
+    "ground_truth": [
+      "Add a setup step that inserts the 'verifyorg' organisation, a manager-role member (logged-in user), and a pending admin-role invitation before the browse agent runs.",
+      "The setup script should seed a 'verifyorg' organisation (with an admin user and a pending admin-role invitation) before the browse agent runs.",
+      "The setup script should create the 'verifyorg' organisation (and a manager user with a pending invitation) before the browse agent runs."
+    ],
+    "llm_prerequisites": [],
+    "match": "miss"
+  },
+  {
+    "pr": 2635,
+    "title": "fix: missing embed direct template email validation",
+    "ground_truth": [
+      "The setup_writer should generate and insert a valid direct template record with a known token into the database before the browse agent attempts to navigate to the embed URL.",
+      "The setup writer should seed a valid direct template signing token into the database before running AC tests that require navigating to embed direct URLs."
+    ],
+    "llm_prerequisites": [],
+    "match": "miss"
+  },
+  {
+    "pr": 2628,
+    "title": "fix: resolve envelope editor settings ccer logic",
+    "ground_truth": [
+      "The setup_writer should insert a draft document with at least one CC recipient into the test workspace database before the browse agent runs, ensuring the precondition required by the AC is satisfied.",
+      "The setup_writer should create a draft document with at least one CC recipient in the target team workspace before the browse agent runs.",
+      "The setup_writer should create a draft document with at least one CC recipient and one non-CC recipient in the test workspace before the browse agent runs."
+    ],
+    "llm_prerequisites": [],
+    "match": "miss"
+  },
+  {
+    "pr": 2608,
+    "title": "fix: improve webhook execution",
+    "ground_truth": [
+      "The setup script should insert at least one document in 'PENDING' or 'COMPLETED' status for the test user before the browse agent runs so the action button is present."
+    ],
+    "llm_prerequisites": [],
+    "match": "miss"
+  },
+  {
+    "pr": 2605,
+    "title": "fix: template description overflow",
+    "ground_truth": [
+      "The setup_writer should insert a template row with a publicDescription containing 100+ characters and no spaces (e.g. a UUID-like string repeated) so the browse agent has test data to verify text-wrapping behavior."
+    ],
+    "llm_prerequisites": [],
+    "match": "miss"
+  }
+]

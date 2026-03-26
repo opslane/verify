@@ -1,0 +1,134 @@
+{
+  "timestamp": "2026-03-25T17:16:08.920Z",
+  "summary": {
+    "total": 6,
+    "matched": 6,
+    "executed": 3,
+    "rightTable": 3
+  },
+  "crossRepo": {
+    "documenso": {
+      "total": 3,
+      "executed": 0
+    },
+    "calcom": {
+      "total": 3,
+      "executed": 3
+    }
+  },
+  "results": [
+    {
+      "repo": "documenso",
+      "condition": "A draft document exists for the logged-in user's personal team, with at least one recipient added",
+      "matched": true,
+      "matchedKeywords": [
+        "draft\\s+document",
+        "recipient"
+      ],
+      "templateLabel": "draft document with recipient",
+      "resolvedParams": {
+        "uid": "1774458968633_w20hoj",
+        "email": "ac1-test@test.documenso.com",
+        "userId": 9,
+        "teamId": 7
+      },
+      "filledSql": "INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_meta_1774458968633_w20hoj');\n\n      INSERT INTO \"Envelope\" (\n        id, \"secondaryId\", type, source, title, status,\n        \"internalVersion\", \"userId\", \"teamId\", \"documentMetaId\"\n      ) VALUES (\n        'spike_env_1774458968633_w20hoj', 'spike_sec_1774458968633_w20hoj',\n        'DOCUMENT', 'DOCUMENT', 'Spike test draft', 'DRAFT',\n        1, 9, 7, 'spike_meta_1774458968633_w20hoj'\n      );\n\n      INSERT INTO \"Recipient\" (\"email\", \"name\", \"token\", \"envelopeId\")\n      VALUES ('recipient@test.com', 'Test Recipient', 'spike_tok_1774458968633_w20hoj', 'spike_env_1774458968633_w20hoj');",
+      "executed": false,
+      "error": "psql multi error: ERROR:  null value in column \"updatedAt\" of relation \"Envelope\" violates not-null constraint\nDETAIL:  Failing row contains (spike_env_1774458968633_w20hoj, spike_sec_1774458968633_w20hoj, null, DOCUMENT, 2026-03-25 17:16:08.683, null, null, null, Spike test draft, DRAFT, DOCUMENT, null, 1, f, null, null, EVERYONE, PRIVATE, , , null, 9, 7, null, spike_meta_1774458968633_w20hoj).",
+      "rightTable": false
+    },
+    {
+      "repo": "documenso",
+      "condition": "At least 3 draft documents exist for the logged-in user's personal team",
+      "matched": true,
+      "matchedKeywords": [
+        "\\d+\\s+draft\\s+documents?"
+      ],
+      "templateLabel": "multiple draft documents",
+      "resolvedParams": {
+        "uid": "1774458968692_72ubhl",
+        "email": "ac1-test@test.documenso.com",
+        "userId": 9,
+        "teamId": 7
+      },
+      "filledSql": "INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_meta_a_1774458968692_72ubhl');\n      INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_meta_b_1774458968692_72ubhl');\n      INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_meta_c_1774458968692_72ubhl');\n\n      INSERT INTO \"Envelope\" (\n        id, \"secondaryId\", type, source, title, status,\n        \"internalVersion\", \"userId\", \"teamId\", \"documentMetaId\"\n      ) VALUES\n        ('spike_env_a_1774458968692_72ubhl', 'spike_sec_a_1774458968692_72ubhl', 'DOCUMENT', 'DOCUMENT', 'Draft 1', 'DRAFT', 1, 9, 7, 'spike_meta_a_1774458968692_72ubhl'),\n        ('spike_env_b_1774458968692_72ubhl', 'spike_sec_b_1774458968692_72ubhl', 'DOCUMENT', 'DOCUMENT', 'Draft 2', 'DRAFT', 1, 9, 7, 'spike_meta_b_1774458968692_72ubhl'),\n        ('spike_env_c_1774458968692_72ubhl', 'spike_sec_c_1774458968692_72ubhl', 'DOCUMENT', 'DOCUMENT', 'Draft 3', 'DRAFT', 1, 9, 7, 'spike_meta_c_1774458968692_72ubhl');",
+      "executed": false,
+      "error": "psql multi error: ERROR:  null value in column \"updatedAt\" of relation \"Envelope\" violates not-null constraint\nDETAIL:  Failing row contains (spike_env_a_1774458968692_72ubhl, spike_sec_a_1774458968692_72ubhl, null, DOCUMENT, 2026-03-25 17:16:08.722, null, null, null, Draft 1, DRAFT, DOCUMENT, null, 1, f, null, null, EVERYONE, PRIVATE, , , null, 9, 7, null, spike_meta_a_1774458968692_72ubhl).",
+      "rightTable": false
+    },
+    {
+      "repo": "documenso",
+      "condition": "A template exists for the logged-in user's personal team",
+      "matched": true,
+      "matchedKeywords": [
+        "template\\s+exists"
+      ],
+      "templateLabel": "template exists",
+      "resolvedParams": {
+        "uid": "1774458968727_rptqyt",
+        "email": "ac1-test@test.documenso.com",
+        "userId": 9,
+        "teamId": 7
+      },
+      "filledSql": "INSERT INTO \"DocumentMeta\" (id) VALUES ('spike_tmpl_meta_1774458968727_rptqyt');\n\n      INSERT INTO \"Envelope\" (\n        id, \"secondaryId\", type, source, title, status,\n        \"internalVersion\", \"userId\", \"teamId\", \"documentMetaId\"\n      ) VALUES (\n        'spike_tmpl_1774458968727_rptqyt', 'spike_tmpl_sec_1774458968727_rptqyt',\n        'TEMPLATE', 'TEMPLATE', 'Spike test template', 'DRAFT',\n        1, 9, 7, 'spike_tmpl_meta_1774458968727_rptqyt'\n      );",
+      "executed": false,
+      "error": "psql multi error: ERROR:  null value in column \"updatedAt\" of relation \"Envelope\" violates not-null constraint\nDETAIL:  Failing row contains (spike_tmpl_1774458968727_rptqyt, spike_tmpl_sec_1774458968727_rptqyt, null, TEMPLATE, 2026-03-25 17:16:08.755, null, null, null, Spike test template, DRAFT, TEMPLATE, null, 1, f, null, null, EVERYONE, PRIVATE, , , null, 9, 7, null, spike_tmpl_meta_1774458968727_rptqyt).",
+      "rightTable": false
+    },
+    {
+      "repo": "calcom",
+      "condition": "An event type exists for the logged-in user",
+      "matched": true,
+      "matchedKeywords": [
+        "event\\s*type\\s+exists"
+      ],
+      "templateLabel": "event type exists",
+      "resolvedParams": {
+        "uid": "1774458968759_exugwp",
+        "email": "pro@example.com",
+        "userId": 4
+      },
+      "filledSql": "INSERT INTO \"EventType\" (title, slug, length, \"userId\")\n      VALUES ('Spike Event', 'spike-event-1774458968759_exugwp', 30, 4);",
+      "executed": true,
+      "error": null,
+      "rightTable": true
+    },
+    {
+      "repo": "calcom",
+      "condition": "A booking exists for the logged-in user's event type",
+      "matched": true,
+      "matchedKeywords": [
+        "booking\\s+exists"
+      ],
+      "templateLabel": "booking exists",
+      "resolvedParams": {
+        "uid": "1774458968792_ohs0bj",
+        "email": "pro@example.com",
+        "userId": 4,
+        "eventTypeId": 9001
+      },
+      "filledSql": "INSERT INTO \"Booking\" (\n        uid, \"userId\", \"eventTypeId\", title,\n        \"startTime\", \"endTime\", status\n      ) VALUES (\n        'spike_booking_1774458968792_ohs0bj', 4, 9001,\n        'Spike Booking',\n        NOW() + INTERVAL '1 day',\n        NOW() + INTERVAL '1 day 30 minutes',\n        'accepted'\n      );",
+      "executed": true,
+      "error": null,
+      "rightTable": true
+    },
+    {
+      "repo": "calcom",
+      "condition": "A webhook exists for the logged-in user",
+      "matched": true,
+      "matchedKeywords": [
+        "webhook\\s+exists"
+      ],
+      "templateLabel": "webhook exists",
+      "resolvedParams": {
+        "uid": "1774458968893_f7nouw",
+        "email": "pro@example.com",
+        "userId": 4
+      },
+      "filledSql": "INSERT INTO \"Webhook\" (\n        id, \"userId\", \"subscriberUrl\", \"eventTriggers\", active\n      ) VALUES (\n        'spike_webhook_1774458968893_f7nouw', 4,\n        'https://spike.test/webhook-1774458968893_f7nouw',\n        ARRAY['BOOKING_CREATED']::\"WebhookTriggerEvents\"[],\n        true\n      );",
+      "executed": true,
+      "error": null,
+      "rightTable": true
+    }
+  ]
+}

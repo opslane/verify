@@ -1,0 +1,3 @@
+A template already exists for the user's personal team (team 7). The condition is already satisfied.
+
+{"group_id":"spike-d-doc-template","condition":"A template exists for the logged-in user's personal team","setup_commands":[],"teardown_commands":[]}

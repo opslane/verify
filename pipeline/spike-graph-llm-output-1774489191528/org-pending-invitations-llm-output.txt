@@ -1,0 +1,5 @@
+```json
+{"inserts":[{"table":"TeamMemberInvite","values":{"id":"gen_random_uuid()","teamId":7,"email":"admin-invite@example.com","role":"ADMIN","status":"PENDING","createdAt":"2026-03-25T00:00:00.000Z"}},{"table":"TeamMemberInvite","values":{"id":"gen_random_uuid()","teamId":7,"email":"member-invite@example.com","role":"MEMBER","status":"PENDING","createdAt":"2026-03-25T00:00:00.000Z"}}]}
+```
+
+All tables except `TeamMemberInvite` are in the ALREADY EXIST list, so they're skipped. Two invites are created — one ADMIN and one MEMBER — both with `PENDING` status to satisfy the condition "pending admin and member invitations".

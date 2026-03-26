@@ -1,0 +1,29 @@
+{
+  "steps": [
+    {
+      "match": "goto ",
+      "stdout": "Navigated to profile settings.\n",
+      "exitCode": 0
+    },
+    {
+      "match": "snapshot",
+      "stdout": "@e1 [tab] \"Profile\"\n@e2 [tab] \"Security\"\n@e3 [tab] \"Notifications\"\n",
+      "exitCode": 0
+    },
+    {
+      "match": "press ArrowDown",
+      "stdout": "Focus moved to next tab.\n",
+      "exitCode": 0
+    },
+    {
+      "match": "snapshot",
+      "stdout": "@e1 [tab] \"Profile\"\n@e2 [tab selected] \"Security\"\n@e3 [tab] \"Notifications\"\n",
+      "exitCode": 0
+    },
+    {
+      "match": "screenshot ",
+      "stdout": "Screenshot saved.\n",
+      "exitCode": 0
+    }
+  ]
+}

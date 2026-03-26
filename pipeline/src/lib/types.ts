@@ -140,6 +140,26 @@ export interface AppIndex {
   seed_ids: Record<string, string[]>;   // modelName → array of known seed record IDs
   json_type_annotations: Record<string, Record<string, string>>;  // model → { field → TypeName }
   example_urls: Record<string, string>;  // parameterized route → concrete example URL
+  /** FK dependency graphs for entity creation — computed by index-app from information_schema. Optional: missing in old app.json files. */
+  entity_graphs?: Record<string, {
+    /** Tables in topological order (parents first) */
+    insert_order: string[];
+    /** Per-table metadata for SQL generation */
+    tables: Record<string, {
+      columns: Array<{
+        name: string;
+        pg_type: string;         // udt_name from information_schema
+        nullable: boolean;
+        has_default: boolean;
+      }>;
+      fk_parents: Array<{
+        column: string;          // FK column in this table
+        parent_table: string;    // referenced table
+        parent_column: string;   // referenced column
+        required: boolean;       // NOT NULL and no default
+      }>;
+    }>;
+  }>;
 }
 
 // ── Stage progress (stream-json observability) ──────────────────────────────
@@ -174,6 +194,8 @@ export interface RunClaudeResult {
   durationMs: number;
   timedOut: boolean;
 }
+
+export type RunClaudeFn = (opts: RunClaudeOptions) => Promise<RunClaudeResult>;
 
 // ── Stage permissions ───────────────────────────────────────────────────────
 // Each stage gets ONLY the tool access it needs. This is the explicit map.

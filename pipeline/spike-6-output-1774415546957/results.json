@@ -1,0 +1,35 @@
+[
+  {
+    "group_id": "spike-6-doc",
+    "variant": "hardened",
+    "scoping_correct": false,
+    "sql_success": false,
+    "has_fake_ids": false,
+    "fake_id_details": [],
+    "commands_count": 0,
+    "error": "No JSON output",
+    "duration_ms": 15218
+  },
+  {
+    "group_id": "spike-6-template",
+    "variant": "hardened",
+    "scoping_correct": false,
+    "sql_success": false,
+    "has_fake_ids": false,
+    "fake_id_details": [],
+    "commands_count": 0,
+    "error": "No JSON output",
+    "duration_ms": 18371
+  },
+  {
+    "group_id": "spike-6-3docs",
+    "variant": "hardened",
+    "scoping_correct": false,
+    "sql_success": false,
+    "has_fake_ids": false,
+    "fake_id_details": [],
+    "commands_count": 0,
+    "error": "No JSON output",
+    "duration_ms": 25575
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "criteria": [
+    {
+      "id": "ac1",
+      "group": "group-a",
+      "description": "The billing page shows the trial tooltip when the badge is hovered.",
+      "url": "/settings/billing",
+      "steps": [
+        "Navigate to /settings/billing",
+        "Wait for page load",
+        "Hover the trial badge",
+        "Take screenshot"
+      ],
+      "screenshot_at": ["trial_tooltip_visible"],
+      "timeout_seconds": 90
+    }
+  ]
+}

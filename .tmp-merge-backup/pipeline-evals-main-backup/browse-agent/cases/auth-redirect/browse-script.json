@@ -1,0 +1,19 @@
+{
+  "steps": [
+    {
+      "match": "goto ",
+      "stdout": "Redirected to sign in.\n",
+      "exitCode": 0
+    },
+    {
+      "match": "snapshot",
+      "stdout": "@e1 [heading] \"Sign in\"\n@e2 [text] \"Please sign in to continue\"\n",
+      "exitCode": 0
+    },
+    {
+      "match": "screenshot ",
+      "stdout": "Screenshot saved.\n",
+      "exitCode": 0
+    }
+  ]
+}
