@@ -92,7 +92,7 @@ describe("buildBrowseAgentPrompt", () => {
     const prompt = buildBrowseAgentPrompt(mockAC, {
       baseUrl: "http://localhost:3002", browseBin: "/usr/local/bin/browse", evidenceDir,
     });
-    expect(prompt).toContain("If any `browse click`, `browse fill`, `browse hover`, `browse press`, or `browse wait` command returns");
+    expect(prompt).toContain("If any `browse click`, `browse fill`, `browse upload`, `browse hover`, `browse press`, or `browse wait` command returns");
     expect(prompt).toContain("Do NOT try alternative selectors");
     expect(prompt).toContain("Do NOT invent selectors");
     expect(prompt).toContain("Do NOT search the codebase");

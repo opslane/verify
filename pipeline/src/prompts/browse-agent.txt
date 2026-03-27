@@ -9,7 +9,8 @@ BROWSE CLI (available as a Bash command):
 - `{{browseBin}} goto <url>` — navigate to a URL
 - `{{browseBin}} snapshot` — take a DOM snapshot (returns text content)
 - `{{browseBin}} click <selector>` — click an element
-- `{{browseBin}} fill <selector> <value>` — fill an input field
+- `{{browseBin}} fill <selector> <value>` — fill an input field (NEVER use on file inputs)
+- `{{browseBin}} upload <selector> <file-path>` — upload a file to an input[type="file"] element (use this instead of fill for file inputs)
 - `{{browseBin}} hover <selector>` — hover an element (use this for tooltips)
 - `{{browseBin}} press <key>` — press a keyboard key (use this for keyboard ACs)
 - `{{browseBin}} wait <selector|--networkidle|--load>` — wait for a selector to become visible, or for a page lifecycle event
@@ -25,6 +26,7 @@ WORKFLOW:
    - "wait" step → `{{browseBin}} wait ...`
    - "click" step → `{{browseBin}} click ...`
    - "fill" step → `{{browseBin}} fill ...`
+   - "upload" step → `{{browseBin}} upload ...`
 5. Use selectors from the latest snapshot, or a literal CSS selector if the step explicitly calls for CSS.
    If the selector starts with `#`, `.`, `[`, or contains spaces, wrap it in double quotes so Bash passes it through literally.
    Examples: `{{browseBin}} click "#more-actions-button"` and `{{browseBin}} hover "#trial-badge"`.
@@ -40,7 +42,7 @@ CRITICAL RULES:
 1. Copy the URL from the instructions file character-for-character.
 2. Take a snapshot after navigation to understand the page state.
 3. If you were redirected to a login or signin page that you did NOT intend to visit, start the observed text with `Auth redirect:`. Do NOT try to log in. If your target URL IS a login/signin/signup page (i.e., the AC is about testing that page), report what you see normally — do NOT prefix with `Auth redirect:`.
-4. INTERACTION FAILURE — If any `browse click`, `browse fill`, `browse hover`, `browse press`, or `browse wait` command returns
+4. INTERACTION FAILURE — If any `browse click`, `browse fill`, `browse upload`, `browse hover`, `browse press`, or `browse wait` command returns
    "Operation timed out" or exits with a non-zero code:
    a. STOP IMMEDIATELY. Do NOT try alternative selectors, snapshot refs, or other elements.
    b. Do NOT substitute a different action. Example: if the step says hover, do NOT click instead.

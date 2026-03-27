@@ -28,6 +28,7 @@ import { runSetupWriter } from "./stages/run-setup-writer.js";
 import { extractTableNames, snapshotTables, restoreSnapshot } from "./lib/db-snapshot.js";
 import { findAndRenameVideo } from "./lib/video.js";
 import { formatTerminalReport, formatTimingSummary } from "./report.js";
+import { ensureSampleFiles } from "./lib/sample-files.js";
 
 const SECONDS_PER_STEP = 20;
 const MIN_TIMEOUT_S = 90;
@@ -151,6 +152,7 @@ export async function runPipeline(
   // ── Stage 3 + 4: Setup + Browse Agents ────────────────────────────────
   callbacks.onLog("Stage 3-4: Executing browser agents...");
   const browseBin = resolveBrowseBin();
+  ensureSampleFiles();
   const projectEnv = loadProjectEnv(projectRoot);
 
   // Collect seed IDs from app.json to protect from destructive setup/teardown
