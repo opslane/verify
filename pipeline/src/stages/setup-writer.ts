@@ -129,7 +129,8 @@ Output ONLY the JSON. No explanation, no markdown fences.`;
 
 export type SetupRetryContext =
   | { type: "parse_error" }
-  | { type: "exec_error"; failedCommands: string[]; error: string };
+  | { type: "exec_error"; failedCommands: string[]; error: string }
+  | { type: "sdk_error"; toolCalls: import("../sdk/tools/run-sql.js").ToolCallLog[]; error?: string };
 
 /**
  * Build a retry prompt that includes the original prompt + error context.
