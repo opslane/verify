@@ -272,6 +272,24 @@ if (command === "run") {
   console.log(`  Seed IDs: ${Object.values(appIndex.seed_ids).flat().length}`);
   console.log(`  DB URL env: ${appIndex.db_url_env ?? "(not found)"}`);
 
+} else if (command === "eval-setup") {
+  // Setup-writer eval: runs realistic A/B comparison (CLI vs SDK) through actual code path
+  const projectDir = values["project-dir"];
+  if (!projectDir) { console.error("--project-dir required"); process.exit(1); }
+
+  const { loadProjectEnv } = await import("./stages/setup-writer.js");
+  const projectEnv = loadProjectEnv(projectDir);
+  const dbUrlEnv = "DATABASE_URL";
+  const dbUrl = projectEnv[dbUrlEnv] ?? projectEnv.NEXT_PRIVATE_DATABASE_URL ?? "";
+  if (!dbUrl) { console.error(`No DATABASE_URL or NEXT_PRIVATE_DATABASE_URL found in ${projectDir}/.env`); process.exit(1); }
+
+  // Set EVAL_DB_URL for the eval runner
+  process.env.EVAL_DB_URL = dbUrl;
+  process.env.EVAL_PROJECT_DIR = projectDir;
+
+  const { main: runEval } = await import("./evals/setup-writer/realistic-eval.js");
+  await runEval();
+
 } else if (command === "run-stage" && stageName) {
   const verifyDir = values["verify-dir"]!;
   const runDir = values["run-dir"] ?? join(verifyDir, "runs", `manual-${Date.now()}`);
@@ -360,15 +378,15 @@ if (command === "run") {
         }
         const { loadProjectEnv } = await import("./stages/setup-writer.js");
         const projectEnv = loadProjectEnv(projectRoot);
-        const commands = await runSetupWriter({
+        const setupResult = await runSetupWriter({
           groupId, condition, appIndex, projectEnv, projectRoot,
           authEmail: config.auth?.email, retryContext: null,
           runDir, stageName, runClaudeFn: runClaude,
           permissions, timeoutMs: 90_000,
         });
-        if (commands) {
-          console.log(`Setup writer: ${commands.setup_commands.length} setup commands`);
-          writeFileSync(join(runDir, "setup.json"), JSON.stringify(commands, null, 2));
+        if (setupResult) {
+          console.log(`Setup writer: ${setupResult.commands.setup_commands.length} setup commands${setupResult.sqlExecuted ? " (SDK — already executed)" : ""}`);
+          writeFileSync(join(runDir, "setup.json"), JSON.stringify(setupResult.commands, null, 2));
         } else {
           console.error("Failed to produce setup commands");
           process.exitCode = 1;
@@ -506,6 +524,9 @@ if (command === "run") {
   console.error("  run            Full pipeline run (orchestrator)");
   console.error("  index-app      Build app.json index (routes, selectors, schema, seed IDs)");
   console.error("  run-stage      Run a single stage for debugging");
+  console.error("");
+  console.error("Eval:");
+  console.error("  eval-setup     --project-dir <path>  [EVAL_CASES_SET=calcom]");
   console.error("");
   console.error("Stages:");
   console.error("  ac-generator   --spec <path>");
