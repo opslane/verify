@@ -527,3 +527,42 @@ COMPLETE — all 8 tasks done, typecheck clean, 335 tests passing (97 new/update
 
 ### Status
 COMPLETE — all 7 tasks done, 2 code review gates passed, 372 tests passing
+
+---
+
+## setup-writer-sdk-migration (plan: docs/plans/2026-03-30-setup-writer-sdk-migration.md)
+
+### Completed
+- [x] Task 0: Spike — A/B comparison of SDK vs CLI (commit: 5abdb87)
+  - Files: pipeline/src/evals/spike-setup-sdk.ts, pipeline/package.json
+  - Installed @anthropic-ai/claude-agent-sdk, postgres, zod
+  - SDK exports confirmed: query, tool, createSdkMcpServer
+
+- [x] Task 1: Structured error taxonomy (commit: 6c724ce)
+  - Files: pipeline/src/sdk/errors.ts, pipeline/test/sdk-errors.test.ts
+  - SetupError enum (17 variants), classifyPgError, 7 tests
+
+- [x] Task 2: run_sql MCP tool (commit: 028f4e5)
+  - Files: pipeline/src/sdk/tools/run-sql.ts, pipeline/test/run-sql-validation.test.ts
+  - validateSQL, extractTableName, createRunSqlTool, 12 tests
+
+- [x] Task 3: SDK adapter for setup-writer (commit: 4227ec5)
+  - Files: pipeline/src/stages/setup-writer-sdk.ts (new), pipeline/src/stages/run-setup-writer.ts (modified)
+  - runSetupSDK wraps query() + createRunSqlTool, SDK path opt-in via VERIFY_SETUP_SDK=1
+  - Code review gate passed: 2 blockers fixed (DDL bypass, operation mismatch), 5 should-fixes (commit: 3c7ffcf)
+
+- [x] Task 4: Transaction lifecycle tests (commit: 1af06d3)
+  - Files: pipeline/test/transaction-lifecycle.test.ts
+  - 5 tests with real DB (skip without TEST_DATABASE_URL)
+
+- [x] Task 5: Setup-writer eval framework (commit: dd722b2)
+  - Files: pipeline/src/evals/setup-writer/cases.ts, pipeline/src/evals/setup-writer/runner.ts
+  - 8 eval cases, A/B runner with verification queries
+
+- [x] Task 6: Wire SDK path into orchestrator (commit: 05d5718)
+  - Files: pipeline/src/orchestrator.ts, pipeline/src/cli.ts, pipeline/src/stages/run-setup-writer.ts
+  - SetupWriterResult type with affectedTables + sqlExecuted
+  - Orchestrator skips executeSetupCommands when SDK already executed
+
+### Status
+COMPLETE — all 7 tasks done (0-6), 1 code review gate passed, 395 pipeline tests passing

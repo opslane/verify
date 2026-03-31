@@ -24,7 +24,7 @@ import { collectEvidencePaths, buildJudgePrompt, parseJudgeOutput } from "./stag
 import { buildLearnerPrompt, backupAndRestore, validateLearnings } from "./stages/learner.js";
 import { resolveBrowseBin, resetPage, startGroupDaemon, stopGroupDaemon, stopAllGroupDaemons } from "./lib/browse.js";
 import { loginOnDaemon } from "./init.js";
-import { runSetupWriter } from "./stages/run-setup-writer.js";
+import { runSetupWriter, consumeLastSdkFailure } from "./stages/run-setup-writer.js";
 import { extractTableNames, snapshotTables, restoreSnapshot } from "./lib/db-snapshot.js";
 import { findAndRenameVideo } from "./lib/video.js";
 import { formatTerminalReport, formatTimingSummary } from "./report.js";
@@ -229,30 +229,49 @@ export async function runPipeline(
             : `setup-${groupId}-retry${attempt - 1}`;
           const timeoutMs = attempt === 1 ? 120_000 : 90_000;
 
-          const commands = await runSetupWriter({
+          // Restore snapshot before retry (clean slate — SDK may have mutated in-process)
+          if (attempt > 1 && snapshotPath) {
+            const restoreResult = restoreSnapshot(snapshotPath, snapshotTableList, projectEnv);
+            if (!restoreResult.success) {
+              callbacks.onLog(`  Snapshot restore failed for ${groupId} — aborting retries: ${restoreResult.error}`);
+              break;
+            }
+          }
+
+          const setupResult = await runSetupWriter({
             groupId, condition, appIndex, projectEnv, projectRoot,
             authEmail: config.auth?.email, retryContext: lastRetryContext,
             runDir, stageName, runClaudeFn: runClaude,
             permissions: perms("setup-writer"), timeoutMs,
           });
 
-          if (!commands) {
-            lastRetryContext = { type: "parse_error" };
-            callbacks.onLog(`  Setup attempt ${attempt}/${MAX_SETUP_ATTEMPTS} for ${groupId}: parse error, ${attempt < MAX_SETUP_ATTEMPTS ? "retrying..." : "giving up"}`);
+          if (!setupResult) {
+            // Check if SDK path failed — use structured error context for retry
+            const sdkFailure = consumeLastSdkFailure();
+            if (sdkFailure) {
+              // SDK may have partially mutated — snapshot now for restore on next attempt
+              if (!snapshotPath && sdkFailure.toolCalls.some(c => c.operation !== "SELECT" && !c.error)) {
+                const tables = [...new Set(sdkFailure.toolCalls.filter(c => c.operation !== "SELECT").map(c => c.sql).map(s => { const m = s.match(/(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+"?(?:\w+"\."?)?(\w+)"?/i); return m?.[1]; }).filter((t): t is string => !!t))];
+                if (tables.length > 0) {
+                  snapshotTableList = tables;
+                  const snapshotDir = join(runDir, "setup", groupId);
+                  mkdirSync(snapshotDir, { recursive: true });
+                  snapshotPath = snapshotTables(tables, snapshotDir, projectEnv);
+                }
+              }
+              lastRetryContext = { type: "sdk_error", toolCalls: sdkFailure.toolCalls, error: sdkFailure.error };
+              callbacks.onLog(`  Setup attempt ${attempt}/${MAX_SETUP_ATTEMPTS} for ${groupId}: SDK error (${sdkFailure.toolCalls.length} tool calls), ${attempt < MAX_SETUP_ATTEMPTS ? "retrying..." : "giving up"}`);
+            } else {
+              lastRetryContext = { type: "parse_error" };
+              callbacks.onLog(`  Setup attempt ${attempt}/${MAX_SETUP_ATTEMPTS} for ${groupId}: parse error, ${attempt < MAX_SETUP_ATTEMPTS ? "retrying..." : "giving up"}`);
+            }
             continue;
           }
 
-          // Restore snapshot if this is a retry (clean slate before re-executing)
-          if (attempt > 1 && snapshotPath) {
-            const restoreResult = restoreSnapshot(snapshotPath, snapshotTableList, projectEnv);
-            if (!restoreResult.success) {
-              callbacks.onLog(`  Snapshot restore failed for ${groupId} — aborting retries: ${restoreResult.error}`);
-              break;  // DB in unknown state, don't retry
-            }
-          }
+          const { commands } = setupResult;
 
-          // Snapshot affected tables — use affected_tables from graph path, or parse from commands (review decision C3)
-          snapshotTableList = extractTableNames(commands.setup_commands);
+          // Snapshot affected tables for potential future restore
+          snapshotTableList = setupResult.affectedTables ?? extractTableNames(commands.setup_commands);
           const snapshotDir = join(runDir, "setup", groupId);
           mkdirSync(snapshotDir, { recursive: true });
           snapshotPath = snapshotTables(snapshotTableList, snapshotDir, projectEnv);
@@ -260,7 +279,13 @@ export async function runPipeline(
             callbacks.onLog(`  Snapshotted ${snapshotTableList.length} tables for ${groupId}`);
           }
 
-          // Execute setup SQL
+          // Execute setup SQL — skip if SDK already executed (SQL ran in-process via MCP tool)
+          if (setupResult.sqlExecuted) {
+            setupSuccess = true;
+            writeFileSync(join(runDir, "setup", groupId, "commands.json"), JSON.stringify(commands, null, 2));
+            break;
+          }
+
           const setupExec = executeSetupCommands(commands.setup_commands, projectEnv, projectRoot, seedIds);
           if (setupExec.success) {
             setupSuccess = true;
