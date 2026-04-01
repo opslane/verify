@@ -25,6 +25,7 @@ const { positionals, values } = parseArgs({
     password: { type: "string" },
     "browse-bin": { type: "string" },
     legacy: { type: "boolean", default: false },
+    case: { type: "string" },
   },
 });
 
@@ -290,6 +291,25 @@ if (command === "run") {
   const { main: runEval } = await import("./evals/setup-writer/realistic-eval.js");
   await runEval();
 
+} else if (command === "eval-judge") {
+  const { runJudgeEvals, discoverCaseDirs, formatJudgeEvalSummary } = await import("./evals/run-judge-evals.js");
+  const caseFilter = values["case"] as string | undefined;
+  const caseDirs = discoverCaseDirs();
+  if (caseDirs.length === 0) { console.error("No judge eval cases found"); process.exit(1); }
+
+  const results = await runJudgeEvals(caseDirs, caseFilter);
+  for (const result of results) {
+    if (result.passed) {
+      console.log(`PASS ${result.caseId}  ${(result.durationMs / 1000).toFixed(1)}s  accuracy=${(result.verdictAccuracy * 100).toFixed(0)}%`);
+      continue;
+    }
+    console.log(`FAIL ${result.caseId}  ${result.failures.join("; ")}`);
+  }
+  console.log(formatJudgeEvalSummary(results));
+
+  const failCount = results.filter(r => !r.passed).length;
+  process.exit(failCount > 0 ? 1 : 0);
+
 } else if (command === "run-stage" && stageName) {
   const verifyDir = values["verify-dir"]!;
   const runDir = values["run-dir"] ?? join(verifyDir, "runs", `manual-${Date.now()}`);
@@ -536,6 +556,7 @@ if (command === "run") {
   console.error("");
   console.error("Eval:");
   console.error("  eval-setup     --project-dir <path>  [EVAL_CASES_SET=calcom]");
+  console.error("  eval-judge     [--case <caseId>]  Run judge eval cases");
   console.error("");
   console.error("Stages:");
   console.error("  ac-generator   --spec <path>");

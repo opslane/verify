@@ -27,6 +27,9 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
     args.push("--dangerously-skip-permissions");
   }
   if (allowedTools) {
+    // --tools restricts which tools are available (reduces context size)
+    // --allowedTools auto-approves them (no permission prompts)
+    args.push("--tools", allowedTools.join(","));
     for (const tool of allowedTools) {
       args.push("--allowedTools", tool);
     }
