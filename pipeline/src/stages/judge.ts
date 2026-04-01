@@ -9,6 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export interface EvidenceRef {
   acId: string;
   resultPath: string;
+  description?: string;  // AC description — what the judge should evaluate against
 }
 
 export function collectEvidencePaths(runDir: string): EvidenceRef[] {
@@ -16,13 +17,28 @@ export function collectEvidencePaths(runDir: string): EvidenceRef[] {
   if (!existsSync(evidenceDir)) return [];
   return readdirSync(evidenceDir, { withFileTypes: true })
     .filter((d) => d.isDirectory())
-    .map((d) => ({ acId: d.name, resultPath: join(evidenceDir, d.name, "result.json") }))
+    .map((d) => {
+      const acDir = join(evidenceDir, d.name);
+      const ref: EvidenceRef = { acId: d.name, resultPath: join(acDir, "result.json") };
+      // Read AC description from instructions.json if available
+      const instrPath = join(acDir, "instructions.json");
+      if (existsSync(instrPath)) {
+        try {
+          const instr = JSON.parse(readFileSync(instrPath, "utf-8")) as { description?: string };
+          if (instr.description) ref.description = instr.description;
+        } catch { /* ignore malformed instructions.json */ }
+      }
+      return ref;
+    })
     .filter((ref) => existsSync(ref.resultPath));
 }
 
 export function buildJudgePrompt(evidenceRefs: EvidenceRef[]): string {
   const template = readFileSync(join(__dirname, "../prompts/judge.txt"), "utf-8");
-  const evidenceList = evidenceRefs.map((ref) => `- AC ${ref.acId}: ${ref.resultPath}`).join("\n");
+  const evidenceList = evidenceRefs.map((ref) => {
+    const desc = ref.description ? ` — "${ref.description}"` : "";
+    return `- AC ${ref.acId}${desc}: ${ref.resultPath}`;
+  }).join("\n");
   return template.replace("{{evidenceList}}", evidenceList);
 }
 

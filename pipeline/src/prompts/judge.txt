@@ -5,7 +5,8 @@ You are the ONLY stage that produces verdicts. Browse agents collected evidence 
 EVIDENCE FILES:
 {{evidenceList}}
 
-Read each evidence file listed above using tool calls. Also look at any screenshots in those directories.
+Each AC line shows the acceptance criterion description (what should be verified) and the evidence file path.
+Read the evidence file for each AC. The description defines what "pass" means for that AC.
 
 OUTPUT: Write valid JSON to stdout with this exact schema:
 
@@ -55,5 +56,7 @@ RULES:
    OR element is completely absent from the page the spec directed the agent to
    (suggesting the spec has the wrong page location). Don't use it as a fallback
    for ambiguous or low-quality evidence — that's "fail" with low confidence.
+9. Always evaluate evidence AGAINST the AC description. The description defines what "pass" means.
+   Do not infer pass/fail from the evidence alone — compare evidence to the stated requirement.
 
 Output ONLY the JSON. No explanation, no markdown fences.

@@ -46,6 +46,42 @@ describe("buildJudgePrompt", () => {
     expect(prompt).toContain("ac1");
     expect(prompt).toContain("/tmp/evidence/ac1/result.json");
   });
+
+  it("includes AC description when provided", () => {
+    const prompt = buildJudgePrompt([
+      { acId: "ac1", resultPath: "/tmp/evidence/ac1/result.json", description: "User can log in with valid credentials" },
+    ]);
+    expect(prompt).toContain("User can log in with valid credentials");
+  });
+
+  it("works without description (backward compatible)", () => {
+    const prompt = buildJudgePrompt([
+      { acId: "ac1", resultPath: "/tmp/evidence/ac1/result.json" },
+    ]);
+    expect(prompt).not.toContain('""');
+    expect(prompt).toContain("AC ac1:");
+  });
+});
+
+describe("collectEvidencePaths reads instructions.json", () => {
+  let runDir: string;
+
+  beforeEach(() => {
+    runDir = join(tmpdir(), `verify-judge-instr-${Date.now()}`);
+    mkdirSync(join(runDir, "evidence", "ac1"), { recursive: true });
+    writeFileSync(join(runDir, "evidence", "ac1", "result.json"), "{}");
+    writeFileSync(join(runDir, "evidence", "ac1", "instructions.json"), JSON.stringify({
+      ac_id: "ac1",
+      description: "Page loads without errors",
+    }));
+  });
+
+  afterEach(() => { rmSync(runDir, { recursive: true, force: true }); });
+
+  it("reads description from instructions.json", () => {
+    const paths = collectEvidencePaths(runDir);
+    expect(paths[0].description).toBe("Page loads without errors");
+  });
 });
 
 describe("parseJudgeOutput", () => {

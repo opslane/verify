@@ -570,6 +570,13 @@ export async function runPipeline(
 
   // ── Stage 5: Judge ────────────────────────────────────────────────────
   const evidenceRefs = collectEvidencePaths(runDir);
+  // Enrich evidence refs with AC descriptions from the plan
+  for (const ref of evidenceRefs) {
+    if (!ref.description) {
+      const planned = plan.criteria.find((ac) => ac.id === ref.acId);
+      if (planned) ref.description = planned.description;
+    }
+  }
 
   if (evidenceRefs.length > 0) {
     callbacks.onLog("Stage 5: Judging evidence...");

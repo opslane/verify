@@ -566,3 +566,42 @@ COMPLETE — all 7 tasks done, 2 code review gates passed, 372 tests passing
 
 ### Status
 COMPLETE — all 7 tasks done (0-6), 1 code review gate passed, 395 pipeline tests passing
+
+---
+
+## judge-eval-framework (plan: docs/plans/2026-03-31-judge-eval-framework.md)
+
+### Completed
+- [x] Task 1: Judge Eval Types (commit: f1ff8b3)
+  - Files: pipeline/src/evals/judge-eval-types.ts
+  - PROMPT_LEGAL_VERDICTS (4 verdicts), JudgeEvalExpectation, JudgeEvalResult
+
+- [x] Task 2: Judge Eval Scorer (commit: 77ed22c)
+  - Files: pipeline/src/evals/judge-eval-score.ts
+  - scoreJudgeEvalCase: verdict match, confidence floor, reasoning substrings, prompt-legal check
+
+- [x] Task 3: Judge Eval Scorer Tests (commit: e1060c9)
+  - Files: pipeline/test/judge-eval-score.test.ts
+  - 14 tests covering all scorer paths
+
+- [x] Code Review Gate 1 (commit: 73ebc7c)
+  - Fixed: removed `as never` cast, added prompt-legal explanation comment
+  - Score: 4.5/5 APPROVE WITH CHANGES
+
+- [x] Task 4: Golden Test Cases (commit: ab5014c)
+  - Files: pipeline/evals/judge/cases/{clear-pass,setup-404,skeleton-loading,spec-wrong-disabled,unicode-input}/
+  - 5 cases from real Documenso runs, 26 ACs total, screenshots removed (text-only Phase 1)
+
+- [x] Task 5: Judge Eval Runner (commit: 23d1d67)
+  - Files: pipeline/src/evals/run-judge-evals.ts
+  - discoverCaseDirs, runJudgeEvalCase, formatJudgeEvalSummary
+
+- [x] Task 6: CLI Integration (commit: 01fd516)
+  - Files: pipeline/src/cli.ts
+  - eval-judge command with --case filter
+
+- [x] Code Review Gate 2 (commit: e924d11)
+  - Fixed: guard missing/malformed expected.json, --case arg validation
+
+### Status
+COMPLETE — all 6 tasks done, 2 code review gates passed, 413 tests passing (14 new)
