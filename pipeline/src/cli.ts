@@ -496,16 +496,25 @@ if (command === "run") {
       console.error(`Unknown stage: ${stageName}. Available: ac-generator, planner, plan-validator, setup-writer, browse-agent, judge, learner, login-agent, verify-login`);
       process.exit(1);
   }
+} else if (command === "eval-planner") {
+  const runDir = values["run-dir"];
+  const args = ["tsx", "src/evals/planner-eval.ts"];
+  if (runDir) args.push("--run-dir", runDir);
+  const { execFileSync } = await import("node:child_process");
+  execFileSync("npx", args, { stdio: "inherit", cwd: process.cwd() });
+
 } else {
   console.error("Usage:");
   console.error("  npx tsx src/cli.ts run --spec <path> [--verify-dir .verify]");
   console.error("  npx tsx src/cli.ts index-app [--project-dir .] [--output .verify/app.json]");
   console.error("  npx tsx src/cli.ts run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
+  console.error("  npx tsx src/cli.ts eval-planner [--run-dir <path>]");
   console.error("");
   console.error("Commands:");
   console.error("  run            Full pipeline run (orchestrator)");
   console.error("  index-app      Build app.json index (routes, selectors, schema, seed IDs)");
   console.error("  run-stage      Run a single stage for debugging");
+  console.error("  eval-planner   Score planner output against baseline");
   console.error("");
   console.error("Stages:");
   console.error("  ac-generator   --spec <path>");
