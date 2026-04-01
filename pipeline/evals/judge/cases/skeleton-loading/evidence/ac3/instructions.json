@@ -1,0 +1,15 @@
+{
+  "ac_id": "ac3",
+  "description": "If any of the three parallelized operations fails, the error propagates correctly and the envelope is not created in a partial state.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents",
+    "Wait for page load",
+    "Verify the page does not show any documents in a partial or corrupted state — all listed documents should have a valid status (Draft, Pending, or Completed)",
+    "Take screenshot of the documents list showing no partial-state documents"
+  ],
+  "screenshot_at": [
+    "no_partial_state_documents"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac3"
+}

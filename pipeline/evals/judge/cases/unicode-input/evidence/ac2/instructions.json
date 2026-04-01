@@ -1,0 +1,18 @@
+{
+  "ac_id": "ac2",
+  "description": "On /signin, entering an international email like Søren@gmail.com in the Email field and clicking Sign In does not show a client-side email validation error.",
+  "url": "http://localhost:3003/signin",
+  "steps": [
+    "Navigate to /signin",
+    "Wait for page load",
+    "Fill the 'Email' input with 'Søren@gmail.com'",
+    "Fill the 'Password' input with 'TestPassword123!'",
+    "Click the 'Sign In' button",
+    "Wait 2 seconds for any validation errors to appear",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "after_submit_check_for_validation_error"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac2"
+}

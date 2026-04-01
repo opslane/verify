@@ -1,0 +1,14 @@
+{
+  "ac_id": "ac1",
+  "observed": "The 'Document Settings' dialog is visible and open. It shows a heading 'Document Settings' (level 2) with three navigation tabs: 'General', 'Email', and 'Security'. The 'General' section is displayed with fields including Language, Allowed Signature Types, Date Format, Time Zone, External ID, Redirect URL, Document Distribution Method, and Expiration. The dialog also has 'Cancel', 'Update', and 'Close' buttons. The page contains a CC recipient (cc@example.com with role CC) in the recipients list, confirming the dialog opens successfully when a CC recipient exists on the draft.",
+  "screenshots": [
+    "settings_dialog_open.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "snapshot",
+    "click @e16",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-28-0438-spec/evidence/ac1/settings_dialog_open.png"
+  ]
+}

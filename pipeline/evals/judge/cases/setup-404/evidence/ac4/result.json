@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac4",
+  "observed": "The page returned a 404 response and displayed 'Token Not Found' with two help hints: 'Ensure that you are using the embedding token, not the API token' and 'If you are using staging, ensure that you have set the host prop on the embedding component to the staging domain'. No envelope data (PDF preview, document title, recipient fields) or team settings data (editor configuration, signature type settings, branding elements) was rendered on the page.",
+  "screenshots": [
+    "envelope_and_settings_rendered.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-27-1648-spec/evidence/ac4/envelope_and_settings_rendered.png"
+  ]
+}

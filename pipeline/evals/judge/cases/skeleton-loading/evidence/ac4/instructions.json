@@ -1,0 +1,15 @@
+{
+  "ac_id": "ac4",
+  "description": "The documentMeta creation and counter increment still execute concurrently even when no delegated owner validation is needed.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents",
+    "Wait for page load",
+    "Verify the documents page loads without errors — the page should show either documents or the empty state, not an error message",
+    "Take screenshot confirming the page renders successfully"
+  ],
+  "screenshot_at": [
+    "page_renders_without_errors"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac4"
+}

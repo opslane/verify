@@ -1,0 +1,17 @@
+{
+  "ac_id": "ac3",
+  "description": "On /forgot-password, entering an international email like Søren@gmail.com in the Email field and clicking Reset Password does not show a client-side email validation error.",
+  "url": "http://localhost:3003/forgot-password",
+  "steps": [
+    "Navigate to /forgot-password",
+    "Wait for page load",
+    "Fill the 'Email' input with 'Søren@gmail.com'",
+    "Click the 'Reset Password' button",
+    "Wait 2 seconds for any validation errors to appear",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "after_submit_check_for_validation_error"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac3"
+}

@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac2",
+  "observed": "The page loaded but showed a 404 error state with the message 'Token Not Found' and two list items advising to use an embedding token (not API token) and to set the host prop on the embedding component for staging. The editor UI with document content and settings controls was NOT rendered. The page returned HTTP 404, indicating the envelope ID 'envelope_tmdiotunmyndrtuk' does not exist or the token is invalid.",
+  "screenshots": [
+    "page_loaded_promptly.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-27-1648-spec/evidence/ac2/page_loaded_promptly.png"
+  ]
+}

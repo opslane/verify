@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac4",
+  "observed": "The documents page at /t/personal_mwiasvikdmkwinfh/documents loaded successfully with a 200 status. The page shows the Documents section with navigation tabs (Inbox 0, Pending 0, Completed 0, Draft 0, All — with All selected), a search box, a table with column headers (Created, Title, Sender, Recipient, Status, Actions), and 'Showing 0 results.' at the bottom. No error messages were present. The page also shows folders (AC1 Second Folder, AC1 Test Folder) and upload/create options. The page rendered without errors.",
+  "screenshots": [
+    "page_renders_without_errors.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac4/page_renders_without_errors.png"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac8",
+  "observed": "The page returned a 404 Not Found error. The URL http://localhost:3003/embed/direct/seed-verify-dl-57a7755d-422 does not exist — the page content shows only 'Not Found'. The Email input field for the recipient information form was not accessible, so the international email validation check could not be performed.",
+  "screenshots": [
+    "after_email_entry_check_for_validation_error.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/embed/direct/seed-verify-dl-57a7755d-422",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac8/after_email_entry_check_for_validation_error.png"
+  ]
+}

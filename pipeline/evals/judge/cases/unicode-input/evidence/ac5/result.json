@@ -1,0 +1,17 @@
+{
+  "ac_id": "ac5",
+  "observed": "The signup form at /signup was filled with Name='Test User', Email='test@example.com', and Password='TestPassword123!'. After clicking 'Create account', the page stayed on /signup but no client-side email validation error appeared for the email field. The form remained filled with the entered values. A message 'We need your signature to sign documents' appeared (related to the missing signature field), but no error about the email address format. No validation error message for the email field was visible.",
+  "screenshots": [
+    "after_submit_check_for_validation_error.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/signup",
+    "snapshot",
+    "fill @e18 Test User",
+    "fill @e20 test@example.com",
+    "fill @e22 TestPassword123!",
+    "click @e30",
+    "snapshot",
+    "screenshot after_submit_check_for_validation_error.png"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac3",
+  "observed": "The page loaded and displayed 'Token Not Found' with two bullet points: 'Ensure that you are using the embedding token, not the API token' and 'If you are using staging, ensure that you have set the host prop on the embedding component to the staging domain (https://stg-app.documenso.com)'. The page finished loading with no stuck loading spinners or prolonged blank screens — the envelope editor returned an error state (invalid/missing embedding token) rather than an editor UI, but there was no performance regression visible (page loaded quickly to a rendered state).",
+  "screenshots": [
+    "performance_check.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-27-1648-spec/evidence/ac3/performance_check.png"
+  ]
+}

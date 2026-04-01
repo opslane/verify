@@ -1,0 +1,19 @@
+{
+  "ac_id": "ac7",
+  "description": "On /o/org_hbersosbneorktuw/settings/members, clicking Invite member and entering an international email like Søren@gmail.com in the Email address field does not show a client-side email validation error.",
+  "url": "http://localhost:3003/o/org_hbersosbneorktuw/settings/members",
+  "steps": [
+    "Navigate to /o/org_hbersosbneorktuw/settings/members",
+    "Wait for page load",
+    "Click the 'Invite member' button",
+    "Wait for the 'Invite organisation members' dialog to appear",
+    "Fill the 'Email address' input with 'Søren@gmail.com'",
+    "Click the 'Invite' button",
+    "Wait 2 seconds for any validation errors to appear",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "after_invite_check_for_validation_error"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac7"
+}

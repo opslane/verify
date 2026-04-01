@@ -1,0 +1,15 @@
+{
+  "ac_id": "ac6",
+  "observed": "After filling the signer email input with 'Søren@gmail.com' and pressing Tab, the page shows an 'Invalid email' error message (@e57) directly below the email input field. The input shows the value 'Søren@gmail.com' and a client-side validation error paragraph with text 'Invalid email' is visible.",
+  "screenshots": [
+    "after_email_entry_check_for_validation_error.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "snapshot",
+    "fill [data-testid='signer-email-input'] Søren@gmail.com",
+    "press Tab",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac6/after_email_entry_check_for_validation_error.png"
+  ]
+}

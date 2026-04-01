@@ -1,0 +1,17 @@
+{
+  "ac_id": "ac8",
+  "description": "On /embed/direct/seed-verify-dl-57a7755d-422, entering an international email like Søren@gmail.com in the Email input field of the recipient information form does not show a client-side email validation error.",
+  "url": "http://localhost:3003/embed/direct/seed-verify-dl-57a7755d-422",
+  "steps": [
+    "Navigate to /embed/direct/seed-verify-dl-57a7755d-422",
+    "Wait for page load",
+    "Fill the 'Email' input with 'Søren@gmail.com'",
+    "Press Tab to move focus away from the email input",
+    "Wait 2 seconds for any validation errors to appear",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "after_email_entry_check_for_validation_error"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac8"
+}

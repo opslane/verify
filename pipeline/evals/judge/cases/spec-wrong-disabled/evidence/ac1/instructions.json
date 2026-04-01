@@ -1,0 +1,16 @@
+{
+  "ac_id": "ac1",
+  "description": "On the document edit page, clicking the 'Document Settings' button in the left sidebar opens the Settings dialog successfully when a CC recipient exists on the draft.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "Wait for page load",
+    "Click the 'Document Settings' button in the left sidebar Quick Actions",
+    "Wait for the 'Document Settings' dialog heading to appear",
+    "Take screenshot showing the Settings dialog is open"
+  ],
+  "screenshot_at": [
+    "settings_dialog_open"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0438-spec/evidence/ac1"
+}

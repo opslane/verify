@@ -1,0 +1,18 @@
+{
+  "ac_id": "ac4",
+  "description": "The SelectContent component's Viewport element has the CSS classes max-h-60 and overflow-y-auto applied in packages/ui/primitives/select.tsx.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "Wait for page load",
+    "Click the button with title 'Settings' (settings trigger button)",
+    "Wait for the heading 'Document Settings' to appear in the dialog",
+    "Click the 'Date Format' select dropdown to open it",
+    "Inspect the dropdown viewport element (the element with role 'listbox' or the SelectPrimitive.Viewport wrapper) and verify it has CSS classes 'max-h-60' and 'overflow-y-auto' applied",
+    "Take screenshot showing the open dropdown with the constrained viewport"
+  ],
+  "screenshot_at": [
+    "select_viewport_classes_verified"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0104-spec/evidence/ac4"
+}

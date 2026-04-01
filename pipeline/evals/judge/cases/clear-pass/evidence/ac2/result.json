@@ -1,0 +1,26 @@
+{
+  "ac_id": "ac2",
+  "observed": "Navigated to the document edit page. Clicked 'Document Settings' button and the Document Settings dialog appeared with a 'General' tab showing various settings. Clicked the 'Date Format' combobox (initially showing 'DD/MM/YYYY HH:mm') and a listbox appeared with 22 date format options including: 'YYYY-MM-DD hh:mm AM/PM', 'YYYY-MM-DD HH:mm', 'DD/MM/YYYY HH:mm' (selected), 'DD/MM/YYYY HH:mm AM/PM', 'MM/DD/YYYY HH:mm', 'MM/DD/YYYY HH:mm AM/PM', 'DD.MM.YYYY HH:mm', 'YY-MM-DD HH:mm', 'YY-MM-DD HH:mm AM/PM', 'YYYY-MM-DD HH:mm:ss', 'Month Date, Year HH:mm', 'Month Date, Year HH:mm AM/PM', 'Day, Month Year HH:mm', 'Day, Month Year HH:mm AM/PM', 'ISO 8601', 'YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY', 'DD.MM.YYYY', 'YY-MM-DD', 'Month Date, Year', 'Day, Month Year'. Direct click on options timed out, so used keyboard navigation (ArrowDown + Enter) to select 'DD/MM/YYYY HH:mm AM/PM'. After selection, the dialog returned showing the Date Format combobox now displays 'DD/MM/YYYY HH:mm AM/PM' as the selected value.",
+  "screenshots": [
+    "date_format_options_visible.png",
+    "date_format_option_selected.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "snapshot",
+    "click @e16",
+    "snapshot",
+    "click @e17",
+    "snapshot",
+    "screenshot date_format_options_visible.png",
+    "click @e2",
+    "click @e6",
+    "click @e3",
+    "click [role=option]:first-child",
+    "snapshot",
+    "press ArrowDown",
+    "press Enter",
+    "snapshot",
+    "screenshot date_format_option_selected.png"
+  ]
+}

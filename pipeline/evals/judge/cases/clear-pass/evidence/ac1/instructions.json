@@ -1,0 +1,17 @@
+{
+  "ac_id": "ac1",
+  "description": "Opening the date format select dropdown in document settings shows a scrollable list that does not extend beyond the viewport (max-height is constrained via max-h-60).",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "Wait for page load",
+    "Click the button with title 'Settings' (settings trigger button)",
+    "Wait for the heading 'Document Settings' to appear in the dialog",
+    "Click the 'Date Format' select dropdown to open it",
+    "Take screenshot to verify the dropdown list is visible and contained within the viewport with a scrollable area (not extending beyond screen bounds)"
+  ],
+  "screenshot_at": [
+    "date_format_dropdown_open_constrained"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0104-spec/evidence/ac1"
+}

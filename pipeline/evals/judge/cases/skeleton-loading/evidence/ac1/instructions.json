@@ -1,0 +1,14 @@
+{
+  "ac_id": "ac1",
+  "description": "The documentMeta creation, counter increment, and delegated owner validation execute concurrently via Promise.all rather than sequentially.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents",
+    "Wait for page load",
+    "Take screenshot of the documents list page to confirm the application loads and envelope creation infrastructure is functional"
+  ],
+  "screenshot_at": [
+    "documents_page_loaded"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac1"
+}

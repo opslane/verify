@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac3",
+  "observed": "The documents page at /t/personal_mwiasvikdmkwinfh/documents loaded successfully. The 'All' tab is selected and shows 'Showing 0 results.' — there are no documents in the list at all. All tabs (Inbox 0, Pending 0, Completed 0, Draft 0, All) show 0 counts. Two folders are visible: 'AC1 Second Folder' (0 documents) and 'AC1 Test Folder' (1 document). There are no documents in a partial or corrupted state; no documents with invalid statuses are present. The table rows appear empty with no document entries visible.",
+  "screenshots": [
+    "no_partial_state_documents.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac3/no_partial_state_documents.png"
+  ]
+}

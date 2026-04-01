@@ -1,0 +1,15 @@
+{
+  "ac_id": "ac3",
+  "observed": "After filling the Email input with 'Søren@gmail.com' and clicking 'Reset Password', the page remains on /forgot-password with the email field still showing 'Søren@gmail.com'. No client-side validation error message is visible. The form shows the same state as before submission — no inline error below the email field, no dialog, and no toast notification in the Notifications region.",
+  "screenshots": [
+    "after_submit_check_for_validation_error.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/forgot-password",
+    "snapshot",
+    "fill @e7 Søren@gmail.com",
+    "click @e8",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac3/after_submit_check_for_validation_error.png"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "ac_id": "ac4",
+  "observed": "The Date Format dropdown was opened successfully showing a listbox with 23 date format options. The dialog 'Document Settings' was visible with the heading present. The dropdown opened and showed all options. However, inspecting the source file packages/ui/primitives/select.tsx lines 66-74 reveals that SelectPrimitive.Viewport only has className 'p-1' (plus a conditional popper class) — the CSS classes 'max-h-60' and 'overflow-y-auto' are NOT applied to the Viewport element. The classes are absent from the component definition.",
+  "screenshots": [
+    "select_viewport_classes_verified.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "snapshot",
+    "click @e16",
+    "snapshot",
+    "click @e17",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-28-0104-spec/evidence/ac4/select_viewport_classes_verified.png"
+  ]
+}

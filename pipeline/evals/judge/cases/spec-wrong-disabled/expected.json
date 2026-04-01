@@ -1,0 +1,35 @@
+{
+  "case_id": "spec-wrong-disabled",
+  "description": "Multi-AC cross-pattern: AC1 passes (dialog opens), AC2-5 show disabled combobox elements. Judge should recognize the cross-AC pattern and return spec_unclear for disabled elements.",
+  "expected_verdicts": [
+    {
+      "ac_id": "ac1",
+      "expected_verdict": "pass",
+      "expected_confidence_min": "high"
+    },
+    {
+      "ac_id": "ac2",
+      "expected_verdict": "spec_unclear",
+      "expected_confidence_min": "high",
+      "required_reasoning_substrings": ["disabled"]
+    },
+    {
+      "ac_id": "ac3",
+      "expected_verdict": "spec_unclear",
+      "expected_confidence_min": "high",
+      "required_reasoning_substrings": ["disabled"]
+    },
+    {
+      "ac_id": "ac4",
+      "expected_verdict": "spec_unclear",
+      "expected_confidence_min": "high",
+      "required_reasoning_substrings": ["disabled"]
+    },
+    {
+      "ac_id": "ac5",
+      "expected_verdict": "spec_unclear",
+      "expected_confidence_min": "high",
+      "required_reasoning_substrings": ["disabled"]
+    }
+  ]
+}

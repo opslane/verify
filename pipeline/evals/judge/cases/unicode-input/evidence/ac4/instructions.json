@@ -1,0 +1,17 @@
+{
+  "ac_id": "ac4",
+  "description": "On /unverified-account, entering an international email like Søren@gmail.com in the Email address field and clicking Send confirmation email does not show a client-side email validation error.",
+  "url": "http://localhost:3003/unverified-account",
+  "steps": [
+    "Navigate to /unverified-account",
+    "Wait for page load",
+    "Fill the 'Email address' input with 'Søren@gmail.com'",
+    "Click the 'Send confirmation email' button",
+    "Wait 2 seconds for any validation errors to appear",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "after_submit_check_for_validation_error"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac4"
+}

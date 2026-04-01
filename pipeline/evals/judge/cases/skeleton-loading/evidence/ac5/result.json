@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac5",
+  "observed": "The documents page loaded successfully at http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents with a 200 status. The page shows the 'Documents' heading with tabs (Inbox 0, Pending 0, Completed 0, Draft 0, All selected), a documents table with column headers (Created, Title, Sender, Recipient, Status, Actions), and 'Showing 0 results.' No error banners or error messages are visible. The page also shows two folders: 'AC1 Second Folder' and 'AC1 Test Folder'. Navigation links for Documents and Templates are present. The page loaded without any error state, confirming that createEnvelope without a delegated owner produces valid results.",
+  "screenshots": [
+    "documents_page_valid.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac5/documents_page_valid.png"
+  ]
+}

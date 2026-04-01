@@ -1,0 +1,20 @@
+{
+  "ac_id": "ac5",
+  "description": "After changing the date format in the Settings dialog of a draft document with a CC recipient, the setting is saved successfully without error.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "Wait for page load",
+    "Click the 'Document Settings' button in the left sidebar Quick Actions",
+    "Wait for the 'Document Settings' dialog heading to appear",
+    "Click the date format dropdown/select element in the Settings dialog",
+    "Select a different date format value from the dropdown options",
+    "Click the save/update button in the Settings dialog to save the changes",
+    "Wait for the save operation to complete and check that no error toast or error message appears",
+    "Take screenshot showing the setting was saved successfully"
+  ],
+  "screenshot_at": [
+    "date_format_saved_successfully"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0438-spec/evidence/ac5"
+}

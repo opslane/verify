@@ -1,0 +1,26 @@
+{
+  "case_id": "setup-404",
+  "description": "All 4 ACs hit 404 Token Not Found. With AC descriptions, judge returns fail (AC not satisfied) since it can see what was expected.",
+  "expected_verdicts": [
+    {
+      "ac_id": "ac1",
+      "expected_verdict": "fail",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac2",
+      "expected_verdict": "fail",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac3",
+      "expected_verdict": "fail",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac4",
+      "expected_verdict": "fail",
+      "expected_confidence_min": "low"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "ac_id": "ac2",
+  "description": "The createEnvelope function returns the same correct result as before the parallelization change.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents",
+    "Wait for page load",
+    "Look for any existing documents in the documents table or the empty state message",
+    "Take screenshot to confirm documents list renders correctly with envelope data intact"
+  ],
+  "screenshot_at": [
+    "documents_list_rendered"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac2"
+}

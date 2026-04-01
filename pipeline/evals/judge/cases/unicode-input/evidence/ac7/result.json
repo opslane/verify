@@ -1,0 +1,18 @@
+{
+  "ac_id": "ac7",
+  "observed": "After navigating to /o/org_hbersosbneorktuw/settings/members and clicking 'Invite member', the 'Invite organisation members' dialog appeared. After filling the Email address field with 'Søren@gmail.com' and clicking the 'Invite' button, a client-side validation error paragraph with text 'Invalid email' appeared below the email input field. The dialog remains open with the email field showing 'Søren@gmail.com' and the error 'Invalid email' visible.",
+  "screenshots": [
+    "after_invite_check_for_validation_error.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/o/org_hbersosbneorktuw/settings/members",
+    "snapshot",
+    "click @e29",
+    "snapshot",
+    "fill @e10 Søren@gmail.com",
+    "click @e16",
+    "sleep 2",
+    "snapshot",
+    "screenshot after_invite_check_for_validation_error.png"
+  ]
+}

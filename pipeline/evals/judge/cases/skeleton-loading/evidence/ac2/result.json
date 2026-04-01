@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac2",
+  "observed": "The documents list page at /t/personal_mwiasvikdmkwinfh/documents rendered correctly. The page shows a Documents heading with tabs (Inbox 0, Pending 0, Completed 0, Draft 0, All - selected). A documents table is visible with columns: Created, Title, Sender, Recipient, Status, Actions. The table contains 5 rows (though cell content appears empty in snapshot, the rows are present). The pagination shows 'Showing 0 results.' with 'Page 1 of 1'. Two folders are visible: 'AC1 Second Folder' (0 documents, 0 folders) and 'AC1 Test Folder' (1 document, 0 folders). The page loaded successfully with no errors, indicating the envelope/document data structure renders correctly.",
+  "screenshots": [
+    "documents_list_rendered.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac2/documents_list_rendered.png"
+  ]
+}

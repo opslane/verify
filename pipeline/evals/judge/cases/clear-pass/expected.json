@@ -1,0 +1,27 @@
+{
+  "case_id": "clear-pass",
+  "description": "Document Settings dialog: AC1-3 pass (interactive elements work), AC4 fails (CSS classes missing).",
+  "expected_verdicts": [
+    {
+      "ac_id": "ac1",
+      "expected_verdict": "pass",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac2",
+      "expected_verdict": "pass",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac3",
+      "expected_verdict": "pass",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac4",
+      "expected_verdict": "fail",
+      "expected_confidence_min": "low",
+      "required_reasoning_substrings": ["max-h-60"]
+    }
+  ]
+}

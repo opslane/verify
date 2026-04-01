@@ -1,0 +1,18 @@
+{
+  "ac_id": "ac2",
+  "description": "In the Settings dialog of a draft document with a CC recipient, the timezone dropdown is interactive and allows selecting a different timezone value.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "Wait for page load",
+    "Click the 'Document Settings' button in the left sidebar Quick Actions",
+    "Wait for the 'Document Settings' dialog heading to appear",
+    "Click the timezone dropdown/select element in the Settings dialog",
+    "Select a different timezone value from the dropdown options (e.g., 'America/New_York' or any other available option)",
+    "Take screenshot showing the timezone dropdown with the newly selected value"
+  ],
+  "screenshot_at": [
+    "timezone_dropdown_changed"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0438-spec/evidence/ac2"
+}

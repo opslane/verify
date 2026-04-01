@@ -1,0 +1,49 @@
+{
+  "case_id": "unicode-input",
+  "description": "Unicode email validation: ACs say international email should NOT show validation error. AC1/6/7 fail (error shown), AC3/4/5 pass (no error), AC2 error (auth redirect), AC8 error (404).",
+  "expected_verdicts": [
+    {
+      "ac_id": "ac1",
+      "expected_verdict": "fail",
+      "expected_confidence_min": "low",
+      "required_reasoning_substrings": ["Invalid email"]
+    },
+    {
+      "ac_id": "ac2",
+      "expected_verdict": "error",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac3",
+      "expected_verdict": "pass",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac4",
+      "expected_verdict": "pass",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac5",
+      "expected_verdict": "pass",
+      "expected_confidence_min": "low"
+    },
+    {
+      "ac_id": "ac6",
+      "expected_verdict": "fail",
+      "expected_confidence_min": "low",
+      "required_reasoning_substrings": ["Invalid email"]
+    },
+    {
+      "ac_id": "ac7",
+      "expected_verdict": "fail",
+      "expected_confidence_min": "low",
+      "required_reasoning_substrings": ["Invalid email"]
+    },
+    {
+      "ac_id": "ac8",
+      "expected_verdict": "error",
+      "expected_confidence_min": "low"
+    }
+  ]
+}

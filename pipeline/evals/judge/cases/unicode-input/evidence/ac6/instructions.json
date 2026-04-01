@@ -1,0 +1,17 @@
+{
+  "ac_id": "ac6",
+  "description": "On /t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit, entering an international email like Søren@gmail.com in the signer email input field does not show a client-side email validation error.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "Wait for page load",
+    "Fill the element with data-testid 'signer-email-input' with 'Søren@gmail.com'",
+    "Press Tab to move focus away from the email input",
+    "Wait 2 seconds for any validation errors to appear",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "after_email_entry_check_for_validation_error"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac6"
+}

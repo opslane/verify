@@ -1,0 +1,15 @@
+{
+  "ac_id": "ac3",
+  "description": "The page load time for the embed envelope edit loader is not slower than before the change (no performance regression).",
+  "url": "http://localhost:3003/embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+  "steps": [
+    "Navigate to /embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+    "Wait for page load",
+    "Verify the page finishes loading and renders the envelope editor within a reasonable time (no visible loading spinners stuck or prolonged blank screens)",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "performance_check"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-27-1648-spec/evidence/ac3"
+}

@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac2",
+  "observed": "Auth redirect: Navigating to /signin redirected to the main application page (Personal Inbox) because the user is already authenticated. The page shows 'Personal Inbox' with 'AC1 Test User Personal Account' in the header. The signin form was never displayed, so no email validation could be tested.",
+  "screenshots": [
+    "after_submit_check_for_validation_error.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/signin",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-28-0506-spec/evidence/ac2/after_submit_check_for_validation_error.png"
+  ]
+}

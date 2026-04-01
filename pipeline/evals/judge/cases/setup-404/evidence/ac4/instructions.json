@@ -1,0 +1,16 @@
+{
+  "ac_id": "ac4",
+  "description": "The envelope data and team settings data are both correctly returned and rendered on the edit page after parallelization.",
+  "url": "http://localhost:3003/embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+  "steps": [
+    "Navigate to /embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+    "Wait for page load",
+    "Check that envelope data is rendered on the page (e.g., a PDF preview area, document title, or recipient fields are visible)",
+    "Check that team settings data is reflected on the page (e.g., editor configuration options, signature type settings, or branding elements are present)",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "envelope_and_settings_rendered"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-27-1648-spec/evidence/ac4"
+}

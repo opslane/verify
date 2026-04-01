@@ -1,0 +1,15 @@
+{
+  "ac_id": "ac5",
+  "description": "The createEnvelope function succeeds and returns the correct result when no delegated owner is specified.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents",
+    "Wait for page load",
+    "Verify the documents page loads correctly showing either the documents table or the empty state message without any error banners",
+    "Take screenshot confirming envelope creation without delegated owner produces valid results"
+  ],
+  "screenshot_at": [
+    "documents_page_valid"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac5"
+}

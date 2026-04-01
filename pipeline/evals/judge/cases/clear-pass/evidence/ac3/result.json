@@ -1,0 +1,20 @@
+{
+  "ac_id": "ac3",
+  "observed": "Navigated to the document edit page. Clicked 'Document Settings' button which opened a dialog with heading 'Document Settings'. The dialog contained a 'Time Zone' combobox showing 'Europe/London'. Clicked the combobox to open the dropdown, which displayed a scrollable list of timezone options (Etc/UTC, Africa/Abidjan, Africa/Accra, ... America/New_York, ... Pacific/Wallis). Clicked on 'America/New_York' option. After selection, the dropdown closed and the Time Zone combobox now shows 'America/New_York' as the selected value.",
+  "screenshots": [
+    "timezone_dropdown_open.png",
+    "timezone_option_selected.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "snapshot",
+    "click @e16",
+    "snapshot",
+    "click @e19",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-28-0104-spec/evidence/ac3/timezone_dropdown_open.png",
+    "click @e192",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-28-0104-spec/evidence/ac3/timezone_option_selected.png"
+  ]
+}

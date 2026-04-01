@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac1",
+  "observed": "The documents list page loaded successfully at http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents. The page shows a 'Documents' heading with tabs for Inbox, Pending, Completed, Draft, and All (currently selected). The navigation bar includes links to Documents and Templates. The page shows document upload options ('Upload Document' and 'Document (Legacy)'), a 'Create Folder' button, and two folders: 'AC1 Second Folder' (0 documents, 0 folders) and 'AC1 Test Folder' (1 document, 0 folders). The documents table shows 'Showing 0 results.' with columns for Created, Title, Sender, Recipient, Status, and Actions. The application loads and envelope creation infrastructure is functional.",
+  "screenshots": [
+    "documents_page_loaded.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-27-1639-spec/evidence/ac1/documents_page_loaded.png"
+  ]
+}

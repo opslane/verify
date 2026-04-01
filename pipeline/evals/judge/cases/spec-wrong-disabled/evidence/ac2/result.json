@@ -1,0 +1,24 @@
+{
+  "ac_id": "ac2",
+  "nav_failure": {
+    "kind": "interaction",
+    "failed_step": "click @e19 (timezone combobox [disabled])",
+    "error": "Operation timed out: click: Timeout 5000ms exceeded.",
+    "page_snapshot": "@e1 [dialog] \"Document Settings\"\n  @e2 [heading] \"Document Settings\" [level=2]\n  @e3 [navigation]\n    @e4 [button] \"General\"\n    @e5 [button] \"Email\"\n    @e6 [button] \"Security\"\n  @e7 [heading] \"General\" [level=3]\n  @e8 [paragraph]: Configure document settings and options before sending.\n  @e9 [group]\n    @e10 [text]: Language\n    @e11 [button]\n    @e12 [combobox]: English\n    @e13 [text]: Allowed Signature Types\n    @e14 [button]\n    @e15 [combobox]: Type, Draw, Upload\n    @e16 [text]: Date Format\n    @e17 [combobox] [disabled]: DD/MM/YYYY HH:mm\n    @e18 [text]: Time Zone\n    @e19 [combobox] [disabled]: Europe/London\n    @e20 [text]: External ID\n    @e21 [button]\n    @e22 [textbox] \"External ID\": test-external-id-123\n    @e23 [text]: Redirect URL\n    @e24 [button]\n    @e25 [textbox] \"Redirect URL\": https://example.com/updated-redirect\n    @e26 [text]: Document Distribution Method\n    @e27 [button]\n    @e28 [combobox]: Email\n    @e29 [text]: Expiration\n    @e30 [button]\n    @e31 [combobox] [disabled]\n  @e32 [button] \"Cancel\"\n  @e33 [button] \"Update\"\n  @e34 [button] \"Close\""
+  },
+  "screenshots": [
+    "timezone_dialog_initial.png",
+    "nav-failure.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "snapshot",
+    "click @e16",
+    "snapshot",
+    "screenshot timezone_dialog_initial.png",
+    "click @e19",
+    "snapshot",
+    "screenshot nav-failure.png"
+  ],
+  "observed": "Nav failure during click @e19 (timezone combobox [disabled]): Operation timed out: click: Timeout 5000ms exceeded."
+}

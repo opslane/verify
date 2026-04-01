@@ -1,0 +1,16 @@
+{
+  "ac_id": "ac1",
+  "observed": "The Document Settings dialog opened successfully with the heading 'Document Settings'. The Date Format combobox was clicked and a scrollable listbox appeared showing 22 date format options including 'YYYY-MM-DD hh:mm AM/PM', 'DD/MM/YYYY HH:mm' (currently selected), 'ISO 8601', and others. The dropdown list is visible as a listbox containing all date format options. The screenshot confirms the dropdown list opened and is visible on the page.",
+  "screenshots": [
+    "date_format_dropdown_open_constrained.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "snapshot",
+    "click @e16",
+    "snapshot",
+    "click @e17",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-28-0104-spec/evidence/ac1/date_format_dropdown_open_constrained.png"
+  ]
+}

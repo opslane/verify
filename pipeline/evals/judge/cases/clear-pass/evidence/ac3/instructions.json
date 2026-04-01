@@ -1,0 +1,20 @@
+{
+  "ac_id": "ac3",
+  "description": "The timezone select dropdown in document settings still opens, displays options, and allows selection after the viewport constraint change.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "Wait for page load",
+    "Click the button with title 'Settings' (settings trigger button)",
+    "Wait for the heading 'Document Settings' to appear in the dialog",
+    "Click the 'Time Zone' select dropdown to open it",
+    "Take screenshot showing the timezone dropdown is open with visible options in a scrollable list",
+    "Click on a timezone option from the list to select it",
+    "Take screenshot to verify the selected timezone is now shown as the selected value"
+  ],
+  "screenshot_at": [
+    "timezone_dropdown_open",
+    "timezone_option_selected"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0104-spec/evidence/ac3"
+}

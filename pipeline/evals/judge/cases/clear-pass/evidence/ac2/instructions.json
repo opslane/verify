@@ -1,0 +1,21 @@
+{
+  "ac_id": "ac2",
+  "description": "The date format select dropdown displays all available options and allows selecting any option from the scrollable list.",
+  "url": "http://localhost:3003/t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+  "steps": [
+    "Navigate to /t/personal_mwiasvikdmkwinfh/documents/envelope_tmdiotunmyndrtuk/edit",
+    "Wait for page load",
+    "Click the button with title 'Settings' (settings trigger button)",
+    "Wait for the heading 'Document Settings' to appear in the dialog",
+    "Click the 'Date Format' select dropdown to open it",
+    "Take screenshot showing the list of available date format options",
+    "Scroll down within the dropdown list to see additional options if present",
+    "Click on a date format option from the list (e.g., one that is different from the current selection)",
+    "Take screenshot to verify the selected date format option is now shown as the selected value"
+  ],
+  "screenshot_at": [
+    "date_format_options_visible",
+    "date_format_option_selected"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-28-0104-spec/evidence/ac2"
+}

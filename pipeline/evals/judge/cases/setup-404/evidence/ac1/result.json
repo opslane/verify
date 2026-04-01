@@ -1,0 +1,12 @@
+{
+  "ac_id": "ac1",
+  "observed": "The page displays 'Token Not Found' with two list items: 'Ensure that you are using the embedding token, not the API token' and 'If you are using staging, ensure that you have set the host prop on the embedding component to the staging domain (https://stg-app.documenso.com)'. The page returned a 404 status. No envelope editor interface is displayed — only the Token Not Found error message.",
+  "screenshots": [
+    "editor_loaded_no_errors.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+    "snapshot",
+    "screenshot /tmp/documenso-verify/runs/2026-03-27-1648-spec/evidence/ac1/editor_loaded_no_errors.png"
+  ]
+}

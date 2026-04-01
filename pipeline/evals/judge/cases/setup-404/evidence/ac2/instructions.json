@@ -1,0 +1,16 @@
+{
+  "ac_id": "ac2",
+  "description": "The getTeamSettings and getEditorEnvelopeById queries execute concurrently via Promise.all rather than sequentially.",
+  "url": "http://localhost:3003/embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+  "steps": [
+    "Navigate to /embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+    "Wait for page load",
+    "Check that the page loads completely without timeout or excessive delay (page should load within a few seconds, indicating no sequential bottleneck)",
+    "Check that the editor UI is fully rendered with both document content and settings controls visible",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "page_loaded_promptly"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-27-1648-spec/evidence/ac2"
+}

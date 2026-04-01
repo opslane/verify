@@ -1,0 +1,17 @@
+{
+  "ac_id": "ac1",
+  "observed": "After filling the form with Name 'Test User', Email 'Søren@gmail.com', Password 'TestPassword123!' and clicking 'Create account', the page remained on /signup and displayed a client-side validation error paragraph with text 'Invalid email' below the Email Address field (@e21). The form was not submitted successfully.",
+  "screenshots": [
+    "after_submit_check_for_validation_error.png"
+  ],
+  "commands_run": [
+    "goto http://localhost:3003/signup",
+    "snapshot",
+    "fill @e18 Test User",
+    "fill @e20 Søren@gmail.com",
+    "fill @e22 TestPassword123!",
+    "click @e30",
+    "snapshot",
+    "screenshot after_submit_check_for_validation_error.png"
+  ]
+}

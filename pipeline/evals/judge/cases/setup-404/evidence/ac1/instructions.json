@@ -1,0 +1,16 @@
+{
+  "ac_id": "ac1",
+  "description": "The embed envelope edit page loads successfully and displays the envelope editor without errors.",
+  "url": "http://localhost:3003/embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+  "steps": [
+    "Navigate to /embed/v2/authoring/envelope/edit/envelope_tmdiotunmyndrtuk",
+    "Wait for page load",
+    "Check that no error message such as 'Oops! Something went wrong' or 'Token Not Found' is displayed on the page",
+    "Check that the page displays an envelope editor interface (e.g., a PDF document viewer area or editor controls)",
+    "Take screenshot"
+  ],
+  "screenshot_at": [
+    "editor_loaded_no_errors"
+  ],
+  "evidence_dir": "/tmp/documenso-verify/runs/2026-03-27-1648-spec/evidence/ac1"
+}
