@@ -112,32 +112,59 @@ export async function runPipeline(
   }
 
   // ── Stage 2: Planner + Validator ──────────────────────────────────────
-  callbacks.onLog("Stage 2: Planning browser steps...");
-  const planPrompt = buildPlannerPrompt(join(runDir, "acs.json"));
-  const planResult = await runClaude({
-    prompt: planPrompt, model: "opus", timeoutMs: 240_000,
-    stage: "planner", runDir, ...perms("planner"),
-  });
-  let plan = parsePlannerOutput(planResult.stdout);
+  const usePlannerSDK = process.env.VERIFY_PLANNER_SDK === "1";
+  callbacks.onLog(`Stage 2: Planning browser steps...${usePlannerSDK ? " (SDK)" : ""}`);
+
+  let plan: PlannerOutput | null;
+  let validation;
+
+  if (usePlannerSDK) {
+    // SDK path: same prompt, same tools (via bypassPermissions), same model
+    const { runPlannerSDK } = await import("./stages/planner-sdk.js");
+    const sdkResult = await runPlannerSDK({
+      acsPath: join(runDir, "acs.json"),
+      appIndex,
+      timeoutMs: 240_000,
+      stage: "planner",
+      runDir,
+      cwd: projectRoot,
+    });
+    plan = sdkResult.plan;
+    // SDK handles validate + retry internally
+    validation = plan ? validatePlan(plan, appIndex) : { valid: false, errors: [] };
+  } else {
+    const planPrompt = buildPlannerPrompt(join(runDir, "acs.json"), appIndex);
+    const planResult = await runClaude({
+      prompt: planPrompt, model: "opus", timeoutMs: 240_000,
+      stage: "planner", runDir, ...perms("planner"),
+    });
+    plan = parsePlannerOutput(planResult.stdout);
+
+    if (!plan) {
+      callbacks.onError("Planner failed. Check logs: " + join(runDir, "logs"));
+      return { runDir, verdicts: null };
+    }
+
+    // Validate + one retry (CLI path only — SDK handles this internally)
+    validation = validatePlan(plan, appIndex);
+    if (!validation.valid) {
+      callbacks.onLog("Plan has errors, retrying with feedback...");
+      const retryPrompt = buildRetryPrompt(join(runDir, "acs.json"), validation.errors, appIndex);
+      const retryResult = await runClaude({
+        prompt: retryPrompt, model: "opus", timeoutMs: 240_000,
+        stage: "planner-retry", runDir, ...perms("planner"),
+      });
+      const retryPlan = parsePlannerOutput(retryResult.stdout);
+      if (retryPlan) {
+        plan = retryPlan;
+        validation = validatePlan(plan, appIndex);
+      }
+    }
+  }
+
   if (!plan) {
     callbacks.onError("Planner failed. Check logs: " + join(runDir, "logs"));
     return { runDir, verdicts: null };
-  }
-
-  // Validate + one retry
-  let validation = validatePlan(plan, appIndex);
-  if (!validation.valid) {
-    callbacks.onLog("Plan has errors, retrying with feedback...");
-    const retryPrompt = buildRetryPrompt(join(runDir, "acs.json"), validation.errors);
-    const retryResult = await runClaude({
-      prompt: retryPrompt, model: "opus", timeoutMs: 240_000,
-      stage: "planner-retry", runDir, ...perms("planner"),
-    });
-    const retryPlan = parsePlannerOutput(retryResult.stdout);
-    if (retryPlan) {
-      plan = retryPlan;
-      validation = validatePlan(plan, appIndex);
-    }
   }
 
   // Filter out ACs that still have errors

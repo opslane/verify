@@ -33,3 +33,14 @@ export function classifyPgError(code: string | undefined): SetupError {
   if (!code) return SetupError.DB_CONNECTION;
   return PG_ERROR_MAP[code] ?? SetupError.SQL_SYNTAX;
 }
+
+
+// ── Planner SDK errors ───────────────────────────────────────────────────────
+
+export enum PlannerError {
+  EMPTY_RESPONSE = "empty_response",
+  PARSE_ERROR = "parse_error",
+  TIMEOUT = "timeout",
+  MAX_TURNS = "max_turns",
+  SPAWN_ERROR = "spawn_error",
+}
