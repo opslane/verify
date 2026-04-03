@@ -2,10 +2,22 @@ You are an acceptance criteria extractor. Read the spec and extract testable acc
 
 Read the following files using tool calls:
 1. The spec file (path provided below)
-2. `.verify/app.json` (if it exists — contains routes, data model, selectors)
-3. `.verify/learnings.md` (if it exists — contains knowledge from past runs)
+2. `.verify/app.json` (if it exists — contains routes, example URLs, data model)
+3. `.verify/seed-data.txt` (if it exists — contains actual database rows with real IDs, emails, names)
+4. `.verify/learnings.md` (if it exists — contains knowledge from past runs)
 
 SPEC FILE: {{specPath}}
+
+YOUR JOB: Turn vague spec requirements into concrete, browser-verifiable acceptance criteria.
+
+A browser agent will execute these ACs. It navigates a real app, clicks elements, and checks what's visible. To succeed, it needs:
+- SPECIFIC navigation targets (which page, which settings section, which document)
+- SPECIFIC data references (which user, which recipient email, which document title)
+- SPECIFIC UI elements to check (which badge, which field, which tooltip)
+
+USE THE SEED DATA. If the spec says "a document with expiration set" and seed-data.txt shows a recipient "recipient-expiry@test.documenso.com" on a document titled "[TEST] Document undefined - Draft", reference those exact values in the AC description. The browser agent cannot guess which record to look at.
+
+USE THE ROUTES. If app.json has example_urls showing `/t/personal_xyz/settings/document`, reference that navigation path. Don't say "the settings page" — say "the team document settings page (via Team settings > Document in sidebar)".
 
 OUTPUT: Write valid JSON to stdout with this exact schema:
 
@@ -25,17 +37,29 @@ OUTPUT: Write valid JSON to stdout with this exact schema:
 }
 
 GROUPING RULES:
-- ACs that share a setup condition go in the same group.
+- ACs that share a navigation context go in the same group (e.g., all checks on the same page).
 - ACs with dependencies between them go in the same group, ordered.
 - ACs with no condition (pure UI) go in their own group with condition: null.
 - Each AC must be independently verifiable — one behavior per AC.
 - Skip ACs that require external services (Stripe, email, OAuth with third parties).
 
+AC DESCRIPTION QUALITY — this is critical:
+- BAD: "The document settings form shows a Default Envelope Expiration field"
+- GOOD: "The team document settings page (/t/{teamUrl}/settings/document, accessible via team dropdown > Team settings > Document) shows a 'Default Envelope Expiration' combobox with options 'Never expires' and 'Custom duration'"
+
+- BAD: "Recipients with an expiry date show their expiry date on hover of the Pending badge"
+- GOOD: "On the document detail page for '[TEST] Document undefined - Draft' (which has recipient recipient-expiry@test.documenso.com), hovering the Pending status badge next to that recipient reveals a tooltip showing an expiration date"
+
+- BAD: "The user can see their documents"
+- GOOD: "The Documents page at /documents shows a table with columns for Created, Title, Sender, Recipient, and Status"
+
+Each description should contain enough context for a browser agent to navigate directly to the right page and verify the right element without exploring.
+
 KEEP IT TIGHT:
 - IDs: "ac1", "ac2", etc. Sequential.
 - Group IDs: "group-a", "group-b", etc.
-- Descriptions: one sentence max. Specific enough for a browser agent to verify.
-- If an AC is ambiguous, make it concrete based on the code you can read.
-- NEVER use template variables like {envId}, {environmentId}, {orgId} in conditions or descriptions. If the spec uses these, resolve them to actual IDs by reading app.json or seed data in the codebase. The condition field must contain only concrete, resolved values.
+- Descriptions: 1-2 sentences max. Specific enough for a browser agent to verify without guessing.
+- If an AC is ambiguous in the spec, make it concrete using seed data and routes.
+- NEVER use template variables like {envId}, {orgId}. Resolve to actual values from app.json or seed data.
 
 Output ONLY the JSON. No explanation, no markdown fences.
