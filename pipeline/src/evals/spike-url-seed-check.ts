@@ -394,7 +394,7 @@ function main() {
     "2. It CANNOT verify attribute-level conditions (dropdown fields, description length, roles)",
   );
   console.log(
-    `3. Of ${total} conditions, ${results.filter((r) => r.hasAttributeCheck).length} require attribute checks that URL-only inference misses`,
+    `3. Of ${total} conditions, ${results.filter((r) => (r as Record<string, unknown>).hasAttributeCheck).length} require attribute checks that URL-only inference misses`,
   );
   console.log(
     "4. False positives are the dangerous case — they would skip setup that's actually needed",

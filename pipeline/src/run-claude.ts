@@ -94,11 +94,14 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
           eventCount++;
           lastEventType = evt.type ?? "";
 
-          // Report tool use activity
+          // Report tool use activity with input content
           if (onProgress && evt.type === "assistant" && evt.message?.content) {
             for (const block of evt.message.content) {
               if (block.type === "tool_use" && block.name) {
-                onProgress({ stage, event: "tool_call", detail: block.name });
+                // Extract tool input for supervisor visibility
+                const input = (block as Record<string, unknown>).input as Record<string, unknown> | undefined;
+                const toolInput = input?.command as string ?? input?.description as string ?? undefined;
+                onProgress({ stage, event: "tool_call", detail: block.name, toolInput });
               }
             }
           }

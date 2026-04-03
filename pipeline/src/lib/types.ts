@@ -95,7 +95,7 @@ export interface BrowseResult {
 
 // ── Judge output (with confidence scoring) ──────────────────────────────────
 
-export type Verdict = "pass" | "fail" | "error" | "timeout" | "skipped"
+export type Verdict = "pass" | "fail" | "blocked" | "unclear" | "error" | "timeout" | "skipped"
   | "setup_failed" | "setup_unsupported" | "plan_error" | "auth_expired"
   | "login_failed" | "spec_unclear";
 
@@ -168,6 +168,8 @@ export interface StageProgressEvent {
   stage: string;
   event: "tool_call" | "output" | "heartbeat";
   detail?: string;
+  /** For tool_call events: the tool input (e.g. the bash command). */
+  toolInput?: string;
 }
 
 // ── Run Claude helper ───────────────────────────────────────────────────────
@@ -202,12 +204,9 @@ export type RunClaudeFn = (opts: RunClaudeOptions) => Promise<RunClaudeResult>;
 
 export const STAGE_PERMISSIONS: Record<string, Pick<RunClaudeOptions, "dangerouslySkipPermissions" | "allowedTools">> = {
   "ac-generator":  { dangerouslySkipPermissions: true },   // needs Read, Grep for spec + app.json
-  "planner":       { dangerouslySkipPermissions: true },   // needs Read, Grep, Glob for full codebase
-  "setup-writer":  { allowedTools: ["Bash"] },                  // Bash for psql queries + setup commands (schema injected in prompt)
-  "browse-agent":  { allowedTools: ["Bash", "Read"] },      // Bash for browse CLI, Read for instructions.json
-  "browse-replan": { allowedTools: ["Read"] },              // reads replan-input.json only — DOM content is attacker-controllable
-  "judge":         { allowedTools: ["Read"] },              // only reads evidence files
-  "learner":       { dangerouslySkipPermissions: true },   // needs Read + Write for learnings.md
+  "executor":      { allowedTools: ["Bash", "Read"] },      // Bash for browse CLI, Read for page content
+  "index-agent":   { dangerouslySkipPermissions: true },   // needs Read, Grep, Glob for codebase indexing
+  "browse-agent":  { allowedTools: ["Bash", "Read"] },      // legacy — kept for run-stage debugging
   "login-agent":   { allowedTools: ["Bash"] },              // Bash for browse CLI only — used during /verify-setup
 };
 

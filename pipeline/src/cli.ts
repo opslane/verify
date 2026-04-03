@@ -166,7 +166,7 @@ if (command === "run") {
           stage: `index-${agent.name}`,
           runDir,
           cwd: projectDir,
-                   ...STAGE_PERMISSIONS["planner"], // needs Read, Grep, Glob
+                   ...STAGE_PERMISSIONS["index-agent"], // needs Read, Grep, Glob
         });
         // Read the output file the agent wrote
         const raw = readFs(agent.outputFile, "utf-8");
@@ -431,9 +431,8 @@ if (command === "run") {
         browseBin: resolveBrowseBin(),
         evidenceDir,
       });
-      const { computeTimeoutMs } = await import("./orchestrator.js");
       const browseTimeoutMs = timeoutOverrideMs
-        ?? (typeof ac.timeout_seconds === "number" ? ac.timeout_seconds * 1000 : computeTimeoutMs(ac.steps));
+        ?? (typeof ac.timeout_seconds === "number" ? ac.timeout_seconds * 1000 : 90_000);
       const result = await runClaude({ prompt, model: "sonnet", timeoutMs: browseTimeoutMs, stage: `browse-agent-${acId}`, runDir, settingSources: "", ...permissions });
       const parsed = parseBrowseResult(result.stdout);
       if (parsed) {
