@@ -25,6 +25,29 @@ export function formatTerminalReport(verdicts: ACVerdict[]): string {
     lines.push(`  ${icon} ${v.ac_id}: ${v.verdict}${conf} \u2014 ${v.reasoning}`);
   }
 
+  const blocked = verdicts.filter(v => v.verdict === "blocked");
+  if (blocked.length > 0) {
+    lines.push("");
+    lines.push("  BLOCKERS (missing data or state):");
+    for (const v of blocked) {
+      lines.push(`    \u2192 ${v.ac_id}: ${v.reasoning}`);
+    }
+  }
+
+  const unclear = verdicts.filter(v => v.verdict === "unclear");
+  if (unclear.length > 0) {
+    lines.push("");
+    lines.push("  UNCLEAR (could not determine pass/fail):");
+    for (const v of unclear) {
+      lines.push(`    ? ${v.ac_id}: ${v.reasoning}`);
+    }
+  }
+
+  if (unclear.length > verdicts.length * 0.5 && verdicts.length > 0) {
+    lines.push("");
+    lines.push(`  \u26a0 ${unclear.length}/${verdicts.length} ACs are unclear. The spec may need more detail.`);
+  }
+
   const specUnclear = verdicts.filter(v => v.verdict === "spec_unclear");
   if (specUnclear.length > 0) {
     lines.push("");
