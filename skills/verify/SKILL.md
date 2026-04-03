@@ -10,7 +10,6 @@ Verify your frontend changes before pushing.
 ## Prerequisites
 - Dev server running (e.g. `npm run dev`)
 - Auth set up (`/verify-setup`) if app requires login
-- App indexed (`/verify-setup` step 7) for column mappings and seed IDs
 
 ## Conversation Flow
 
@@ -24,17 +23,25 @@ This skill is turn-based. Each turn has a trigger and a bounded set of actions. 
 
 **Check for arguments first.** If the user passed a file path as an argument (e.g. `/verify path/to/spec.md`), skip this turn entirely — go straight to Turn 2 using that path.
 
-**Otherwise**, send this message and end your response:
+**Otherwise**, try smart spec discovery first:
+
+```bash
+find . -maxdepth 3 -name "*.md" \( -name "*spec*" -o -name "*plan*" -o -name "*requirements*" -o -name "*acceptance*" \) -not -path "./.verify/*" -not -path "./node_modules/*" -not -path "./.git/*" 2>/dev/null | head -5
+```
+
+- If **exactly 1 file** found: suggest it to the user. "Found a likely spec: `path/to/spec.md`. Use this? (y/n)"
+- If **multiple files** found: show the list and ask the user to pick one.
+- If **no files** found: send this message and end your response:
 
 > "What spec are you verifying? Paste the spec content or give a file path."
 
-Do not call any tools. Do not run any bash commands. Do not read any files. End your response and wait for the user to reply.
+Do not call any other tools. End your response and wait for the user to reply.
 
 ---
 
 ## Turn 2: Read Spec + Pre-flight
 
-**Trigger:** User has provided a spec (pasted content or file path).
+**Trigger:** User has provided a spec (pasted content, file path, or confirmed a discovered file).
 
 1. If they gave a **file path** — read the file now with the Read tool.
 2. If they **pasted content** — first create the directory, then write the file:
@@ -51,9 +58,6 @@ Then run pre-flight checks:
 # Check dev server
 BASE_URL=$(jq -r '.baseUrl' .verify/config.json 2>/dev/null || echo "http://localhost:3000")
 curl -sf "$BASE_URL" > /dev/null 2>&1 || { echo "⚠ Dev server not running at $BASE_URL"; exit 1; }
-
-# Check app.json exists
-[ -f .verify/app.json ] || echo "⚠ No .verify/app.json — run /verify-setup first for column mappings"
 ```
 
 Proceed to Turn 3.
@@ -108,12 +112,8 @@ npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts run \
 ```
 
 The pipeline runs these stages automatically:
-1. **AC Generator** — extracts testable acceptance criteria from the spec
-2. **Planner** — plans browser steps, URLs, and screenshots for each AC
-3. **Setup Writer** — generates SQL to set up the required DB state (reads column mappings from app.json)
-4. **Browse Agents** — navigates the app and captures evidence (parallel per group)
-5. **Judge** — evaluates evidence against each AC
-6. **Learner** — writes corrections to `.verify/learnings.md` for future runs
+1. **AC Extractor** — extracts testable acceptance criteria from the spec
+2. **Executor** — navigates the app, verifies each AC, collects screenshots and evidence
 
 Wait for completion, then show results.
 
@@ -127,6 +127,14 @@ After the pipeline finishes, show results:
 echo ""
 echo "Results:"
 cat .verify/runs/*/verdicts.json 2>/dev/null | jq -r '.verdicts[] | "  \(if .verdict == "pass" then "✓" else "✗" end) \(.ac_id): \(.verdict) — \(.reasoning[:100])"'
+echo ""
+echo "Evidence report:"
+ls .verify/runs/*/report.html 2>/dev/null
+```
+
+If an HTML report exists, offer to open it:
+```bash
+open .verify/runs/*/report.html 2>/dev/null || true
 ```
 
 ---
@@ -136,7 +144,6 @@ cat .verify/runs/*/verdicts.json 2>/dev/null | jq -r '.verdicts[] | "  \(if .ver
 | Failure | Action |
 |---------|--------|
 | Dev server not running | Print error, stop |
-| No app.json | Warn, suggest `/verify-setup` |
 | All agents timeout/error | Print "Check dev server and auth", suggest `/verify-setup` |
 | Pipeline exits non-zero | Print "Check logs in .verify/runs/" |
 | Auth redirects on all ACs | Auth cookies expired — re-run `/verify-setup` |
@@ -144,10 +151,10 @@ cat .verify/runs/*/verdicts.json 2>/dev/null | jq -r '.verdicts[] | "  \(if .ver
 ## Quick Reference
 
 ```bash
-/verify-setup                                          # one-time auth + app indexing
+/verify-setup                                          # one-time auth setup
 /verify                                                # run pipeline
 /verify path/to/spec.md                                # run with specific spec
 cat .verify/runs/*/verdicts.json | jq                  # check verdicts
 ls .verify/runs/*/evidence/                            # browse evidence
-cat .verify/learnings.md                               # see accumulated learnings
+open .verify/runs/*/report.html                        # open HTML evidence report
 ```

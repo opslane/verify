@@ -90,42 +90,68 @@ Deferred work captured from plan reviews. Each item includes enough context to p
 
 ---
 
-## P2 — Multi-ORM Setup Writer support (Prisma done, Drizzle/TypeORM remaining)
+## ~~P2 — Multi-ORM Setup Writer support~~ SUPERSEDED
 
-**What:** Add Setup Writer prompt variants for Drizzle, TypeORM, and raw SQL (no ORM).
+> Removed: v1 removes setup-writer entirely. If setup-writer is re-added in v2, this TODO becomes relevant again.
 
-**Why:** Pipeline now dispatches ORM-specific setup writer prompts via `detectORM()` in `setup-writer.ts`. Prisma path is complete (`setup-writer-prisma.txt`), including `pg_dump --schema-only` for DDL and JSONB type annotation extraction. Drizzle and TypeORM users still get the generic fallback prompt.
+---
 
-**Context:** Infrastructure is in place: `detectORM()` returns `"prisma" | "drizzle" | "unknown"`, `buildSetupWriterPrompt()` selects prompt by ORM, `schema.sql` is generated during index-app. Adding a new ORM means: (1) new prompt file `setup-writer-drizzle.txt`, (2) possibly a schema parser in `drizzle-parser.ts`. The generic prompt + schema.sql handles most cases; ORM-specific prompts add column mapping awareness.
+## P2 — Create eval cases for v1 stages (AC Extractor + Executor)
 
-**Depends on:** Nothing — infrastructure is shipped.
+**What:** Create eval cases for the 2 LLM stages in the v1 pipeline: AC Extractor and Executor. 2-3 golden input/output pairs per stage.
+
+**Why:** The v1 pipeline has only 2 LLM stages (down from 6). Eval coverage is simpler but still needed to catch prompt regressions. The spikes will produce initial eval data, but structured eval cases should be formalized.
+
+**Context:** AC Extractor eval: known spec → expected AC structure (correct will_verify/out_of_scope classification, correct field extraction). Executor eval: known AC + evidence dir → expected verdict (pass/fail/blocked matches human judgment). Use spike results from Documenso as the first eval cases. Existing eval infrastructure in `pipeline/evals/` was deleted on this branch — build fresh with vitest.
+
+**Depends on:** v1 pipeline shipping first + spike results.
 
 **Effort:** S human → XS with CC+gstack
 
 ---
 
-## P2 — Migrate eval sets to v2 stage boundaries
+## ~~P3 — Multi-condition entity graph merging~~ SUPERSEDED
 
-**What:** Create v2-compatible eval cases for each LLM stage (AC Generator, Planner, Setup Writer, Browse Agent, Judge, Learner), informed by but not constrained by `docs/evals/eval-set-v1.json`.
+> Removed: v1 removes setup-writer and graph-setup entirely. If setup-writer is re-added in v2, this TODO becomes relevant again.
 
-**Why:** eval-set-v1.json assumes combined AC extraction + plan generation in a single planner call. v2 splits this into two stages with different inputs and outputs. The old eval set won't work with the new stage interfaces, and attempting to port it 1:1 would miss the new stage boundaries (e.g., AC grouping logic, plan validator checks).
+---
 
-**Context:** For each stage, define 2-3 eval scenarios: known input → expected output shape + key assertions. Priority stages: (1) **Setup Writer (graph-informed)** — test root table selection accuracy, value generation quality, SQL execution success rate across entity types (eng review 2026-03-25), (2) Planner — most failure-prone in v1, (3) Judge — highest-stakes verdicts, (4) AC Generator — grouping logic is new.
+## P2 — Optional Judge stage for executor accuracy
 
-**Depends on:** Pipeline v2 shipping first. Eval infrastructure (how to run evals) should be decided during implementation.
+**What:** If executor self-judgment accuracy is <85% after 5 real runs, re-add a separate judge stage that reviews evidence independently from the executor.
+
+**Why:** v1 merges navigation + interaction + judgment into a single executor LLM call. This is simpler but the prompt is doing a lot. A separate judge looking only at screenshots + step traces vs AC descriptions can catch false passes and false fails that the executor (which is also navigating) might miss.
+
+**Context:** The original pipeline had a separate judge stage at `stages/judge.ts` (41 LOC) + `prompts/judge.txt`. The judge received evidence paths and AC descriptions, then emitted verdicts. Re-adding it means: (1) keep executor verdicts as "first-pass", (2) run judge on evidence for ACs where executor said pass/fail, (3) use judge verdict as final. Config flag: `config.useJudge: boolean`. Measure accuracy by human review of evidence vs verdict on 5 real spec runs.
+
+**Depends on:** v1 pipeline shipping first + 5 real test runs to measure accuracy.
+
+**Effort:** S human → XS with CC+gstack
+
+---
+
+## P2 — Conditional parallelism for independent ACs
+
+**What:** After v1 proves sequential execution works, add back optional parallel execution for ACs that don't share page state or navigation context.
+
+**Why:** 10+ ACs running sequentially at ~25s each = 4+ minutes. Parallel execution for independent ACs (e.g., checking text on different pages) could cut runtime to ~1-2 minutes. The current pipeline already has parallel execution infrastructure (per-group browse daemons).
+
+**Context:** The v1 pipeline runs all ACs sequentially in one browser session. To add parallelism: (1) classify ACs as "independent" (different pages, no shared state) vs "dependent" (same page, sequential interaction), (2) run independent groups in parallel with separate browse daemons, (3) run dependent ACs sequentially within each group. Reuse existing `startGroupDaemon`/`stopGroupDaemon` from `lib/browse.ts`.
+
+**Depends on:** v1 stability proven over 10+ real runs.
 
 **Effort:** M human → S with CC+gstack
 
 ---
 
-## P3 — Multi-condition entity graph merging for setup-writer
+## P3 — CI mode with GitHub comment reporting
 
-**What:** When a condition group references entities across multiple root tables (e.g., "a document exists AND a template with a direct link"), the graph-informed setup-writer only picks one root table via LLM. Need to merge graphs from multiple roots.
+**What:** Add a `--ci` flag to the pipeline CLI that outputs JSON results and posts a GitHub PR comment with the verdict summary and evidence links.
 
-**Why:** Some acceptance criteria naturally span multiple entity types. The planner groups ACs by related entity, which should minimize this, but edge cases exist. If the planner doesn't scope well enough, setup will fail on multi-entity conditions.
+**Why:** The research doc explicitly defers CI-first workflow, but it's the natural next step after local verification works. The server/src/verify/ code already has PR comment posting (`comment.ts`) and spec discovery from PR descriptions (`spec-discovery.ts`) that can be adapted.
 
-**Context:** The graph-informed setup-writer (docs/plans/2026-03-25-graph-informed-setup-writer.md) uses a micro-LLM-prompt to pick a single root table, then loads that table's entity graph. To handle multi-root conditions: (1) ask the LLM for multiple root tables, (2) merge their graphs (union of tables, union of insert orders with cross-graph FK resolution), (3) build a combined prompt. Monitor whether single-root-table fails on real conditions before implementing.
+**Context:** The server pipeline (`server/src/verify/pipeline.ts`) already runs a similar flow in E2B sandboxes with PR webhook triggers. The local pipeline could add: (1) `--ci` flag that skips interactive prompts, (2) JSON output to stdout, (3) optional `--pr owner/repo#123` flag that posts a comment using `gh api`. This bridges the local and remote verify paths.
 
-**Depends on:** Graph-informed setup-writer shipping first.
+**Depends on:** v1 local pipeline shipping first.
 
-**Effort:** S human → XS with CC+gstack
+**Effort:** M human → S with CC+gstack
