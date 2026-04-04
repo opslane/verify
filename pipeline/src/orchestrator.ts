@@ -18,7 +18,7 @@ import { resolveBrowseBin, startGroupDaemon, stopGroupDaemon } from "./lib/brows
 import { formatTerminalReport, formatTimingSummary } from "./report.js";
 import { readTimeline } from "./lib/timeline.js";
 
-const AC_EXTRACTOR_TIMEOUT_MS = 120_000;
+const AC_EXTRACTOR_TIMEOUT_MS = 90_000; // No tool access — all content inlined in prompt
 /**
  * Session timeout is a safety net, not the primary constraint.
  * The prompt's navigation budget (8 commands per AC) is what actually bounds execution.
@@ -68,11 +68,12 @@ export async function runPipeline(
   }
 
   // ── Stage 1: AC Extractor ──────────────────────────────────────────────
+  // All content inlined in prompt — no tool access needed (prevents codebase wandering)
   callbacks.onLog("Stage 1: Extracting acceptance criteria...");
-  const acPrompt = buildACGeneratorPrompt(specPath);
+  const acPrompt = buildACGeneratorPrompt(specPath, verifyDir);
   let acResult = await runClaude({
     prompt: acPrompt, model: "opus", timeoutMs: AC_EXTRACTOR_TIMEOUT_MS,
-    stage: "ac-generator", runDir, ...stagePerms("ac-generator"),
+    stage: "ac-generator", runDir, cwd: projectRoot, tools: [],
   });
 
   let rawAcs = parseACGeneratorOutput(acResult.stdout);
@@ -82,7 +83,7 @@ export async function runPipeline(
     callbacks.onLog("AC Extractor failed, retrying...");
     acResult = await runClaude({
       prompt: acPrompt, model: "opus", timeoutMs: AC_EXTRACTOR_TIMEOUT_MS,
-      stage: "ac-generator-retry", runDir, ...stagePerms("ac-generator"),
+      stage: "ac-generator-retry", runDir, cwd: projectRoot, tools: [],
     });
     rawAcs = parseACGeneratorOutput(acResult.stdout);
   }
@@ -175,21 +176,77 @@ export async function runPipeline(
     appRoutes,
   });
 
-  // All ACs start as pending — supervisor upgrades them as it detects activity
+  // ── Stream supervisor: marker-based AC tracking ──────────────────────
+  // The executor emits VERIFY_START|acId and VERIFY_DONE|acId markers.
+  // The supervisor uses these to track which AC is active and enforce budgets.
+  // If the executor exceeds the command budget, the supervisor writes a
+  // blocked verdict itself — the executor doesn't have to cooperate.
+
   const acIds = new Set(allAcs.map(ac => ac.id));
   let activeAcId: string | null = null;
   const completedAcIds = new Set<string>();
-  const commandCounts = new Map<string, number>();  // acId → browse command count
+  const commandCounts = new Map<string, number>();
   const BROWSE_CMD_RE = /browse\s+(goto|snapshot|click|fill|hover|press|wait|screenshot)/;
+  const MAX_COMMANDS_PER_AC = 15; // Hard backstop. Prompt tells LLM to aim for 12, write result by 10.
 
-  // Stream supervisor: watches tool calls to track per-AC progress in real-time
+  const supervisorWriteBlocked = (acId: string, reason: string) => {
+    if (completedAcIds.has(acId)) return;
+    const blockedResult = {
+      ac_id: acId,
+      verdict: "blocked",
+      confidence: "high" as const,
+      reasoning: reason,
+      observed: `Supervisor intervened: ${reason}`,
+      steps_taken: [] as string[],
+      screenshots: [] as string[],
+    };
+    try {
+      writeFileSync(
+        join(evidenceBaseDir, acId, "result.json"),
+        JSON.stringify(blockedResult, null, 2),
+      );
+      completedAcIds.add(acId);
+      callbacks.onLog(`  ${acId}: supervisor wrote blocked verdict`);
+    } catch {
+      // best effort
+    }
+  };
+
   const supervisorProgress = (event: import("./lib/types.js").StageProgressEvent) => {
     callbacks.onStageProgress?.(event);
-
     if (event.event !== "tool_call" || !event.toolInput) return;
     const cmd = event.toolInput;
 
-    // Detect AC transitions: executor writes "cat > evidence/{acId}/result.json"
+    // ── Marker detection: VERIFY_START|acId|description ────────────
+    const startMarker = cmd.match(/VERIFY_START\|(\w+)/);
+    if (startMarker) {
+      const acId = startMarker[1];
+      if (acIds.has(acId)) {
+        // If previous AC was started but never completed, supervisor writes blocked
+        if (activeAcId && !completedAcIds.has(activeAcId)) {
+          const cmds = commandCounts.get(activeAcId) ?? 0;
+          supervisorWriteBlocked(activeAcId, `Executor moved to next AC without writing a verdict (${cmds} commands used)`);
+        }
+        activeAcId = acId;
+        commandCounts.set(acId, 0);
+        progress.update(acId, "running");
+        callbacks.onLog(`  ${acId}: started`);
+      }
+    }
+
+    // ── Marker detection: VERIFY_DONE|acId|verdict ─────────────────
+    const doneMarker = cmd.match(/VERIFY_DONE\|(\w+)/);
+    if (doneMarker) {
+      const acId = doneMarker[1];
+      if (acIds.has(acId) && !completedAcIds.has(acId)) {
+        completedAcIds.add(acId);
+        const cmds = commandCounts.get(acId) ?? 0;
+        callbacks.onLog(`  ${acId}: done (${completedAcIds.size}/${allAcs.length}, ${cmds} commands)`);
+        progress.update(acId, "running", "result written");
+      }
+    }
+
+    // ── Fallback: detect result.json writes even without markers ───
     const resultWrite = cmd.match(/evidence\/(\w+)\/result\.json/);
     if (resultWrite) {
       const acId = resultWrite[1];
@@ -198,37 +255,18 @@ export async function runPipeline(
         const cmds = commandCounts.get(acId) ?? 0;
         callbacks.onLog(`  ${acId}: done (${completedAcIds.size}/${allAcs.length}, ${cmds} commands)`);
         progress.update(acId, "running", "result written");
-
-        const remaining = allAcs.filter(ac => !completedAcIds.has(ac.id));
-        if (remaining.length > 0) {
-          activeAcId = remaining[0].id;
-          progress.update(activeAcId, "running");
-        }
       }
     }
 
-    // Track which AC is active by watching browse commands
-    if (!activeAcId && BROWSE_CMD_RE.test(cmd)) {
-      activeAcId = allAcs[0].id;
-      progress.update(activeAcId, "running");
-    }
-
-    // Switch active AC when we see evidence dir references for a different AC
-    const evidenceRef = cmd.match(/evidence\/(\w+)\//);
-    if (evidenceRef) {
-      const acId = evidenceRef[1];
-      if (acIds.has(acId) && acId !== activeAcId && !completedAcIds.has(acId)) {
-        activeAcId = acId;
-        progress.update(acId, "running");
-      }
-    }
-
-    // Count browse commands for the active AC
-    if (activeAcId && BROWSE_CMD_RE.test(cmd)) {
+    // ── Command budget enforcement ─────────────────────────────────
+    if (activeAcId && !completedAcIds.has(activeAcId) && BROWSE_CMD_RE.test(cmd)) {
       const count = (commandCounts.get(activeAcId) ?? 0) + 1;
       commandCounts.set(activeAcId, count);
-      if (count === 12) {
-        callbacks.onLog(`  ${activeAcId}: hit 12-command budget`);
+      if (count === MAX_COMMANDS_PER_AC) {
+        supervisorWriteBlocked(
+          activeAcId,
+          `Exceeded ${MAX_COMMANDS_PER_AC}-command budget. The required data or page may not exist in the current app state.`,
+        );
       }
     }
   };

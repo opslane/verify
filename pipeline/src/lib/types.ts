@@ -182,7 +182,8 @@ export interface RunClaudeOptions {
   runDir: string;                       // .verify/runs/{run-id}
   cwd?: string;                         // working directory for claude (target project root)
   dangerouslySkipPermissions?: boolean;
-  allowedTools?: string[];              // e.g. ["Bash", "Read", "Glob", "Grep"]
+  allowedTools?: string[];              // e.g. ["Bash", "Read", "Glob", "Grep"] — DEPRECATED, use tools
+  tools?: string[];                     // replaces the entire tool set via --tools (e.g. ["Bash", "Read"], or [] for no tools)
   effort?: "low" | "medium" | "high" | "max";
   settingSources?: string;              // defaults to "" (no hooks/skills); set "user,project" to opt in
   onProgress?: (event: StageProgressEvent) => void;
@@ -202,12 +203,12 @@ export type RunClaudeFn = (opts: RunClaudeOptions) => Promise<RunClaudeResult>;
 // ── Stage permissions ───────────────────────────────────────────────────────
 // Each stage gets ONLY the tool access it needs. This is the explicit map.
 
-export const STAGE_PERMISSIONS: Record<string, Pick<RunClaudeOptions, "dangerouslySkipPermissions" | "allowedTools">> = {
-  "ac-generator":  { dangerouslySkipPermissions: true },   // needs Read, Grep for spec + app.json
-  "executor":      { allowedTools: ["Bash", "Read"] },      // Bash for browse CLI, Read for page content
-  "index-agent":   { dangerouslySkipPermissions: true },   // needs Read, Grep, Glob for codebase indexing
-  "browse-agent":  { allowedTools: ["Bash", "Read"] },      // legacy — kept for run-stage debugging
-  "login-agent":   { allowedTools: ["Bash"] },              // Bash for browse CLI only — used during /verify-setup
+export const STAGE_PERMISSIONS: Record<string, Pick<RunClaudeOptions, "dangerouslySkipPermissions" | "allowedTools" | "tools">> = {
+  // ac-generator: no entry — content inlined in prompt, tools: [] set in orchestrator
+  "executor":      { dangerouslySkipPermissions: true, tools: ["Bash", "Read"] },  // skip-permissions for browse binary + restrict tool set
+  "index-agent":   { dangerouslySkipPermissions: true },    // needs Read, Grep, Glob for codebase indexing
+  "browse-agent":  { dangerouslySkipPermissions: true, tools: ["Bash", "Read"] },  // legacy — kept for run-stage debugging
+  "login-agent":   { dangerouslySkipPermissions: true, tools: ["Bash"] },           // Bash for browse CLI only
 };
 
 // ── Timeline event ──────────────────────────────────────────────────────────

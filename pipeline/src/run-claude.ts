@@ -14,7 +14,7 @@ import { appendTimelineEvent } from "./lib/timeline.js";
  *  - Progress callbacks fire on each tool_use event
  */
 export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult> {
-  const { prompt, model, timeoutMs, stage, runDir, cwd, dangerouslySkipPermissions, allowedTools, effort, settingSources, onProgress } = opts;
+  const { prompt, model, timeoutMs, stage, runDir, cwd, dangerouslySkipPermissions, allowedTools, tools, effort, settingSources, onProgress } = opts;
   const logsDir = join(runDir, "logs");
   mkdirSync(logsDir, { recursive: true });
 
@@ -26,10 +26,11 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
   if (dangerouslySkipPermissions) {
     args.push("--dangerously-skip-permissions");
   }
-  if (allowedTools) {
-    // --tools restricts which tools are available (reduces context size)
-    // --allowedTools auto-approves them (no permission prompts)
-    args.push("--tools", allowedTools.join(","));
+  if (tools !== undefined) {
+    // --tools replaces the entire tool set. Empty array = no tools.
+    args.push("--tools", tools.length > 0 ? tools.join(",") : "");
+  } else if (allowedTools) {
+    // Legacy: --allowedTools adds to the default set (doesn't restrict)
     for (const tool of allowedTools) {
       args.push("--allowedTools", tool);
     }

@@ -3,10 +3,18 @@ import { buildACGeneratorPrompt, parseACGeneratorOutput, fanOutPureUIGroups } fr
 import type { ACGeneratorOutput } from "../src/lib/types.js";
 
 describe("buildACGeneratorPrompt", () => {
-  it("substitutes specPath into template", () => {
-    const prompt = buildACGeneratorPrompt("/path/to/spec.md");
-    expect(prompt).toContain("/path/to/spec.md");
-    expect(prompt).not.toContain("{{specPath}}");
+  it("inlines spec content and substitutes placeholders", async () => {
+    const { writeFileSync, mkdirSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const dir = join(tmpdir(), `ac-gen-test-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    const specPath = join(dir, "spec.md");
+    writeFileSync(specPath, "## AC\n- Button should be visible");
+    const prompt = buildACGeneratorPrompt(specPath);
+    expect(prompt).toContain("Button should be visible");
+    expect(prompt).not.toContain("{{specContent}}");
+    expect(prompt).not.toContain("{{appRoutes}}");
   });
 });
 

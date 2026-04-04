@@ -31,28 +31,28 @@ SELECTOR RULES:
 
 WORKFLOW — process each AC one at a time:
 
-For EACH acceptance criterion:
+For EACH acceptance criterion, follow this EXACT sequence:
 
-1. **Navigate** to the right page based on the AC description and diff hints.
-   - Start from the base URL if unsure. Use nav elements from the snapshot.
-   - Do NOT guess URLs with IDs you haven't seen. Navigate through the UI.
-   - REUSE what you learned from previous ACs — if you already know the URL structure or nav path, go direct.
+1. **SIGNAL START** — echo the marker so the supervisor knows which AC you're working on:
+   ```bash
+   echo "VERIFY_START|{ac_id}|{short description}"
+   ```
 
-2. **Interact** as needed to verify the AC (click, hover, fill).
-   - Take a snapshot after each interaction to see the result.
+2. **Navigate** to the right page based on the AC description and app routes.
+   - Use APP ROUTES above for direct URLs. Do NOT guess URLs with IDs you haven't seen.
+   - REUSE what you learned from previous ACs — if you already know the URL structure, go direct.
 
-3. **Collect evidence** — save screenshots to {{evidenceBaseDir}}/{ac_id}/:
-   - `{{browseBin}} screenshot {{evidenceBaseDir}}/{ac_id}/before.png`
+3. **Check preconditions** — after your first snapshot, check if the required data exists:
+   - If the AC requires specific records (e.g., "a document with CC recipient") and the page shows no such records, write verdict "blocked" IMMEDIATELY. Do not keep searching.
+   - If the page shows the expected content, proceed to interact and verify.
+
+4. **Interact** as needed to verify the AC (click, hover, fill).
+
+5. **Collect evidence** — save screenshots to {{evidenceBaseDir}}/{ac_id}/:
    - `{{browseBin}} screenshot {{evidenceBaseDir}}/{ac_id}/result.png`
    - IMPORTANT: Always use {{evidenceBaseDir}}/{ac_id}/filename.png. Do NOT save to /tmp.
 
-4. **Judge** the result:
-   - If the required element/text/state is clearly visible → pass
-   - If it's missing, wrong, or only partially there → fail
-   - If you couldn't reach the page or required data doesn't exist → blocked
-   - If ambiguous → unclear
-
-5. **Write the result** to a JSON file:
+6. **Write the result** to a JSON file:
    ```bash
    cat > {{evidenceBaseDir}}/{ac_id}/result.json << 'RESULT_EOF'
    {
@@ -62,38 +62,40 @@ For EACH acceptance criterion:
      "reasoning": "What you observed and why",
      "observed": "Exact text/state on the page",
      "steps_taken": ["goto ...", "snapshot", "click @e5"],
-     "screenshots": ["before.png", "result.png"],
+     "screenshots": ["result.png"],
      "blocker": "only if blocked — what's missing"
    }
    RESULT_EOF
    ```
 
-6. Then move to the next AC. Do NOT reset the browser between ACs unless needed.
+7. **SIGNAL DONE** — echo the marker so the supervisor tracks completion:
+   ```bash
+   echo "VERIFY_DONE|{ac_id}|{verdict}"
+   ```
+
+8. Move to the next AC. Do NOT reset the browser unless needed.
 
 HARD CONSTRAINTS — THESE ARE NOT SUGGESTIONS, THEY ARE RULES:
 
-1. COMMAND BUDGET: You may run AT MOST 12 browse commands per AC (goto, snapshot, click, fill, hover, press, wait, screenshot all count). Count them. When you reach 10, you MUST write the result and move on. No exceptions. If you cannot verify the AC in 12 commands, the verdict is "blocked" with reasoning explaining what you tried.
+1. MARKERS ARE MANDATORY: Every AC MUST start with `echo "VERIFY_START|..."` and end with `echo "VERIFY_DONE|..."`. The supervisor uses these to track progress. If you skip markers, the supervisor cannot help you.
 
-2. BAIL EARLY: If after 4 navigation commands (goto, click) you have not found the target page, STOP. Write verdict "blocked", explain what pages you found, and move to the next AC. Do not keep trying different paths.
+2. COMMAND BUDGET: Aim for AT MOST 12 browse commands per AC. When you reach 10, you MUST write the result and move on. The supervisor enforces a hard limit at 15 commands — if you exceed it, the supervisor writes a "blocked" verdict for you automatically.
 
-3. ONE RECOVERY: If a browse command fails (timeout, element not found), you get ONE retry with a different approach. If that also fails, write the result and move on.
+3. PRECONDITION CHECK: After your first snapshot on the target page, if the required data is not visible, write "blocked" immediately and move on. Do NOT explore the entire app looking for data.
 
-4. MOVE FAST: Write the result.json file as soon as you have a verdict. Do not re-verify, do not take extra screenshots "just in case", do not explore adjacent pages.
+4. BAIL EARLY: If after 3 navigation commands (goto, click) you have not found the target page, write verdict "blocked" and move on.
 
-5. NO CODEBASE ACCESS: Do not run grep, find, ls, git, rg, or cat on source files. You only interact with the browser.
+5. ONE RECOVERY: If a browse command fails, you get ONE retry. Then write the result and move on.
 
-6. NO DATA MUTATION: Do not create accounts, fill registration forms, or modify app state.
+6. NO CODEBASE ACCESS: Do not run grep, find, ls, git, rg, or cat on source files.
 
-7. AUTH REDIRECT: If you land on a login page unexpectedly, write verdict "blocked" with "Auth redirect" in observed, and move to the next AC.
+7. NO DATA MUTATION: Do not create accounts, fill forms that change state, or modify app data.
 
-8. FAILED COMMANDS: If a browse command times out or errors, take one screenshot, write the result, move on.
+8. AUTH REDIRECT: If you land on a login page unexpectedly, write verdict "blocked" with "Auth redirect" in observed.
 
-9. STUCK INTERACTION: If you've tried 2 different approaches to interact with a UI element (different selectors, click vs hover, etc.) and neither works, STOP trying. Write verdict "fail" or "blocked" with what you observed and move on. Do NOT keep retrying the same interaction.
-
-10. ALWAYS WRITE RESULT: Before moving to the next AC, you MUST write result.json. Even if your verification is incomplete, write what you know — a partial result is better than no result. Never leave an AC without a written result.
+9. ALWAYS WRITE RESULT: Before moving to the next AC, you MUST write result.json. A partial result is better than no result.
 
 AFTER ALL ACs ARE DONE:
-Output a single line to stdout:
-SESSION_COMPLETE: {number of ACs processed}
-
-This confirms the session finished. The orchestrator reads results from the evidence directory files.
+```bash
+echo "SESSION_COMPLETE|{number of ACs processed}"
+```

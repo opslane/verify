@@ -334,8 +334,8 @@ if (command === "run") {
       const { buildACGeneratorPrompt, parseACGeneratorOutput, fanOutPureUIGroups } = await import("./stages/ac-generator.js");
       const specPath = values.spec ?? config.specPath;
       if (!specPath) { console.error("No --spec provided and no specPath in config"); process.exit(1); }
-      const prompt = buildACGeneratorPrompt(specPath);
-      const result = await runClaude({ prompt, model: "opus", timeoutMs: 120_000, stage: "ac-generator", runDir, settingSources: "", ...permissions });
+      const prompt = buildACGeneratorPrompt(specPath, verifyDir);
+      const result = await runClaude({ prompt, model: "opus", timeoutMs: 90_000, stage: "ac-generator", runDir, cwd: projectRoot });
       const acs = parseACGeneratorOutput(result.stdout);
       if (!acs) { console.error("Failed to parse AC output. Check logs:", join(runDir, "logs")); process.exit(1); }
       const fanned = fanOutPureUIGroups(acs);
