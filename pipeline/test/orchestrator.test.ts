@@ -1,5 +1,6 @@
 // pipeline/test/orchestrator.test.ts — V1.1 single-session orchestrator tests
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { findLastIncompleteRun } from "../src/orchestrator.js";
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -360,5 +361,60 @@ describe("v1.1 single-session orchestrator", () => {
       expect(call.cwd).toBeDefined();
       expect(call.cwd).toBe(testDir);
     }
+  });
+});
+
+describe("session state helpers", () => {
+  it("findLastIncompleteRun returns null when no runs exist", () => {
+    const result = findLastIncompleteRun(verifyDir, specPath);
+    expect(result).toBeNull();
+  });
+
+  it("findLastIncompleteRun finds incomplete run matching specPath", () => {
+    const runsDir = join(verifyDir, "runs");
+    const runName = "2026-04-05-spec";
+    mkdirSync(join(runsDir, runName), { recursive: true });
+    writeFileSync(join(runsDir, runName, "session-state.json"), JSON.stringify({
+      specPath: specPath,
+      completedAcIds: ["ac1"],
+      remainingAcIds: ["ac2"],
+      learnings: [],
+      timestamp: new Date().toISOString(),
+    }));
+
+    const result = findLastIncompleteRun(verifyDir, specPath);
+    expect(result).toBe(join(runsDir, runName));
+  });
+
+  it("findLastIncompleteRun skips completed runs", () => {
+    const runsDir = join(verifyDir, "runs");
+    const runName = "2026-04-05-spec";
+    mkdirSync(join(runsDir, runName), { recursive: true });
+    writeFileSync(join(runsDir, runName, "session-state.json"), JSON.stringify({
+      specPath: specPath,
+      completedAcIds: ["ac1", "ac2"],
+      remainingAcIds: [],
+      learnings: [],
+      timestamp: new Date().toISOString(),
+    }));
+
+    const result = findLastIncompleteRun(verifyDir, specPath);
+    expect(result).toBeNull();
+  });
+
+  it("findLastIncompleteRun does not match runs from a different spec", () => {
+    const runsDir = join(verifyDir, "runs");
+    const runName = "2026-04-05-other-spec";
+    mkdirSync(join(runsDir, runName), { recursive: true });
+    writeFileSync(join(runsDir, runName, "session-state.json"), JSON.stringify({
+      specPath: "/some/other/spec.md",
+      completedAcIds: ["ac1"],
+      remainingAcIds: ["ac2"],
+      learnings: [],
+      timestamp: new Date().toISOString(),
+    }));
+
+    const result = findLastIncompleteRun(verifyDir, specPath);
+    expect(result).toBeNull();
   });
 });

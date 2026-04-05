@@ -1,5 +1,5 @@
 // pipeline/src/orchestrator.ts — V1.1 pipeline: AC Extractor → Single-Session Executor → Report
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type {
   ACGeneratorOutput, AC, ACVerdict, ProgressEvent, StageProgressEvent, JudgeOutput,
@@ -18,11 +18,103 @@ import { resolveBrowseBin, startGroupDaemon, stopGroupDaemon } from "./lib/brows
 import { formatTerminalReport, formatTimingSummary } from "./report.js";
 import { readTimeline } from "./lib/timeline.js";
 
+export interface SessionState {
+  specPath: string;
+  completedAcIds: string[];
+  remainingAcIds: string[];
+  learnings: SessionLearning[];
+  timestamp: string;
+}
+
+export interface SessionLearning {
+  acId: string;
+  url: string;
+  selectorsUsed: string[];
+  pageNotes: string;
+}
+
+/**
+ * Extract learnings from completed AC results — selectors that worked, URLs visited, page structure.
+ * These get injected into the resume session prompt so the agent doesn't re-discover everything.
+ */
+function extractLearnings(
+  completedAcIds: string[],
+  evidenceBaseDir: string,
+): SessionLearning[] {
+  const learnings: SessionLearning[] = [];
+  for (const acId of completedAcIds) {
+    const resultPath = join(evidenceBaseDir, acId, "result.json");
+    try {
+      const raw: Record<string, unknown> = JSON.parse(readFileSync(resultPath, "utf-8"));
+      const steps = Array.isArray(raw.steps_taken) ? (raw.steps_taken as string[]) : [];
+      const gotoStep = steps.find(s => s.startsWith("goto "));
+      const url = gotoStep ? gotoStep.replace("goto ", "") : "";
+      const selectors = steps
+        .filter(s => /^(click|fill|hover)\s/.test(s))
+        .map(s => s.replace(/^(click|fill|hover)\s+/, ""));
+      learnings.push({
+        acId,
+        url,
+        selectorsUsed: selectors,
+        pageNotes: (typeof raw.observed === "string" ? raw.observed : "").slice(0, 200),
+      });
+    } catch {
+      // No result file or parse error — skip
+    }
+  }
+  return learnings;
+}
+
+/**
+ * Find the most recent incomplete run for a given spec.
+ * Scans run directories for session-state.json where specPath matches
+ * and remainingAcIds is non-empty.
+ */
+export function findLastIncompleteRun(verifyDir: string, specPath: string): string | null {
+  const runsDir = join(verifyDir, "runs");
+  try {
+    const dirs = readdirSync(runsDir).sort().reverse();
+    for (const dir of dirs) {
+      const statePath = join(runsDir, dir, "session-state.json");
+      try {
+        const raw: Record<string, unknown> = JSON.parse(readFileSync(statePath, "utf-8"));
+        // Match by exact specPath, not slug — avoids substring collisions
+        if (raw.specPath !== specPath) continue;
+        const remaining = Array.isArray(raw.remainingAcIds) ? raw.remainingAcIds : [];
+        if (remaining.length > 0) {
+          return join(runsDir, dir);
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // runs dir doesn't exist
+  }
+  return null;
+}
+
+function formatLearningsForPrompt(learnings: SessionLearning[]): string {
+  if (learnings.length === 0) return "";
+  const lines = ["LEARNINGS FROM PREVIOUS SESSION (use these to navigate faster):"];
+  for (const l of learnings) {
+    lines.push(`- ${l.acId}: URL=${l.url}`);
+    if (l.selectorsUsed.length > 0) {
+      lines.push(`  Selectors that worked: ${l.selectorsUsed.join(", ")}`);
+    }
+    if (l.pageNotes) {
+      lines.push(`  Page state: ${l.pageNotes}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 const AC_EXTRACTOR_TIMEOUT_MS = 90_000; // No tool access — all content inlined in prompt
 /**
- * Session timeout is a safety net, not the primary constraint.
- * The prompt's navigation budget (8 commands per AC) is what actually bounds execution.
- * This timeout just prevents runaway sessions.
+ * Session timeout is the primary safety net.
+ * The supervisor detects stalls (repeated failed selectors) and has a hard
+ * backstop at 30 commands per AC. This timeout prevents runaway sessions
+ * when neither mechanism triggers.
  */
 const SESSION_TIMEOUT_MS = 600_000; // 10 minutes — generous, like Expect's model
 
@@ -186,8 +278,11 @@ export async function runPipeline(
   let activeAcId: string | null = null;
   const completedAcIds = new Set<string>();
   const commandCounts = new Map<string, number>();
+  const recentCommands = new Map<string, string[]>(); // Track recent commands per AC for stall detection
   const BROWSE_CMD_RE = /browse\s+(goto|snapshot|click|fill|hover|press|wait|screenshot)/;
-  const MAX_COMMANDS_PER_AC = 15; // Hard backstop. Prompt tells LLM to aim for 12, write result by 10.
+  const STALL_WINDOW = 6;      // Look at last N interaction commands
+  const STALL_THRESHOLD = 3;   // Same selector N times in window = stall
+  const MAX_COMMANDS_PER_AC = 30; // Hard backstop — catches cases stall detection misses (e.g., @ref cycling)
 
   const supervisorWriteBlocked = (acId: string, reason: string) => {
     if (completedAcIds.has(acId)) return;
@@ -258,15 +353,39 @@ export async function runPipeline(
       }
     }
 
-    // ── Command budget enforcement ─────────────────────────────────
+    // ── Stall detection + hard backstop ───────────────────────────
     if (activeAcId && !completedAcIds.has(activeAcId) && BROWSE_CMD_RE.test(cmd)) {
       const count = (commandCounts.get(activeAcId) ?? 0) + 1;
       commandCounts.set(activeAcId, count);
-      if (count === MAX_COMMANDS_PER_AC) {
+
+      // Hard backstop — catches @ref cycling where stall detection doesn't fire
+      if (count >= MAX_COMMANDS_PER_AC) {
         supervisorWriteBlocked(
           activeAcId,
-          `Exceeded ${MAX_COMMANDS_PER_AC}-command budget. The required data or page may not exist in the current app state.`,
+          `Exceeded ${MAX_COMMANDS_PER_AC}-command hard limit. Agent may be stuck with changing selectors.`,
         );
+      }
+
+      // Stall detection: same selector repeated in sliding window
+      const interactionMatch = cmd.match(/browse\s+(click|fill|hover)\s+(\S+)/);
+      if (interactionMatch) {
+        const selector = interactionMatch[2];
+        const recent = recentCommands.get(activeAcId) ?? [];
+        recent.push(selector);
+        if (recent.length > STALL_WINDOW) recent.shift();
+        recentCommands.set(activeAcId, recent);
+
+        const selectorCounts = new Map<string, number>();
+        for (const s of recent) selectorCounts.set(s, (selectorCounts.get(s) ?? 0) + 1);
+        for (const [sel, n] of selectorCounts) {
+          if (n >= STALL_THRESHOLD) {
+            supervisorWriteBlocked(
+              activeAcId,
+              `Stall detected: selector "${sel}" attempted ${n} times in last ${recent.length} interactions. Agent is stuck.`,
+            );
+            break;
+          }
+        }
       }
     }
   };
