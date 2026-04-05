@@ -53,7 +53,7 @@ function extractLearnings(
       const url = gotoStep ? gotoStep.replace("goto ", "") : "";
       const selectors = steps
         .filter(s => /^(click|fill|hover)\s/.test(s))
-        .map(s => s.replace(/^(click|fill|hover)\s+/, ""));
+        .map(s => s.replace(/^(click|fill|hover)\s+/, "").split(/\s/)[0]);
       learnings.push({
         acId,
         url,

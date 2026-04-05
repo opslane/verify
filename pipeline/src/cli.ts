@@ -74,26 +74,18 @@ if (command === "run") {
     process.exit(1);
   }
 
-  if (result.hasRemaining) {
-    // Print partial summary so user sees what completed
-    if (result.verdicts) {
-      const verdicts = result.verdicts.verdicts;
-      const passCount = verdicts.filter(v => v.verdict === "pass").length;
-      const failCount = verdicts.filter(v => v.verdict !== "pass" && v.verdict !== "spec_unclear").length;
-      console.log(`Partial run: ${passCount} pass, ${failCount} fail out of ${verdicts.length} judged.`);
-    }
-    console.log("Remaining ACs not yet verified. Re-run with --resume to continue.");
-    console.log("Run dir:", result.runDir);
-    process.exit(3);
-  }
-
   const verdicts = result.verdicts.verdicts;
   const passCount = verdicts.filter(v => v.verdict === "pass").length;
   const specUnclearCount = verdicts.filter(v => v.verdict === "spec_unclear").length;
   const failCount = verdicts.length - passCount - specUnclearCount;
 
   if (failCount > 0) {
-    process.exit(1);     // real failures
+    process.exit(1);     // real failures take precedence over partial
+  } else if (result.hasRemaining) {
+    console.log(`Partial run: ${passCount} pass, ${failCount} fail out of ${verdicts.length} judged.`);
+    console.log("Remaining ACs not yet verified. Re-run with --resume to continue.");
+    console.log("Run dir:", result.runDir);
+    process.exit(3);     // partial — some ACs not yet run
   } else if (specUnclearCount > 0) {
     process.exit(2);     // needs human review, but code may be correct
   } else {

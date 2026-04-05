@@ -605,7 +605,7 @@ describe("extractLearnings", () => {
 
     const ac1Learning = state.learnings.find((l: Record<string, unknown>) => l.acId === "ac1");
     expect(ac1Learning.url).toBe("http://localhost:3000/inbox");
-    expect(ac1Learning.selectorsUsed).toEqual(["@e5", "@e7 test"]);
+    expect(ac1Learning.selectorsUsed).toEqual(["@e5", "@e7"]);
     expect(ac1Learning.pageNotes).toContain("Inbox tab visible");
 
     const ac2Learning = state.learnings.find((l: Record<string, unknown>) => l.acId === "ac2");
