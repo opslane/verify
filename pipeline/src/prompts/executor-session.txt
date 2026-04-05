@@ -8,11 +8,15 @@ ACCEPTANCE CRITERIA TO VERIFY:
 CONTEXT:
 - Base URL: {{baseUrl}}
 - Evidence directory: {{evidenceBaseDir}}
-- Diff hints (changed files/routes that may help you find the right pages):
+
+CHANGED FILES (the code changes being verified — read these for navigation context):
 {{diffHints}}
+When an AC is ambiguous about WHERE to find a UI element (e.g., "left sidebar", "dropdown"), use the Read tool to read the relevant changed file(s) above BEFORE navigating. Look for component structure, section names, data-testid attributes, and conditional rendering logic. This tells you exactly where the feature lives.
 
 APP ROUTES (known pages in this app — use these for direct navigation instead of guessing):
 {{appRoutes}}
+
+{{learnings}}
 
 BROWSE CLI (available as a Bash command):
 - `{{browseBin}} goto <url>` — navigate to a URL
@@ -24,10 +28,14 @@ BROWSE CLI (available as a Bash command):
 - `{{browseBin}} wait <selector|--networkidle|--load>` — wait for element or page event
 - `{{browseBin}} screenshot <path>` — save a screenshot to a file
 
-SELECTOR RULES:
-- Use @ref values from the latest snapshot (e.g., @e5, @e12).
-- If using a CSS selector, wrap it in double quotes: `{{browseBin}} click "#more-actions-button"`
+SELECTOR RULES (in priority order — use the BEST available selector, not just @ref):
+1. `[data-testid="..."]` — most stable, preferred when visible in snapshot or attrs output
+2. `[role="..."][aria-label="..."]` or `[name="..."]` — semantic HTML
+3. `button:has-text("...")` or similar text-content selectors — when text is unique
+4. `@ref` values from the latest snapshot (e.g., @e5, @e12) — fallback when above aren't available
+- Always wrap CSS/attribute selectors in double quotes: `{{browseBin}} click "[data-testid='calendar-view']"`
 - After `goto`, the first `snapshot` is usually enough for "wait for page load."
+- TIP: Run `{{browseBin}} attrs <@ref>` to inspect an element's attributes (data-testid, role, aria-label) before clicking.
 
 WORKFLOW — process each AC one at a time:
 
@@ -79,21 +87,26 @@ HARD CONSTRAINTS — THESE ARE NOT SUGGESTIONS, THEY ARE RULES:
 
 1. MARKERS ARE MANDATORY: Every AC MUST start with `echo "VERIFY_START|..."` and end with `echo "VERIFY_DONE|..."`. The supervisor uses these to track progress. If you skip markers, the supervisor cannot help you.
 
-2. COMMAND BUDGET: Aim for AT MOST 12 browse commands per AC. When you reach 10, you MUST write the result and move on. The supervisor enforces a hard limit at 15 commands — if you exceed it, the supervisor writes a "blocked" verdict for you automatically.
+2. PRECONDITION CHECK: After your first snapshot on the target page, if the required data is not visible, write "blocked" immediately and move on. Do NOT explore the entire app looking for data.
 
-3. PRECONDITION CHECK: After your first snapshot on the target page, if the required data is not visible, write "blocked" immediately and move on. Do NOT explore the entire app looking for data.
+3. BAIL EARLY: If after 3 navigation commands (goto, click) you have not found the target page, write verdict "blocked" and move on.
 
-4. BAIL EARLY: If after 3 navigation commands (goto, click) you have not found the target page, write verdict "blocked" and move on.
+4. RECOVERY WITH FALLBACK: If a browse command fails (wrong element clicked, timeout, non-zero exit):
+   a. Run `{{browseBin}} snapshot` to see current state.
+   b. If the wrong element was activated (e.g., clicked a tab instead of a toggle), try an alternative selector:
+      - Inspect the target with `{{browseBin}} attrs <@ref>` to find data-testid or aria-label
+      - Or use `{{browseBin}} snapshot -C` to find cursor-interactive elements not in the ARIA tree
+      - Try the alternative selector.
+   c. If you've tried 3 different selectors for the same element and all failed, write the result and move on.
+   d. NEVER retry the exact same selector twice — always try a different strategy.
 
-5. ONE RECOVERY: If a browse command fails, you get ONE retry. Then write the result and move on.
+5. LIMITED CODEBASE ACCESS: You may use the Read tool to read CHANGED FILES listed above for navigation hints (selectors, component structure), but limit yourself to AT MOST 2 Read calls per AC. Prefer navigating and using `snapshot` + `attrs` to discover selectors over reading source code. Do NOT run grep, find, ls, git, rg, or cat to search the broader codebase.
 
-6. NO CODEBASE ACCESS: Do not run grep, find, ls, git, rg, or cat on source files.
+6. NO DATA MUTATION: Do not create accounts, fill forms that change state, or modify app data.
 
-7. NO DATA MUTATION: Do not create accounts, fill forms that change state, or modify app data.
+7. AUTH REDIRECT: If you land on a login page unexpectedly, write verdict "blocked" with "Auth redirect" in observed.
 
-8. AUTH REDIRECT: If you land on a login page unexpectedly, write verdict "blocked" with "Auth redirect" in observed.
-
-9. ALWAYS WRITE RESULT: Before moving to the next AC, you MUST write result.json. A partial result is better than no result.
+8. ALWAYS WRITE RESULT: Before moving to the next AC, you MUST write result.json. A partial result is better than no result.
 
 AFTER ALL ACs ARE DONE:
 ```bash
