@@ -131,12 +131,14 @@ export interface OrchestratorCallbacks {
 export interface PipelineResult {
   runDir: string;
   verdicts: JudgeOutput | null;
+  hasRemaining: boolean;
 }
 
 export async function runPipeline(
   specPath: string,
   verifyDir: string,
   callbacks: OrchestratorCallbacks,
+  resumeRunDir?: string,
 ): Promise<PipelineResult> {
   const config = loadConfig(verifyDir);
   const projectRoot = resolve(verifyDir, "..");
@@ -158,7 +160,7 @@ export async function runPipeline(
   const preflight = await runPreflight(config.baseUrl, specPath, verifyDir, config);
   if (!preflight.ok) {
     for (const err of preflight.errors) callbacks.onError(err);
-    return { runDir, verdicts: null };
+    return { runDir, verdicts: null, hasRemaining: false };
   }
 
   // ── Stage 1: AC Extractor ──────────────────────────────────────────────
@@ -184,25 +186,61 @@ export async function runPipeline(
 
   if (!rawAcs) {
     callbacks.onError("AC Extractor failed after retry. Check logs: " + join(runDir, "logs"));
-    return { runDir, verdicts: null };
+    return { runDir, verdicts: null, hasRemaining: false };
   }
 
   // User checkpoint
   const confirmedAcs = await callbacks.onACCheckpoint(rawAcs);
   if (!confirmedAcs) {
     callbacks.onLog("User aborted after AC review.");
-    return { runDir, verdicts: null };
+    return { runDir, verdicts: null, hasRemaining: false };
   }
   const acs = fanOutPureUIGroups(confirmedAcs);
   writeFileSync(join(runDir, "acs.json"), JSON.stringify(acs, null, 2));
 
   // Flatten all ACs from all groups
-  const allAcs = acs.groups.flatMap(g => g.acs);
+  let allAcs = acs.groups.flatMap(g => g.acs);
+
+  // ── Resume: load prior state, filter to remaining ACs, inject learnings ──
+  let priorLearnings = "";
+  let priorVerdicts: ACVerdict[] = [];
+  if (resumeRunDir) {
+    const statePath = join(resumeRunDir, "session-state.json");
+    try {
+      const priorState: SessionState = JSON.parse(readFileSync(statePath, "utf-8"));
+      const completedSet = new Set(priorState.completedAcIds);
+
+      // Validate: all completed AC IDs must exist in current spec
+      const currentAcIds = new Set(allAcs.map(ac => ac.id));
+      const staleIds = priorState.completedAcIds.filter(id => !currentAcIds.has(id));
+      if (staleIds.length > 0) {
+        callbacks.onLog(`Warning: prior run has ${staleIds.length} AC ID(s) not in current spec (${staleIds.join(", ")}). Running all ACs fresh.`);
+        // Fall through without filtering — run everything
+      } else {
+        const remainingAcs = allAcs.filter(ac => !completedSet.has(ac.id));
+        const skippedCount = allAcs.length - remainingAcs.length;
+        callbacks.onLog(`Resuming: ${skippedCount} ACs already completed, ${remainingAcs.length} remaining`);
+
+        // Carry forward verdicts from prior run
+        const priorVerdictsPath = join(resumeRunDir, "verdicts.json");
+        try {
+          const pv: JudgeOutput = JSON.parse(readFileSync(priorVerdictsPath, "utf-8"));
+          priorVerdicts = pv.verdicts.filter(v => completedSet.has(v.ac_id) && v.verdict !== "error");
+        } catch { /* no prior verdicts */ }
+
+        priorLearnings = formatLearningsForPrompt(priorState.learnings);
+        allAcs = remainingAcs;
+      }
+    } catch {
+      callbacks.onLog("Warning: could not load session state from prior run, running all ACs");
+    }
+  }
+
   for (const ac of allAcs) progress.update(ac.id, "pending");
 
   if (allAcs.length === 0) {
     callbacks.onLog("No verifiable ACs found.");
-    return { runDir, verdicts: { verdicts: [] } };
+    return { runDir, verdicts: { verdicts: [] }, hasRemaining: false };
   }
 
   // ── Diff hints ─────────────────────────────────────────────────────────
@@ -256,7 +294,7 @@ export async function runPipeline(
   if (!loginResult.ok) {
     callbacks.onError(`Login failed: ${loginResult.error}`);
     stopGroupDaemon(stateDir);
-    return { runDir, verdicts: null };
+    return { runDir, verdicts: null, hasRemaining: false };
   }
 
   // ── Stage 2: Single-session executor with stream supervisor ──────────
@@ -268,6 +306,7 @@ export async function runPipeline(
     evidenceBaseDir,
     diffHints,
     appRoutes,
+    learnings: priorLearnings || undefined,
   });
 
   // ── Stream supervisor: marker-based AC tracking ──────────────────────
@@ -449,14 +488,38 @@ export async function runPipeline(
     progress.update(ac.id, status);
   }
 
+  // ── Session state: write for resume capability ─────────────────────────
+  const completedIds = allVerdicts
+    .filter(v => v.verdict !== "error")
+    .map(v => v.ac_id);
+  const allOriginalAcIds = acs.groups.flatMap(g => g.acs).map(ac => ac.id);
+  const allCompletedIds = [...priorVerdicts.map(v => v.ac_id), ...completedIds];
+  const remainingIds = allOriginalAcIds.filter(id => !allCompletedIds.includes(id));
+
+  const sessionState: SessionState = {
+    specPath,
+    completedAcIds: allCompletedIds,
+    remainingAcIds: remainingIds,
+    learnings: extractLearnings(completedIds, evidenceBaseDir),
+    timestamp: new Date().toISOString(),
+  };
+  writeFileSync(join(runDir, "session-state.json"), JSON.stringify(sessionState, null, 2));
+
+  if (remainingIds.length > 0) {
+    callbacks.onLog(`\n${remainingIds.length} AC(s) remaining: ${remainingIds.join(", ")}. Use --resume to continue.`);
+  }
+
+  // ── Merge prior verdicts with current ─────────────────────────────────
+  const mergedVerdicts = [...priorVerdicts, ...allVerdicts];
+
   // ── All-unclear detection ──────────────────────────────────────────────
-  const unclearCount = allVerdicts.filter(v => v.verdict === "unclear").length;
-  if (unclearCount > allVerdicts.length * 0.5 && allVerdicts.length > 0) {
-    callbacks.onLog(`WARNING: ${unclearCount}/${allVerdicts.length} ACs are 'unclear'. Executor prompt may be too conservative.`);
+  const unclearCount = mergedVerdicts.filter(v => v.verdict === "unclear").length;
+  if (unclearCount > mergedVerdicts.length * 0.5 && mergedVerdicts.length > 0) {
+    callbacks.onLog(`WARNING: ${unclearCount}/${mergedVerdicts.length} ACs are 'unclear'. Executor prompt may be too conservative.`);
   }
 
   // ── Report ─────────────────────────────────────────────────────────────
-  const finalVerdicts: JudgeOutput = { verdicts: allVerdicts };
+  const finalVerdicts: JudgeOutput = { verdicts: mergedVerdicts };
   writeFileSync(join(runDir, "verdicts.json"), JSON.stringify(finalVerdicts, null, 2));
 
   const timeline = readTimeline(runDir);
@@ -485,5 +548,5 @@ export async function runPipeline(
       .map(e => ({ stage: e.stage, durationMs: e.durationMs })),
   }, null, 2));
 
-  return { runDir, verdicts: finalVerdicts };
+  return { runDir, verdicts: finalVerdicts, hasRemaining: remainingIds.length > 0 };
 }

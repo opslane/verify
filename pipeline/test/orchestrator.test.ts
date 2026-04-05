@@ -37,7 +37,7 @@ vi.mock("../src/run-claude.js", () => ({
       if (evidenceMatch) {
         const evidenceBase = evidenceMatch[1].trim();
         // Write mock results for each AC mentioned in prompt
-        const acMatches = opts.prompt.matchAll(/\[(\w+)\]/g);
+        const acMatches = opts.prompt.matchAll(/\[(ac\d+)\]/g);
         for (const match of acMatches) {
           const acId = match[1];
           const dir = join(evidenceBase, acId);
@@ -329,6 +329,145 @@ describe("v1.1 single-session orchestrator", () => {
     expect(result.verdicts!.verdicts.find(v => v.ac_id === "ac2")?.verdict).toBe("pass");
   });
 
+  it("resumes from prior run, skipping completed ACs and merging verdicts", async () => {
+    const { runPipeline } = await import("../src/orchestrator.js");
+
+    // Simulate 3 ACs, prior run completed ac1
+    const threeAcs: ACGeneratorOutput = {
+      groups: [{ id: "group-a", condition: null, acs: [
+        { id: "ac1", description: "Tab shows Inbox" },
+        { id: "ac2", description: "Tab shows Pending" },
+        { id: "ac3", description: "Tab shows Archive" },
+      ]}],
+      skipped: [],
+    };
+    mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(threeAcs) });
+
+    // Create a fake prior run with session-state.json
+    const priorRunDir = join(verifyDir, "runs", "prior-run");
+    mkdirSync(join(priorRunDir, "evidence", "ac1"), { recursive: true });
+    writeFileSync(join(priorRunDir, "session-state.json"), JSON.stringify({
+      specPath,
+      completedAcIds: ["ac1"],
+      remainingAcIds: ["ac2", "ac3"],
+      learnings: [{ acId: "ac1", url: "http://localhost:3000/inbox", selectorsUsed: ["@e5"], pageNotes: "Inbox tab visible" }],
+      timestamp: new Date().toISOString(),
+    }));
+    writeFileSync(join(priorRunDir, "verdicts.json"), JSON.stringify({
+      verdicts: [{ ac_id: "ac1", verdict: "pass", confidence: "high", reasoning: "Found it" }],
+    }));
+
+    const logs: string[] = [];
+    const result = await runPipeline(specPath, verifyDir, {
+      onACCheckpoint: async (acs) => acs,
+      onLog: (msg) => logs.push(msg),
+      onError: (msg) => logs.push(`ERROR: ${msg}`),
+      onProgress: () => {},
+    }, priorRunDir);
+
+    expect(result.verdicts).not.toBeNull();
+    // Should have all 3 verdicts (1 from prior + 2 from current session)
+    expect(result.verdicts!.verdicts.length).toBe(3);
+    expect(result.verdicts!.verdicts.find(v => v.ac_id === "ac1")?.verdict).toBe("pass");
+
+    // Session prompt should only contain ac2 and ac3
+    const sessionCall = runClaudeCalls.find(c => c.stage === "executor-session");
+    expect(sessionCall!.prompt).not.toContain("[ac1]");
+    expect(sessionCall!.prompt).toContain("[ac2]");
+    expect(sessionCall!.prompt).toContain("[ac3]");
+
+    // Should include learnings in prompt
+    expect(sessionCall!.prompt).toContain("LEARNINGS FROM PREVIOUS SESSION");
+    expect(sessionCall!.prompt).toContain("/inbox");
+  });
+
+  it("falls back to fresh run when prior AC IDs don't match current spec", async () => {
+    const { runPipeline } = await import("../src/orchestrator.js");
+    mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(VALID_ACS) });
+
+    // Prior run has an AC ID that doesn't exist in current spec
+    const priorRunDir = join(verifyDir, "runs", "prior-run");
+    mkdirSync(priorRunDir, { recursive: true });
+    writeFileSync(join(priorRunDir, "session-state.json"), JSON.stringify({
+      specPath,
+      completedAcIds: ["old_ac_that_no_longer_exists"],
+      remainingAcIds: ["ac1", "ac2"],
+      learnings: [],
+      timestamp: new Date().toISOString(),
+    }));
+    writeFileSync(join(priorRunDir, "verdicts.json"), JSON.stringify({
+      verdicts: [{ ac_id: "old_ac_that_no_longer_exists", verdict: "pass", confidence: "high", reasoning: "Found it" }],
+    }));
+
+    const logs: string[] = [];
+    const result = await runPipeline(specPath, verifyDir, {
+      onACCheckpoint: async (acs) => acs,
+      onLog: (msg) => logs.push(msg),
+      onError: () => {},
+      onProgress: () => {},
+    }, priorRunDir);
+
+    expect(result.verdicts).not.toBeNull();
+    // Should run all ACs fresh (prior verdicts for unknown IDs are discarded)
+    const sessionCall = runClaudeCalls.find(c => c.stage === "executor-session");
+    expect(sessionCall!.prompt).toContain("[ac1]");
+    expect(sessionCall!.prompt).toContain("[ac2]");
+    // Should log a warning about stale prior state
+    expect(logs.some(l => l.includes("Warning") || l.includes("stale"))).toBe(true);
+  });
+
+  it("writes session-state.json after run", async () => {
+    const { runPipeline } = await import("../src/orchestrator.js");
+    mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(VALID_ACS) });
+
+    const result = await runPipeline(specPath, verifyDir, {
+      onACCheckpoint: async (acs) => acs,
+      onLog: () => {},
+      onError: () => {},
+      onProgress: () => {},
+    });
+
+    expect(existsSync(join(result.runDir, "session-state.json"))).toBe(true);
+    const state = JSON.parse(readFileSync(join(result.runDir, "session-state.json"), "utf-8"));
+    expect(state.specPath).toBe(specPath);
+    expect(Array.isArray(state.completedAcIds)).toBe(true);
+    expect(Array.isArray(state.remainingAcIds)).toBe(true);
+  });
+
+  it("returns hasRemaining when ACs are incomplete", async () => {
+    const { runPipeline } = await import("../src/orchestrator.js");
+    mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(VALID_ACS) });
+
+    // Override: executor writes result for ac1 only, timeout for ac2
+    const originalMock = vi.mocked(await import("../src/run-claude.js")).runClaude;
+    originalMock.mockImplementation(async (opts: RunClaudeOptions) => {
+      runClaudeCalls.push(opts);
+      if (opts.stage === "executor-session") {
+        const evidenceMatch = opts.prompt.match(/Evidence directory: (.+)/);
+        if (evidenceMatch) {
+          const base = evidenceMatch[1].trim();
+          mkdirSync(join(base, "ac1"), { recursive: true });
+          writeFileSync(join(base, "ac1", "result.json"), JSON.stringify({
+            ac_id: "ac1", verdict: "pass", confidence: "high",
+            reasoning: "Found it", observed: "Tab visible",
+            steps_taken: ["goto http://localhost:3000"], screenshots: [],
+          }));
+        }
+        return { stdout: "", stderr: "", exitCode: 1, durationMs: 120000, timedOut: true };
+      }
+      return defaultRunClaudeResult(opts);
+    });
+
+    const result = await runPipeline(specPath, verifyDir, {
+      onACCheckpoint: async (acs) => acs,
+      onLog: () => {},
+      onError: () => {},
+      onProgress: () => {},
+    });
+
+    expect(result.hasRemaining).toBe(true);
+  });
+
   it("writes verdicts.json and report.json to run dir", async () => {
     const { runPipeline } = await import("../src/orchestrator.js");
 
@@ -416,5 +555,61 @@ describe("session state helpers", () => {
 
     const result = findLastIncompleteRun(verifyDir, specPath);
     expect(result).toBeNull();
+  });
+});
+
+describe("extractLearnings", () => {
+  it("extracts URL, selectors, and page notes from result files", async () => {
+    // extractLearnings is not exported, so test it indirectly via session-state.json
+    // after a pipeline run. We verify the session state has learnings with correct shape.
+    const { runPipeline } = await import("../src/orchestrator.js");
+    mockRunClaudeResult("ac-generator", { stdout: JSON.stringify(VALID_ACS) });
+
+    // Override mock to write detailed result files with steps_taken
+    const originalMock = vi.mocked(await import("../src/run-claude.js")).runClaude;
+    originalMock.mockImplementation(async (opts: RunClaudeOptions) => {
+      runClaudeCalls.push(opts);
+      if (opts.stage === "executor-session") {
+        const evidenceMatch = opts.prompt.match(/Evidence directory: (.+)/);
+        if (evidenceMatch) {
+          const base = evidenceMatch[1].trim();
+          mkdirSync(join(base, "ac1"), { recursive: true });
+          writeFileSync(join(base, "ac1", "result.json"), JSON.stringify({
+            ac_id: "ac1", verdict: "pass", confidence: "high",
+            reasoning: "Found it", observed: "Inbox tab visible in sidebar",
+            steps_taken: ["goto http://localhost:3000/inbox", "click @e5", "fill @e7 test"],
+            screenshots: ["result.png"],
+          }));
+          mkdirSync(join(base, "ac2"), { recursive: true });
+          writeFileSync(join(base, "ac2", "result.json"), JSON.stringify({
+            ac_id: "ac2", verdict: "pass", confidence: "high",
+            reasoning: "Found it", observed: "Pending tab visible",
+            steps_taken: ["goto http://localhost:3000/pending"],
+            screenshots: [],
+          }));
+        }
+        return { stdout: "", stderr: "", exitCode: 0, durationMs: 5000, timedOut: false };
+      }
+      return defaultRunClaudeResult(opts);
+    });
+
+    const result = await runPipeline(specPath, verifyDir, {
+      onACCheckpoint: async (acs) => acs,
+      onLog: () => {},
+      onError: () => {},
+      onProgress: () => {},
+    });
+
+    const state = JSON.parse(readFileSync(join(result.runDir, "session-state.json"), "utf-8"));
+    expect(state.learnings).toHaveLength(2);
+
+    const ac1Learning = state.learnings.find((l: Record<string, unknown>) => l.acId === "ac1");
+    expect(ac1Learning.url).toBe("http://localhost:3000/inbox");
+    expect(ac1Learning.selectorsUsed).toEqual(["@e5", "@e7 test"]);
+    expect(ac1Learning.pageNotes).toContain("Inbox tab visible");
+
+    const ac2Learning = state.learnings.find((l: Record<string, unknown>) => l.acId === "ac2");
+    expect(ac2Learning.url).toBe("http://localhost:3000/pending");
+    expect(ac2Learning.selectorsUsed).toEqual([]);
   });
 });
