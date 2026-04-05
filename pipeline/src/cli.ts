@@ -75,7 +75,16 @@ if (command === "run") {
   }
 
   if (result.hasRemaining) {
-    process.exit(3);     // partial run — re-run with --resume to continue
+    // Print partial summary so user sees what completed
+    if (result.verdicts) {
+      const verdicts = result.verdicts.verdicts;
+      const passCount = verdicts.filter(v => v.verdict === "pass").length;
+      const failCount = verdicts.filter(v => v.verdict !== "pass" && v.verdict !== "spec_unclear").length;
+      console.log(`Partial run: ${passCount} pass, ${failCount} fail out of ${verdicts.length} judged.`);
+    }
+    console.log("Remaining ACs not yet verified. Re-run with --resume to continue.");
+    console.log("Run dir:", result.runDir);
+    process.exit(3);
   }
 
   const verdicts = result.verdicts.verdicts;
