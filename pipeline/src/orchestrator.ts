@@ -46,7 +46,9 @@ function extractLearnings(
     const resultPath = join(evidenceBaseDir, acId, "result.json");
     try {
       const raw: Record<string, unknown> = JSON.parse(readFileSync(resultPath, "utf-8"));
-      const steps = Array.isArray(raw.steps_taken) ? (raw.steps_taken as string[]) : [];
+      const steps = Array.isArray(raw.steps_taken)
+        ? (raw.steps_taken as unknown[]).filter((s): s is string => typeof s === "string")
+        : [];
       const gotoStep = steps.find(s => s.startsWith("goto "));
       const url = gotoStep ? gotoStep.replace("goto ", "") : "";
       const selectors = steps
@@ -324,6 +326,7 @@ export async function runPipeline(
         }
         activeAcId = acId;
         commandCounts.set(acId, 0);
+        recentCommands.delete(acId);
         progress.update(acId, "running");
         callbacks.onLog(`  ${acId}: started`);
       }
