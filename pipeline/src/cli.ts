@@ -25,6 +25,7 @@ const { positionals, values } = parseArgs({
     password: { type: "string" },
     "browse-bin": { type: "string" },
     legacy: { type: "boolean", default: false },
+    resume: { type: "boolean", default: false },
     case: { type: "string" },
   },
 });
@@ -33,11 +34,22 @@ const [command, stageName] = positionals;
 
 if (command === "run") {
   // Full pipeline run via orchestrator
-  const { runPipeline } = await import("./orchestrator.js");
+  const { runPipeline, findLastIncompleteRun } = await import("./orchestrator.js");
   const verifyDir = values["verify-dir"]!;
   const config = (await import("./lib/config.js")).loadConfig(verifyDir);
   const specPath = values.spec ?? config.specPath;
   if (!specPath) { console.error("No --spec provided and no specPath in config"); process.exit(1); }
+
+  let resumeRunDir: string | undefined;
+  if (values.resume) {
+    const found = findLastIncompleteRun(verifyDir, specPath);
+    if (found) {
+      console.log(`Resuming from: ${found}`);
+      resumeRunDir = found;
+    } else {
+      console.log("No incomplete run found for this spec. Starting fresh.");
+    }
+  }
 
   const result = await runPipeline(specPath, verifyDir, {
     onACCheckpoint: async (acs) => {
@@ -55,11 +67,15 @@ if (command === "run") {
         process.stdout.write(`\r  ${evt.stage}: ${evt.detail ?? ""}   `);
       }
     },
-  });
+  }, resumeRunDir);
 
   if (!result.verdicts) {
     console.error("Pipeline failed. Check logs in:", result.runDir);
     process.exit(1);
+  }
+
+  if (result.hasRemaining) {
+    process.exit(3);     // partial run — re-run with --resume to continue
   }
 
   const verdicts = result.verdicts.verdicts;
@@ -542,13 +558,13 @@ if (command === "run") {
 
 } else {
   console.error("Usage:");
-  console.error("  npx tsx src/cli.ts run --spec <path> [--verify-dir .verify]");
+  console.error("  npx tsx src/cli.ts run --spec <path> [--verify-dir .verify] [--resume]");
   console.error("  npx tsx src/cli.ts index-app [--project-dir .] [--output .verify/app.json]");
   console.error("  npx tsx src/cli.ts run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
   console.error("  npx tsx src/cli.ts eval-planner [--run-dir <path>]");
   console.error("");
   console.error("Commands:");
-  console.error("  run            Full pipeline run (orchestrator)");
+  console.error("  run            Full pipeline run (orchestrator). --resume skips completed ACs from prior run");
   console.error("  index-app      Build app.json index (routes, selectors, schema, seed IDs)");
   console.error("  run-stage      Run a single stage for debugging");
   console.error("  eval-planner   Score planner output against baseline");
