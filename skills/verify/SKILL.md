@@ -64,34 +64,52 @@ Proceed to Turn 3.
 
 ---
 
-## Turn 3: Spec Interpreter
+## Turn 3: Code-Informed Spec Interpreter
 
 **Trigger:** Pre-flight passed.
 
-Review the spec inline — no subprocess needed. For each AC, check:
+Review the spec inline. For each AC, check for ambiguities:
 
-1. **Reveal action** — does it say "shown/displayed/visible" without saying how (inline, hover, click, modal)? → flag
-2. **Preconditions** — requires specific data to exist (sent doc, user role, feature flag)? → flag
-3. **Target** — UI element identifiable by label or button text? If too vague → flag
-4. **Success** — clear pass/fail? If not → flag
+1. **Reveal action** — does it say "shown/displayed/visible" without saying how (inline, hover, click, modal)?
+2. **Preconditions** — requires specific data to exist (sent doc, user role, feature flag)?
+3. **Target** — UI element identifiable by label or button text? If too vague?
+4. **Success** — clear pass/fail?
 
-If **no ambiguities found**: skip Turn 4, go directly to Turn 5.
+**When ambiguities are found, resolve them from the git diff — don't ask the user blind questions.**
 
-If **ambiguities found**: ask the user the first flagged question now. End your response and wait for their answer.
+Get the diff for the relevant changes:
+
+```bash
+git diff HEAD~1 -- '*.tsx' '*.ts' ':!*.spec.ts' ':!*.test.ts'
+```
+
+(Or if the user provided a PR number, use `gh pr diff <number>`.)
+
+Scan the diff for:
+- Component names, route paths, conditional rendering logic
+- How UI elements are rendered (inline, tooltip, modal, dropdown)
+- Preconditions (feature flags, role checks, data requirements)
+- Exact selector/label text the browser agent will need
+
+**Only read the diff. Do not Grep/Glob/Read the full codebase — it's too slow.**
+
+Then present **all** proposed clarifications to the user at once for confirmation:
+
+> Based on the code, here's what I found:
+> - **AC1**: Template type selector is in `AddTemplateSettingsFormPartial` at `/t/{teamUrl}/templates/{id}`, first step of the edit stepper
+> - **AC3**: TemplateTypeSelect appears in `EnvelopeEditorSettingsDialog` under the "General" tab, only when `envelope.type === TEMPLATE`
+>
+> Does this match your intent? Any corrections?
+
+End your response and wait for the user to confirm or correct.
 
 ---
 
-## Turn 4: Clarification Loop
+## Turn 4: Confirmation
 
-**Trigger:** User has answered a clarifying question.
+**Trigger:** User has confirmed or corrected the proposed clarifications.
 
-Keep a running list of AC annotations as you collect answers, e.g.:
-- AC3: expiry date revealed via hover on Pending badge
-- AC1: expiration field is inline in the send dialog
-
-Note the new answer and add it to the list. If more flagged ambiguities remain — ask the next one. End your response and wait.
-
-When all ambiguities are answered — proceed to Turn 5.
+If corrections were provided, update the annotations accordingly. Proceed to Turn 5.
 
 ---
 
