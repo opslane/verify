@@ -360,36 +360,6 @@ if (command === "run") {
       console.log(`Generated ${fanned.groups.length} groups, ${fanned.skipped.length} skipped`);
       break;
     }
-    case "browse-agent": {
-      const acId = values.ac;
-      if (!acId) { console.error("--ac is required for browse-agent"); process.exit(1); }
-      const planPath = join(runDir, "plan.json");
-      const plan = JSON.parse(readFileSync(planPath, "utf-8")) as { criteria: Array<{ id: string; group: string; description: string; url: string; steps: string[]; screenshot_at: string[]; timeout_seconds?: number }> };
-      const ac = plan.criteria.find(c => c.id === acId);
-      if (!ac) { console.error(`AC ${acId} not found in plan.json`); process.exit(1); }
-      const typedAc = { ...ac, timeout_seconds: ac.timeout_seconds ?? 120 };
-      const { resolveBrowseBin } = await import("./lib/browse.js");
-      const { buildBrowseAgentPrompt, parseBrowseResult } = await import("./stages/browse-agent.js");
-      const evidenceDir = join(runDir, "evidence", acId);
-      mkdirSync(evidenceDir, { recursive: true });
-      const prompt = buildBrowseAgentPrompt(typedAc, {
-        baseUrl: config.baseUrl,
-        browseBin: resolveBrowseBin(),
-        evidenceDir,
-      });
-      const browseTimeoutMs = timeoutOverrideMs
-        ?? (typeof ac.timeout_seconds === "number" ? ac.timeout_seconds * 1000 : 90_000);
-      const result = await runClaude({ prompt, model: "sonnet", timeoutMs: browseTimeoutMs, stage: `browse-agent-${acId}`, runDir, settingSources: "", ...permissions });
-      const parsed = parseBrowseResult(result.stdout);
-      if (parsed) {
-        writeFileSync(join(evidenceDir, "result.json"), JSON.stringify(parsed, null, 2));
-        console.log(`Browse agent ${acId}: ${parsed.observed.slice(0, 80)}`);
-      } else {
-        console.error(`Failed to parse browse agent output for ${acId}. Check logs:`, join(runDir, "logs"));
-        process.exit(1);
-      }
-      break;
-    }
     case "verify-login": {
       const { loginWithCredentials } = await import("./init.js");
       if (!config.auth?.loginSteps?.length) {
@@ -408,7 +378,7 @@ if (command === "run") {
       break;
     }
     default:
-      console.error(`Unknown stage: ${stageName}. Available: ac-generator, browse-agent, verify-login`);
+      console.error(`Unknown stage: ${stageName}. Available: ac-generator, verify-login`);
       process.exit(1);
   }
 } else {
@@ -427,7 +397,6 @@ if (command === "run") {
   console.error("");
   console.error("Stages:");
   console.error("  ac-generator   --spec <path>");
-  console.error("  browse-agent   --ac <id>");
   console.error("  verify-login");
   process.exit(1);
 }
