@@ -1,4 +1,4 @@
-# opslane-verify
+# Verify
 
 A verification layer for Claude Code. Reads your spec, runs a browser agent against your local dev server for each acceptance criterion, and returns pass/fail with screenshots — before you push. No CI. No infrastructure.
 
