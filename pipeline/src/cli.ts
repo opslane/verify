@@ -243,24 +243,6 @@ if (command === "run") {
     }
   }
 
-  // Ensure psqlCmd is available for entity graph discovery
-  if (!psqlCmd) {
-    const dbUrlEnv = appIndex.db_url_env ?? "DATABASE_URL";
-    const dbUrl = (projectEnvForDump[dbUrlEnv] ?? projectEnvForDump.DATABASE_URL ?? "") as string;
-    const cleanDbUrl = dbUrl.split("?")[0];
-    psqlCmd = cleanDbUrl ? `psql "${cleanDbUrl}"` : "";
-  }
-
-  // Step 4: Entity graph discovery — walk FK relationships for setup-writer
-  if (psqlCmd) {
-    console.log("  Discovering entity graphs...");
-    const { buildEntityGraphs } = await import("./lib/entity-graph.js");
-    const entityGraphs = buildEntityGraphs(psqlCmd, appIndex.data_model);
-    appIndex.entity_graphs = entityGraphs;
-    const rootTables = Object.keys(entityGraphs);
-    console.log(`  Entity graphs: ${rootTables.length} root tables`);
-  }
-
   writeFileSync(outputPath, JSON.stringify(appIndex, null, 2));
   console.log(`\nApp index written to: ${outputPath}`);
   console.log(`  Routes: ${Object.keys(appIndex.routes).length}`);
