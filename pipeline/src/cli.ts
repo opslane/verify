@@ -125,7 +125,7 @@ if (command === "run") {
   const envVars = extractEnvVars(projectDir);
 
   // Dump database schema (generic — works for any Postgres project)
-  const { loadProjectEnv } = await import("./stages/setup-writer.js");
+  const { loadProjectEnv } = await import("./lib/env.js");
   const projectEnvForDump = loadProjectEnv(projectDir);
   const schemaDdl = dumpDatabaseSchema(projectEnvForDump, envVars.db_url_env);
   if (schemaDdl) {
