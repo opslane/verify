@@ -65,13 +65,11 @@ vi.mock("../src/run-claude.js", () => ({
 // ── Mock browse helpers ─────────────────────────────────────────────────────
 vi.mock("../src/lib/browse.js", () => ({
   resolveBrowseBin: vi.fn(() => "/mock/browse"),
-  resetPage: vi.fn(),
   startGroupDaemon: vi.fn((_groupId: string, runDir: string) => ({
     env: { BROWSE_STATE_FILE: `${runDir}/.browse/browse.json` },
     stateDir: `${runDir}/.browse`,
   })),
   stopGroupDaemon: vi.fn(),
-  stopAllGroupDaemons: vi.fn(),
 }));
 
 vi.mock("../src/init.js", () => ({
