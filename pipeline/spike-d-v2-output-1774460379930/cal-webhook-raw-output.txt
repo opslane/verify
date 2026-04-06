@@ -1,1 +1,0 @@
-{"group_id":"spike-d-cal-webhook","condition":"A webhook exists for the logged-in user","setup_commands":["psql \"${DATABASE_URL%%\\?*}\" --set ON_ERROR_STOP=1 -c \"INSERT INTO \\\"Webhook\\\" (id, \\\"userId\\\", \\\"subscriberUrl\\\", active) VALUES ('verify-test-spike-d-cal-webhook-001', 4, 'https://example.com/webhook', true)\""],"teardown_commands":[]}

@@ -1,3 +1,0 @@
-Bookings already exist for the logged-in user's event type. No changes needed.
-
-{"group_id":"spike-d-cal-booking","condition":"A booking exists for the logged-in user's event type","setup_commands":[],"teardown_commands":[]}
