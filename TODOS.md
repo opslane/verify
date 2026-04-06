@@ -155,3 +155,59 @@ Deferred work captured from plan reviews. Each item includes enough context to p
 **Depends on:** v1 local pipeline shipping first.
 
 **Effort:** M human → S with CC+gstack
+
+---
+
+## P1 — Automated npm publish workflow (GH Actions)
+
+**What:** Add a GitHub Actions workflow that publishes `@opslane/verify` to npm on version tag push. Steps: checkout → install → `tsc` → copy prompts → `npm publish --provenance`. Uses `NPM_TOKEN` secret and `NODE_AUTH_TOKEN`.
+
+**Why:** Manual `npm publish` is error-prone (wrong directory, missing build step, stale dist/). Automated publish ensures every release is built clean from CI. Provenance flag adds npm supply chain transparency.
+
+**Context:** Package publishes from `pipeline/` subdirectory (Phase 1). Workflow triggers on `v*` tags. Add `publishConfig: { "access": "public" }` to package.json. Phase 2 changes the publish root to repo root when server moves out.
+
+**Depends on:** Standalone CLI shipping first (package.json rename, bin entry, tsc build).
+
+**Effort:** XS human → XS with CC+gstack
+
+---
+
+## P1 — Publish smoke test in CI
+
+**What:** Add a GH Actions job (in the publish workflow or as a separate PR check) that runs `npm pack`, installs the tarball in a temp dir, and runs `npx @opslane/verify --version` + `npx @opslane/verify run --help` to verify the package installs and boots correctly.
+
+**Why:** `npm publish` can silently ship broken packages (missing `dist/`, wrong `bin` path, missing prompt templates). A 30-second smoke test catches all of these before publish.
+
+**Context:** Run as a prerequisite step before `npm publish` in the GH Actions workflow. Uses `npm pack` → `npm install -g ./opslane-verify-*.tgz` → verify CLI entry point works. Also catches the prompt template copy issue (postbuild step must run).
+
+**Depends on:** Automated npm publish workflow.
+
+**Effort:** XS human → XS with CC+gstack
+
+---
+
+## P2 — Platform support docs in package README
+
+**What:** Add a "Supported Platforms" section to the package README listing macOS (arm64, x64) and Linux (x64), with a note that Windows is unsupported due to browse binary availability.
+
+**Why:** Users on unsupported platforms get a confusing error from the browse auto-downloader. Clear docs set expectations upfront.
+
+**Context:** The browse binary is only built for macOS and Linux. The auto-download function in `browse.ts` will throw "Unsupported platform" on Windows. README should explain this and point to `BROWSE_BIN` env var override as an escape hatch.
+
+**Depends on:** Standalone CLI shipping first.
+
+**Effort:** XS human → XS with CC+gstack
+
+---
+
+## P2 — Credential redaction in prompt logs
+
+**What:** Redact email/password values from prompt log files written to `.verify/runs/` before writing to disk. Replace credential values with `[REDACTED]`.
+
+**Why:** Even though `.verify/` is gitignored, prompt logs contain plaintext credentials from config.json. If a user accidentally commits or shares a run directory, credentials leak. Defense in depth.
+
+**Context:** Credentials flow from `config.json` → prompt string → log file (written by `runClaude` in `run-claude.ts`). Add a `redactCredentials(text, config)` helper that replaces known credential values (email, password from config) with `[REDACTED]` before writing log files. Apply in `runClaude` where it writes `{stage}-prompt.txt` and `{stage}-response.txt`.
+
+**Depends on:** Standalone CLI shipping first.
+
+**Effort:** S human → XS with CC+gstack

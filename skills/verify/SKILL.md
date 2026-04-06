@@ -106,7 +106,7 @@ Then run the pipeline:
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts run \
+npx @opslane/verify run \
   --spec .verify/spec.md \
   --verify-dir .verify
 ```

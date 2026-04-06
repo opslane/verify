@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { resolveBrowseBin, startGroupDaemon, stopGroupDaemon, stopAllGroupDaemons } from "../src/lib/browse.js";
+import { resolveBrowseBin, ensureBrowseBin, detectPlatform, startGroupDaemon, stopGroupDaemon, stopAllGroupDaemons } from "../src/lib/browse.js";
 
 describe("resolveBrowseBin", () => {
   afterEach(() => { delete process.env.BROWSE_BIN; });
@@ -23,6 +23,33 @@ describe("resolveBrowseBin", () => {
       // Browse is not installed — verify it throws
       expect(() => resolveBrowseBin()).toThrow("Browse binary not found");
     }
+  });
+});
+
+describe("detectPlatform", () => {
+  it("returns a valid platform string", () => {
+    const plat = detectPlatform();
+    expect(["darwin-arm64", "darwin-x64", "linux-x64"]).toContain(plat);
+  });
+});
+
+describe("ensureBrowseBin", () => {
+  afterEach(() => { delete process.env.BROWSE_BIN; });
+
+  it("returns BROWSE_BIN env var when set", async () => {
+    process.env.BROWSE_BIN = "/tmp/fake-browse";
+    const path = await ensureBrowseBin();
+    expect(path).toBe("/tmp/fake-browse");
+  });
+
+  it("returns cached path when binary exists", async () => {
+    delete process.env.BROWSE_BIN;
+    const cached = join(homedir(), ".cache", "verify", "browse");
+    if (existsSync(cached)) {
+      const path = await ensureBrowseBin();
+      expect(path).toBe(cached);
+    }
+    // If not cached, skip — we don't want to trigger a real download in tests
   });
 });
 

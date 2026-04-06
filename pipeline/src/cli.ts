@@ -1,7 +1,9 @@
-// pipeline/src/cli.ts — CLI entry point for running pipeline stages
+#!/usr/bin/env node
+// pipeline/src/cli.ts — CLI entry point for @opslane/verify
 import { parseArgs } from "node:util";
-import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfig } from "./lib/config.js";
 import { runClaude } from "./run-claude.js";
 import { STAGE_PERMISSIONS } from "./lib/types.js";
@@ -22,8 +24,18 @@ const { positionals, values } = parseArgs({
     email: { type: "string" },
     password: { type: "string" },
     "browse-bin": { type: "string" },
+    "login-steps": { type: "string" },
+    version: { type: "boolean", short: "v", default: false },
   },
 });
+
+// --version flag
+if (values.version) {
+  const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version: string };
+  console.log(pkg.version);
+  process.exit(0);
+}
 
 const [command, stageName] = positionals;
 
@@ -71,7 +83,71 @@ if (command === "run") {
     process.exit(0);     // all pass
   }
 
-} else if (command === "index-app") {
+} else if (command === "init") {
+  // One-time project setup: create config, discover login, verify auth, index app
+  const baseUrl = values["base-url"] ?? "http://localhost:3000";
+  const email = values.email;
+  const password = values.password;
+  if (!email || !password) {
+    console.error("init requires --email and --password");
+    process.exit(1);
+  }
+
+  const projectDir = values["project-dir"] ?? process.cwd();
+  const verifyDir = values["verify-dir"] === ".verify"
+    ? join(projectDir, ".verify")
+    : values["verify-dir"]!;
+
+  // Step 1: Create .verify/ and config.json
+  mkdirSync(verifyDir, { recursive: true });
+  const configPath = join(verifyDir, "config.json");
+
+  // Load existing config or start fresh
+  let config: Record<string, unknown> = {};
+  if (existsSync(configPath)) {
+    try { config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>; } catch { /* start fresh */ }
+  }
+  config.baseUrl = baseUrl;
+  config.auth = { email, password, loginSteps: [] };
+  writeFileSync(configPath, JSON.stringify(config, null, 2));
+  console.log(`Config written: ${configPath}`);
+
+  // Step 2: Load login steps from file
+  const loginStepsPath = values["login-steps"];
+  if (!loginStepsPath) {
+    console.error("--login-steps <path> is required. Use /verify-setup in Claude Code to discover login steps,");
+    console.error("then pass the resulting JSON file: verify init --login-steps .verify/login-steps.json ...");
+    process.exit(1);
+  }
+  const steps = JSON.parse(readFileSync(loginStepsPath, "utf-8")) as unknown[];
+  (config.auth as Record<string, unknown>).loginSteps = steps;
+  writeFileSync(configPath, JSON.stringify(config, null, 2));
+  console.log(`Login steps loaded from: ${loginStepsPath} (${steps.length} steps)`);
+
+  // Step 3: Verify login works
+  console.log("Verifying login...");
+  const { loginWithCredentials } = await import("./init.js");
+  const fullConfig = loadConfig(verifyDir);
+  const loginResult = loginWithCredentials(fullConfig);
+  if (!loginResult.ok) {
+    console.error(`Login verification failed: ${loginResult.error}`);
+    process.exit(1);
+  }
+  console.log("Login verified.");
+
+  // Step 4: Index the app
+  console.log("Indexing app...");
+  const { execFileSync } = await import("node:child_process");
+  execFileSync(process.execPath, [
+    ...process.execArgv,
+    fileURLToPath(import.meta.url),
+    "index-app",
+    "--project-dir", projectDir,
+  ], { stdio: "inherit" });
+
+  console.log("\nSetup complete. Run `npx @opslane/verify run --spec .verify/spec.md` to verify.");
+
+} else if (command === "index-app" || command === "index") {
   const projectDir = values["project-dir"] ?? process.cwd();
   const outputPath = values.output ?? join(projectDir, ".verify", "app.json");
   const runDir = join(projectDir, ".verify", "runs", `index-${Date.now()}`);
@@ -337,13 +413,16 @@ if (command === "run") {
   }
 } else {
   console.error("Usage:");
-  console.error("  npx tsx src/cli.ts run --spec <path> [--verify-dir .verify]");
-  console.error("  npx tsx src/cli.ts index-app [--project-dir .] [--output .verify/app.json]");
-  console.error("  npx tsx src/cli.ts run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
+  console.error("  verify run --spec <path> [--verify-dir .verify]");
+  console.error("  verify init --base-url <url> --email <email> --password <password> --login-steps <path>");
+  console.error("  verify index [--project-dir .] [--output .verify/app.json]");
+  console.error("  verify run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
   console.error("");
   console.error("Commands:");
   console.error("  run            Full pipeline run (orchestrator)");
-  console.error("  index-app      Build app.json index (routes, selectors, schema, seed IDs)");
+  console.error("  init           One-time project setup (login discovery + app indexing)");
+  console.error("  index          Build app.json index (routes, selectors, schema, seed IDs)");
+  console.error("  index-app      Alias for index");
   console.error("  run-stage      Run a single stage for debugging");
   console.error("");
   console.error("Stages:");

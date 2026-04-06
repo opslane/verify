@@ -13,13 +13,16 @@ graph LR
 
 ## Install
 
-Requires Claude Code with OAuth login (`claude login`).
+### Prerequisites
 
-**Plugin marketplace:**
+- Node 22+
+- Claude Code with OAuth login (`claude login`)
+
 ```bash
-/plugin marketplace add opslane/verify
-/plugin install opslane-verify@opslane/verify
+npx @opslane/verify --version
 ```
+
+The browse binary is auto-downloaded on first run.
 
 **Manual (contributors):**
 ```bash
@@ -30,6 +33,21 @@ cd verify/pipeline && npm install
 > Manual clone gives you the pipeline CLI but not the `/verify` slash commands. See [CLAUDE.md](./CLAUDE.md) for contributor setup.
 
 ## Usage
+
+### Standalone CLI
+
+```bash
+# One-time setup (login discovery + app indexing)
+npx @opslane/verify init --base-url http://localhost:3000 --email test@example.com --password secret
+
+# Run verification against a spec
+npx @opslane/verify run --spec .verify/spec.md
+
+# Re-index the app after schema/route changes
+npx @opslane/verify index --project-dir .
+```
+
+### Claude Code Skills
 
 ```bash
 # One-time setup — installs browser, discovers login steps, indexes your app

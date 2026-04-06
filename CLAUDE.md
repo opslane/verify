@@ -20,7 +20,7 @@ GitHub App webhook → /webhooks/github → HMAC verify → installation.created
 ```
 
 ## Skill sync
-The skills in `skills/` are the source of truth. A `PostToolUse` hook (`.claude/hooks/sync-skill.sh`) automatically copies them to `~/.claude/skills/` after every Write or Edit. It also syncs `pipeline/` to `~/.claude/tools/verify/pipeline/` when pipeline files change. Never edit `~/.claude/skills/verify/SKILL.md` directly — edit the project copy instead.
+The skills in `skills/` are the source of truth. A `PostToolUse` hook (`.claude/hooks/sync-skill.sh`) automatically copies them to `~/.claude/skills/` after every Write or Edit. Never edit `~/.claude/skills/verify/SKILL.md` directly — edit the project copy instead.
 
 ## Module-specific instructions
 Pipeline and server have their own conventions, commands, and verification steps:
