@@ -74,10 +74,6 @@ vi.mock("../src/lib/browse.js", () => ({
   stopAllGroupDaemons: vi.fn(),
 }));
 
-vi.mock("../src/lib/video.js", () => ({
-  findAndRenameVideo: vi.fn(() => null),
-}));
-
 vi.mock("../src/init.js", () => ({
   runPreflight: vi.fn(async () => ({ ok: true, errors: [] })),
   loginOnDaemon: vi.fn(() => ({ ok: true })),
