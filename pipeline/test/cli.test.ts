@@ -25,8 +25,9 @@ describe("cli", () => {
     const result = runCli([]);
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("run-stage");
-    expect(result.stderr).toContain("judge");
-    expect(result.stderr).toContain("learner");
+    expect(result.stderr).toContain("ac-generator");
+    expect(result.stderr).toContain("browse-agent");
+    expect(result.stderr).toContain("verify-login");
   });
 
   it("errors when unknown stage given", () => {
@@ -35,32 +36,11 @@ describe("cli", () => {
     expect(result.stderr).toContain("Unknown stage");
   });
 
-  it("login-agent stage is accepted (not unknown)", () => {
-    const result = runCli(["run-stage", "login-agent",
-      "--verify-dir", "/tmp/nonexistent",
-      "--base-url", "http://localhost:3000",
-      "--email", "a@b.com",
-      "--password", "x",
-      "--browse-bin", "/nonexistent/browse",
-    ]);
-    // Should not error with "Unknown stage" — may fail for other reasons (no browse binary, etc.)
-    expect(result.stderr).not.toContain("Unknown stage: login-agent");
-  });
-
   it("verify-login stage is accepted (not unknown)", () => {
     const result = runCli(["run-stage", "verify-login",
       "--verify-dir", "/tmp/nonexistent",
     ]);
     expect(result.stderr).not.toContain("Unknown stage: verify-login");
-  });
-
-  it("judge with empty evidence outputs empty verdicts", () => {
-    const runDir = join(tmpdir(), `verify-cli-${Date.now()}`);
-    mkdirSync(join(runDir, "logs"), { recursive: true });
-    const result = runCli(["run-stage", "judge", "--run-dir", runDir]);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('"verdicts":[]');
-    rmSync(runDir, { recursive: true, force: true });
   });
 
   it("browse-agent stage honors per-AC timeout_seconds", () => {

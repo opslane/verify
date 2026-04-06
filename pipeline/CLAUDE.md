@@ -18,9 +18,7 @@
 - **Node 22 ESM**: use `import`, not `require`
 - **Non-interactive Claude**: always use `claude -p`, never interactive mode
 - **Stage permissions**: each stage gets minimal tool access via `STAGE_PERMISSIONS` in types.ts
-- **Deterministic > LLM**: Prisma column mappings and seed IDs are parsed deterministically, not by LLM
 
 ## Don't
 - Don't hardcode URLs — use config or env vars
 - Don't commit `.verify/` contents — auth, evidence, and plans are gitignored
-- Don't use Prisma field names in SQL — always look up the Postgres column name from `app.json`

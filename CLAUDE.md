@@ -8,7 +8,7 @@ Also contains `server/` — a SaaS backend (Hono + TypeScript + Postgres) for Gi
 ### Pipeline
 ```
 /verify-setup → index-app (Prisma parser + seed IDs + 4 LLM agents → app.json)
-/verify → ac-generator → planner → setup-writer + browse-agents (parallel) → judge → learner → report
+/verify → ac-generator → single-session executor → report
 ```
 Config lives in `.verify/config.json`. App index lives in `.verify/app.json`. Env vars always override config.
 `.verify/` is runtime output (gitignored) — config, plans, evidence, auth. `scripts/` is the legacy bash pipeline, being replaced by `pipeline/`.
@@ -29,5 +29,4 @@ Pipeline and server have their own conventions, commands, and verification steps
 
 ## References
 - Design docs and implementation plans: `docs/plans/`
-- Eval sets: `docs/evals/`
 - Prompt templates: `pipeline/src/prompts/`
