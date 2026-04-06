@@ -38,66 +38,10 @@ export interface ACGeneratorOutput {
   skipped: Array<{ id: string; reason: string }>;
 }
 
-// ── Planner output ──────────────────────────────────────────────────────────
-
-export interface PlannedAC {
-  id: string;
-  group: string;                        // matches ACGroup.id
-  description: string;
-  url: string;                          // relative, e.g. "/settings"
-  steps: string[];
-  screenshot_at: string[];
-  timeout_seconds: number;              // 60-300
-}
-
-export interface PlannerOutput {
-  criteria: PlannedAC[];
-}
-
-// ── Plan Validator ──────────────────────────────────────────────────────────
-
-export interface PlanValidationError {
-  acId: string;
-  field: string;
-  message: string;
-}
-
-export interface PlanValidationResult {
-  valid: boolean;
-  errors: PlanValidationError[];
-}
-
-// ── Setup Writer output ─────────────────────────────────────────────────────
-
-export interface SetupCommands {
-  group_id: string;
-  condition: string;
-  setup_commands: string[];
-  teardown_commands: string[];
-}
-
-// ── Browse Agent output ─────────────────────────────────────────────────────
-
-export interface NavFailure {
-  kind?: "navigation" | "interaction";
-  failed_step: string;
-  error: string;
-  page_snapshot: string;
-}
-
-export interface BrowseResult {
-  ac_id: string;
-  observed: string;
-  screenshots: string[];                // filenames relative to evidence dir
-  commands_run: string[];
-  nav_failure?: NavFailure;             // present when element not found on current view
-}
-
 // ── Judge output (with confidence scoring) ──────────────────────────────────
 
 export type Verdict = "pass" | "fail" | "blocked" | "unclear" | "error" | "timeout" | "skipped"
-  | "setup_failed" | "setup_unsupported" | "plan_error" | "auth_expired"
-  | "login_failed" | "spec_unclear";
+  | "auth_expired" | "spec_unclear";
 
 export type Confidence = "high" | "medium" | "low";
 
@@ -111,8 +55,6 @@ export interface ACVerdict {
 export interface JudgeOutput {
   verdicts: ACVerdict[];
 }
-
-// ── Learner (no structured output — writes learnings.md) ────────────────────
 
 // ── App Index (from /verify-setup) ──────────────────────────────────────────
 
@@ -207,8 +149,6 @@ export const STAGE_PERMISSIONS: Record<string, Pick<RunClaudeOptions, "dangerous
   // ac-generator: no entry — content inlined in prompt, tools: [] set in orchestrator
   "executor":      { dangerouslySkipPermissions: true, tools: ["Bash", "Read"] },  // skip-permissions for browse binary + restrict tool set
   "index-agent":   { dangerouslySkipPermissions: true },    // needs Read, Grep, Glob for codebase indexing
-  "browse-agent":  { dangerouslySkipPermissions: true, tools: ["Bash", "Read"] },  // legacy — kept for run-stage debugging
-  "login-agent":   { dangerouslySkipPermissions: true, tools: ["Bash"] },           // Bash for browse CLI only
 };
 
 // ── Timeline event ──────────────────────────────────────────────────────────

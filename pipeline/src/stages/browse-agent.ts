@@ -2,7 +2,26 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { PlannedAC, BrowseResult, AC } from "../lib/types.js";
+import type { AC } from "../lib/types.js";
+
+/** Legacy types — kept inline for run-stage debugging only. */
+interface PlannedAC {
+  id: string;
+  group: string;
+  description: string;
+  url: string;
+  steps: string[];
+  screenshot_at: string[];
+  timeout_seconds: number;
+}
+
+interface BrowseResult {
+  ac_id: string;
+  observed: string;
+  screenshots: string[];
+  commands_run: string[];
+  nav_failure?: { kind?: "navigation" | "interaction"; failed_step: string; error: string; page_snapshot: string };
+}
 import { parseJsonOutput } from "../lib/parse-json.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
