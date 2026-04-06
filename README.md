@@ -1,64 +1,78 @@
 # opslane-verify
 
-A verification layer for Claude Code. Reads your spec doc, runs one browser agent per acceptance criterion against your local dev server, and returns pass/fail with screenshots and video — before you push. No CI. No infrastructure.
-
-## How it works
+A verification layer for Claude Code. Reads your spec, runs a browser agent against your local dev server for each acceptance criterion, and returns pass/fail with screenshots — before you push. No CI. No infrastructure.
 
 ```mermaid
 graph LR
-    A[spec doc] --> B[spec interpreter]
-    B --> C[planner]
-    C --> D[agent: AC 1]
-    C --> E[agent: AC 2]
-    C --> F[agent: AC n]
-    D --> G[judge]
-    E --> G
-    F --> G
-    G --> H[report]
+    A[spec] --> B[AC extractor]
+    B --> C[single-session executor]
+    C --> D[report]
 ```
-
-1. **Spec Interpreter** — reviews each AC for testability gaps, asks clarifying questions
-2. **Planner** — extracts testable acceptance criteria from the annotated spec
-3. **Agents** — one Claude + Playwright agent per AC, runs against your dev server
-4. **Judge** — reviews screenshots and traces, returns pass/fail per AC
-5. **Report** — prints results; failures include screenshot links and session recordings
 
 ![Verify Report](docs/report-screenshot.png)
 
-## Installation
+## Install
 
-### Prerequisites
+Requires Claude Code with OAuth login (`claude login`).
 
-- Claude Code with OAuth login (`claude login`)
-- Playwright MCP
-
-### Install
-
+**Plugin marketplace:**
 ```bash
 /plugin marketplace add opslane/verify
 /plugin install opslane-verify@opslane/verify
 ```
 
-**macOS only:** `brew install coreutils` (for `gtimeout`)
+**Manual (contributors):**
+```bash
+git clone https://github.com/opslane/verify.git
+cd verify/pipeline && npm install
+```
+
+> Manual clone gives you the pipeline CLI but not the `/verify` slash commands. See [CLAUDE.md](./CLAUDE.md) for contributor setup.
 
 ## Usage
 
 ```bash
-# One-time auth setup (skip if your app has no login)
+# One-time setup — installs browser, discovers login steps, indexes your app
 /verify-setup
 
-# Run verification — will ask you for the spec
+# Run verification against a spec
 /verify
 ```
 
-`/verify` always asks for your spec upfront, then walks you through any clarifying questions before running.
+`/verify` asks for your spec, reviews it for ambiguities, then runs the pipeline. Results appear inline with a link to the full HTML report.
 
 ## Debugging failures
 
-```bash
-# View Playwright trace for a failed AC
-npx playwright show-report .verify/evidence/<ac_id>/trace
+After a run, evidence lives in `.verify/runs/<run_id>/`:
 
-# Watch session recording
-open .verify/evidence/<ac_id>/session.webm
+```bash
+# Open the HTML report (screenshots, verdicts, and steps in one page)
+open .verify/runs/*/report.html
+
+# Browse raw evidence for a specific AC
+ls .verify/runs/*/evidence/<ac_id>/
 ```
+
+Each AC's evidence directory contains:
+- `result.json` — verdict, confidence, reasoning, steps taken
+- `*.png` — screenshots captured during execution
+
+## Architecture
+
+The pipeline runs two stages, then generates a report:
+
+**1. AC Extractor** — an LLM call (no tools) that parses the spec into grouped acceptance criteria. Groups share a precondition (e.g., "logged in as admin"). Pure UI checks get their own group with no setup.
+
+**2. Single-Session Executor** — one browser session runs all ACs in sequence. A supervisor enforces a per-AC command budget. If the executor exceeds its budget or abandons an AC, the supervisor writes a "blocked" verdict automatically.
+
+There is no separate judge stage — the executor writes `result.json` directly for each AC, and the orchestrator collects them into `verdicts.json` and generates an HTML report.
+
+### Why single-session?
+
+- Login happens once, cookies persist across all ACs
+- No cold-start overhead per criterion
+- Supervisor can enforce budgets without executor cooperation
+
+### Dev setup
+
+See [CLAUDE.md](./CLAUDE.md) for full dev commands, conventions, and test instructions.
