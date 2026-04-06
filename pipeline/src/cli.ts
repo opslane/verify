@@ -43,7 +43,7 @@ if (command === "run") {
   // Full pipeline run via orchestrator
   const { runPipeline } = await import("./orchestrator.js");
   const verifyDir = values["verify-dir"]!;
-  const config = (await import("./lib/config.js")).loadConfig(verifyDir);
+  const config = loadConfig(verifyDir);
   const specPath = values.spec ?? config.specPath;
   if (!specPath) { console.error("No --spec provided and no specPath in config"); process.exit(1); }
 
@@ -157,8 +157,6 @@ if (command === "run") {
   const { extractEnvVars, findPrismaSchemaPath, findSeedFiles, mergeIndexResults, dumpDatabaseSchema, dumpSeedData } = await import("./lib/index-app.js");
   const { parsePrismaSchema, extractJsonFieldAnnotations } = await import("./lib/prisma-parser.js");
   const { groupSeedIdsByContext } = await import("./lib/seed-extractor.js");
-  const { readFileSync: readFs } = await import("node:fs");
-  const { readFileSync: readPrompt } = await import("node:fs");
 
   // Step 1: Deterministic parsing (no LLM needed)
   console.log("Indexing app...");
@@ -168,14 +166,14 @@ if (command === "run") {
   const schemaPath = findPrismaSchemaPath(projectDir);
   if (schemaPath) {
     console.log(`  Found Prisma schema: ${schemaPath}`);
-    prismaMapping = parsePrismaSchema(readFs(schemaPath, "utf-8"));
+    prismaMapping = parsePrismaSchema(readFileSync(schemaPath, "utf-8"));
     console.log(`  Parsed ${Object.keys(prismaMapping).length} models with column mappings`);
   }
 
   // Extract JSONB type annotations from Prisma schema (Prisma-specific)
   let jsonAnnotations: Record<string, Record<string, string>> = {};
   if (schemaPath) {
-    jsonAnnotations = extractJsonFieldAnnotations(readFs(schemaPath, "utf-8"));
+    jsonAnnotations = extractJsonFieldAnnotations(readFileSync(schemaPath, "utf-8"));
     const annotatedFields = Object.values(jsonAnnotations).reduce((n, m) => n + Object.keys(m).length, 0);
     if (annotatedFields > 0) {
       console.log(`  Found ${annotatedFields} JSONB type annotations`);
@@ -187,7 +185,7 @@ if (command === "run") {
   const seedFiles = findSeedFiles(projectDir);
   if (seedFiles.length > 0) {
     console.log(`  Found ${seedFiles.length} seed file(s)`);
-    const allContent = seedFiles.map(f => readFs(f, "utf-8")).join("\n");
+    const allContent = seedFiles.map(f => readFileSync(f, "utf-8")).join("\n");
     seedIds = groupSeedIdsByContext(allContent);
     const totalIds = Object.values(seedIds).flat().length;
     console.log(`  Extracted ${totalIds} seed IDs across ${Object.keys(seedIds).length} models`);
@@ -225,7 +223,7 @@ if (command === "run") {
 
   const agentResults = await Promise.all(
     agentConfigs.map(async (agent) => {
-      const promptTemplate = readPrompt(join(promptDir, agent.file), "utf-8");
+      const promptTemplate = readFileSync(join(promptDir, agent.file), "utf-8");
       let prompt = promptTemplate.replace(/OUTPUT_FILE/g, agent.outputFile);
       if (agent.name === "schema") {
         prompt = prompt.replace(/SCHEMA_HINT/g, schemaHint);
@@ -241,7 +239,7 @@ if (command === "run") {
                    ...STAGE_PERMISSIONS["index-agent"], // needs Read, Grep, Glob
         });
         // Read the output file the agent wrote
-        const raw = readFs(agent.outputFile, "utf-8");
+        const raw = readFileSync(agent.outputFile, "utf-8");
         return JSON.parse(raw);
       } catch {
         console.error(`  Warning: ${agent.name} agent failed, using empty result`);
