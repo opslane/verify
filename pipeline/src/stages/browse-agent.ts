@@ -126,6 +126,7 @@ interface SessionOpts {
   evidenceBaseDir: string;
   diffHints: string;
   appRoutes?: string;
+  learnings?: string;
 }
 
 export function buildSessionPrompt(acs: AC[], opts: SessionOpts): string {
@@ -137,7 +138,8 @@ export function buildSessionPrompt(acs: AC[], opts: SessionOpts): string {
     .replaceAll("{{browseBin}}", opts.browseBin)
     .replaceAll("{{evidenceBaseDir}}", opts.evidenceBaseDir)
     .replaceAll("{{diffHints}}", opts.diffHints)
-    .replaceAll("{{appRoutes}}", opts.appRoutes ?? "No app index available. Navigate using the app UI.");
+    .replaceAll("{{appRoutes}}", opts.appRoutes ?? "No app index available. Navigate using the app UI.")
+    .replaceAll("{{learnings}}", opts.learnings ?? "");
 }
 
 /**

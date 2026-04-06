@@ -4,7 +4,7 @@ import { readFileSync, existsSync, rmSync, mkdirSync, writeFileSync } from "node
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { buildBrowseAgentPrompt, writeInstructionsFile, parseBrowseResult, buildReplanPrompt, parseReplanOutput } from "../src/stages/browse-agent.js";
+import { buildBrowseAgentPrompt, writeInstructionsFile, parseBrowseResult, buildReplanPrompt, parseReplanOutput, buildSessionPrompt } from "../src/stages/browse-agent.js";
 import { isAuthFailure } from "../src/lib/types.js";
 import type { PlannedAC } from "../src/lib/types.js";
 
@@ -258,6 +258,46 @@ describe("parseReplanOutput", () => {
 
   it("returns null for empty output", () => {
     expect(parseReplanOutput("")).toBeNull();
+  });
+});
+
+describe("buildSessionPrompt", () => {
+  it("includes learnings when provided", () => {
+    const acs = [{ id: "ac1", description: "Tab shows Inbox" }];
+    const prompt = buildSessionPrompt(acs, {
+      baseUrl: "http://localhost:3000",
+      browseBin: "/usr/bin/browse",
+      evidenceBaseDir: "/tmp/evidence",
+      diffHints: "No changes",
+      learnings: "LEARNINGS FROM PREVIOUS SESSION:\n- ac0: URL=/dashboard",
+    });
+    expect(prompt).toContain("LEARNINGS FROM PREVIOUS SESSION");
+    expect(prompt).toContain("ac0: URL=/dashboard");
+  });
+
+  it("omits learnings placeholder when not provided", () => {
+    const acs = [{ id: "ac1", description: "Tab shows Inbox" }];
+    const prompt = buildSessionPrompt(acs, {
+      baseUrl: "http://localhost:3000",
+      browseBin: "/usr/bin/browse",
+      evidenceBaseDir: "/tmp/evidence",
+      diffHints: "No changes",
+    });
+    expect(prompt).not.toContain("{{learnings}}");
+    // Should have no leftover template vars
+    expect(prompt).not.toContain("{{");
+  });
+
+  it("includes selector priority rules", () => {
+    const acs = [{ id: "ac1", description: "Tab shows Inbox" }];
+    const prompt = buildSessionPrompt(acs, {
+      baseUrl: "http://localhost:3000",
+      browseBin: "/usr/bin/browse",
+      evidenceBaseDir: "/tmp/evidence",
+      diffHints: "No changes",
+    });
+    expect(prompt).toContain("data-testid");
+    expect(prompt).toContain("RECOVERY WITH FALLBACK");
   });
 });
 

@@ -1,5 +1,5 @@
 // pipeline/src/orchestrator.ts — V1.1 pipeline: AC Extractor → Single-Session Executor → Report
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type {
   ACGeneratorOutput, AC, ACVerdict, ProgressEvent, StageProgressEvent, JudgeOutput,
@@ -18,11 +18,105 @@ import { resolveBrowseBin, startGroupDaemon, stopGroupDaemon } from "./lib/brows
 import { formatTerminalReport, formatTimingSummary } from "./report.js";
 import { readTimeline } from "./lib/timeline.js";
 
+export interface SessionState {
+  specPath: string;
+  completedAcIds: string[];
+  remainingAcIds: string[];
+  learnings: SessionLearning[];
+  timestamp: string;
+}
+
+export interface SessionLearning {
+  acId: string;
+  url: string;
+  selectorsUsed: string[];
+  pageNotes: string;
+}
+
+/**
+ * Extract learnings from completed AC results — selectors that worked, URLs visited, page structure.
+ * These get injected into the resume session prompt so the agent doesn't re-discover everything.
+ */
+function extractLearnings(
+  completedAcIds: string[],
+  evidenceBaseDir: string,
+): SessionLearning[] {
+  const learnings: SessionLearning[] = [];
+  for (const acId of completedAcIds) {
+    const resultPath = join(evidenceBaseDir, acId, "result.json");
+    try {
+      const raw: Record<string, unknown> = JSON.parse(readFileSync(resultPath, "utf-8"));
+      const steps = Array.isArray(raw.steps_taken)
+        ? (raw.steps_taken as unknown[]).filter((s): s is string => typeof s === "string")
+        : [];
+      const gotoStep = steps.find(s => s.startsWith("goto "));
+      const url = gotoStep ? gotoStep.replace("goto ", "") : "";
+      const selectors = steps
+        .filter(s => /^(click|fill|hover)\s/.test(s))
+        .map(s => s.replace(/^(click|fill|hover)\s+/, "").split(/\s/)[0]);
+      learnings.push({
+        acId,
+        url,
+        selectorsUsed: selectors,
+        pageNotes: (typeof raw.observed === "string" ? raw.observed : "").slice(0, 200),
+      });
+    } catch {
+      // No result file or parse error — skip
+    }
+  }
+  return learnings;
+}
+
+/**
+ * Find the most recent incomplete run for a given spec.
+ * Scans run directories for session-state.json where specPath matches
+ * and remainingAcIds is non-empty.
+ */
+export function findLastIncompleteRun(verifyDir: string, specPath: string): string | null {
+  const runsDir = join(verifyDir, "runs");
+  try {
+    const dirs = readdirSync(runsDir).sort().reverse();
+    for (const dir of dirs) {
+      const statePath = join(runsDir, dir, "session-state.json");
+      try {
+        const raw: Record<string, unknown> = JSON.parse(readFileSync(statePath, "utf-8"));
+        // Match by exact specPath, not slug — avoids substring collisions
+        if (raw.specPath !== specPath) continue;
+        const remaining = Array.isArray(raw.remainingAcIds) ? raw.remainingAcIds : [];
+        if (remaining.length > 0) {
+          return join(runsDir, dir);
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // runs dir doesn't exist
+  }
+  return null;
+}
+
+function formatLearningsForPrompt(learnings: SessionLearning[]): string {
+  if (learnings.length === 0) return "";
+  const lines = ["LEARNINGS FROM PREVIOUS SESSION (use these to navigate faster):"];
+  for (const l of learnings) {
+    lines.push(`- ${l.acId}: URL=${l.url}`);
+    if (l.selectorsUsed.length > 0) {
+      lines.push(`  Selectors that worked: ${l.selectorsUsed.join(", ")}`);
+    }
+    if (l.pageNotes) {
+      lines.push(`  Page state: ${l.pageNotes}`);
+    }
+  }
+  return lines.join("\n");
+}
+
 const AC_EXTRACTOR_TIMEOUT_MS = 90_000; // No tool access — all content inlined in prompt
 /**
- * Session timeout is a safety net, not the primary constraint.
- * The prompt's navigation budget (8 commands per AC) is what actually bounds execution.
- * This timeout just prevents runaway sessions.
+ * Session timeout is the primary safety net.
+ * The supervisor detects stalls (repeated failed selectors) and has a hard
+ * backstop at 30 commands per AC. This timeout prevents runaway sessions
+ * when neither mechanism triggers.
  */
 const SESSION_TIMEOUT_MS = 600_000; // 10 minutes — generous, like Expect's model
 
@@ -37,12 +131,14 @@ export interface OrchestratorCallbacks {
 export interface PipelineResult {
   runDir: string;
   verdicts: JudgeOutput | null;
+  hasRemaining: boolean;
 }
 
 export async function runPipeline(
   specPath: string,
   verifyDir: string,
   callbacks: OrchestratorCallbacks,
+  resumeRunDir?: string,
 ): Promise<PipelineResult> {
   const config = loadConfig(verifyDir);
   const projectRoot = resolve(verifyDir, "..");
@@ -64,7 +160,7 @@ export async function runPipeline(
   const preflight = await runPreflight(config.baseUrl, specPath, verifyDir, config);
   if (!preflight.ok) {
     for (const err of preflight.errors) callbacks.onError(err);
-    return { runDir, verdicts: null };
+    return { runDir, verdicts: null, hasRemaining: false };
   }
 
   // ── Stage 1: AC Extractor ──────────────────────────────────────────────
@@ -90,25 +186,61 @@ export async function runPipeline(
 
   if (!rawAcs) {
     callbacks.onError("AC Extractor failed after retry. Check logs: " + join(runDir, "logs"));
-    return { runDir, verdicts: null };
+    return { runDir, verdicts: null, hasRemaining: false };
   }
 
   // User checkpoint
   const confirmedAcs = await callbacks.onACCheckpoint(rawAcs);
   if (!confirmedAcs) {
     callbacks.onLog("User aborted after AC review.");
-    return { runDir, verdicts: null };
+    return { runDir, verdicts: null, hasRemaining: false };
   }
   const acs = fanOutPureUIGroups(confirmedAcs);
   writeFileSync(join(runDir, "acs.json"), JSON.stringify(acs, null, 2));
 
   // Flatten all ACs from all groups
-  const allAcs = acs.groups.flatMap(g => g.acs);
+  let allAcs = acs.groups.flatMap(g => g.acs);
+
+  // ── Resume: load prior state, filter to remaining ACs, inject learnings ──
+  let priorLearnings = "";
+  let priorVerdicts: ACVerdict[] = [];
+  if (resumeRunDir) {
+    const statePath = join(resumeRunDir, "session-state.json");
+    try {
+      const priorState: SessionState = JSON.parse(readFileSync(statePath, "utf-8"));
+      const completedSet = new Set(priorState.completedAcIds);
+
+      // Validate: all completed AC IDs must exist in current spec
+      const currentAcIds = new Set(allAcs.map(ac => ac.id));
+      const staleIds = priorState.completedAcIds.filter(id => !currentAcIds.has(id));
+      if (staleIds.length > 0) {
+        callbacks.onLog(`Warning: prior run has ${staleIds.length} AC ID(s) not in current spec (${staleIds.join(", ")}). Running all ACs fresh.`);
+        // Fall through without filtering — run everything
+      } else {
+        const remainingAcs = allAcs.filter(ac => !completedSet.has(ac.id));
+        const skippedCount = allAcs.length - remainingAcs.length;
+        callbacks.onLog(`Resuming: ${skippedCount} ACs already completed, ${remainingAcs.length} remaining`);
+
+        // Carry forward verdicts from prior run
+        const priorVerdictsPath = join(resumeRunDir, "verdicts.json");
+        try {
+          const pv: JudgeOutput = JSON.parse(readFileSync(priorVerdictsPath, "utf-8"));
+          priorVerdicts = pv.verdicts.filter(v => completedSet.has(v.ac_id) && v.verdict !== "error");
+        } catch { /* no prior verdicts */ }
+
+        priorLearnings = formatLearningsForPrompt(priorState.learnings);
+        allAcs = remainingAcs;
+      }
+    } catch {
+      callbacks.onLog("Warning: could not load session state from prior run, running all ACs");
+    }
+  }
+
   for (const ac of allAcs) progress.update(ac.id, "pending");
 
   if (allAcs.length === 0) {
     callbacks.onLog("No verifiable ACs found.");
-    return { runDir, verdicts: { verdicts: [] } };
+    return { runDir, verdicts: { verdicts: [] }, hasRemaining: false };
   }
 
   // ── Diff hints ─────────────────────────────────────────────────────────
@@ -162,7 +294,7 @@ export async function runPipeline(
   if (!loginResult.ok) {
     callbacks.onError(`Login failed: ${loginResult.error}`);
     stopGroupDaemon(stateDir);
-    return { runDir, verdicts: null };
+    return { runDir, verdicts: null, hasRemaining: false };
   }
 
   // ── Stage 2: Single-session executor with stream supervisor ──────────
@@ -174,6 +306,7 @@ export async function runPipeline(
     evidenceBaseDir,
     diffHints,
     appRoutes,
+    learnings: priorLearnings || undefined,
   });
 
   // ── Stream supervisor: marker-based AC tracking ──────────────────────
@@ -186,8 +319,11 @@ export async function runPipeline(
   let activeAcId: string | null = null;
   const completedAcIds = new Set<string>();
   const commandCounts = new Map<string, number>();
+  const recentCommands = new Map<string, string[]>(); // Track recent commands per AC for stall detection
   const BROWSE_CMD_RE = /browse\s+(goto|snapshot|click|fill|hover|press|wait|screenshot)/;
-  const MAX_COMMANDS_PER_AC = 15; // Hard backstop. Prompt tells LLM to aim for 12, write result by 10.
+  const STALL_WINDOW = 6;      // Look at last N interaction commands
+  const STALL_THRESHOLD = 3;   // Same selector N times in window = stall
+  const MAX_COMMANDS_PER_AC = 30; // Hard backstop — catches cases stall detection misses (e.g., @ref cycling)
 
   const supervisorWriteBlocked = (acId: string, reason: string) => {
     if (completedAcIds.has(acId)) return;
@@ -229,6 +365,7 @@ export async function runPipeline(
         }
         activeAcId = acId;
         commandCounts.set(acId, 0);
+        recentCommands.delete(acId);
         progress.update(acId, "running");
         callbacks.onLog(`  ${acId}: started`);
       }
@@ -258,15 +395,39 @@ export async function runPipeline(
       }
     }
 
-    // ── Command budget enforcement ─────────────────────────────────
+    // ── Stall detection + hard backstop ───────────────────────────
     if (activeAcId && !completedAcIds.has(activeAcId) && BROWSE_CMD_RE.test(cmd)) {
       const count = (commandCounts.get(activeAcId) ?? 0) + 1;
       commandCounts.set(activeAcId, count);
-      if (count === MAX_COMMANDS_PER_AC) {
+
+      // Hard backstop — catches @ref cycling where stall detection doesn't fire
+      if (count >= MAX_COMMANDS_PER_AC) {
         supervisorWriteBlocked(
           activeAcId,
-          `Exceeded ${MAX_COMMANDS_PER_AC}-command budget. The required data or page may not exist in the current app state.`,
+          `Exceeded ${MAX_COMMANDS_PER_AC}-command hard limit. Agent may be stuck with changing selectors.`,
         );
+      }
+
+      // Stall detection: same selector repeated in sliding window
+      const interactionMatch = cmd.match(/browse\s+(click|fill|hover)\s+(\S+)/);
+      if (interactionMatch) {
+        const selector = interactionMatch[2];
+        const recent = recentCommands.get(activeAcId) ?? [];
+        recent.push(selector);
+        if (recent.length > STALL_WINDOW) recent.shift();
+        recentCommands.set(activeAcId, recent);
+
+        const selectorCounts = new Map<string, number>();
+        for (const s of recent) selectorCounts.set(s, (selectorCounts.get(s) ?? 0) + 1);
+        for (const [sel, n] of selectorCounts) {
+          if (n >= STALL_THRESHOLD) {
+            supervisorWriteBlocked(
+              activeAcId,
+              `Stall detected: selector "${sel}" attempted ${n} times in last ${recent.length} interactions. Agent is stuck.`,
+            );
+            break;
+          }
+        }
       }
     }
   };
@@ -327,14 +488,38 @@ export async function runPipeline(
     progress.update(ac.id, status);
   }
 
+  // ── Session state: write for resume capability ─────────────────────────
+  const completedIds = allVerdicts
+    .filter(v => v.verdict !== "error")
+    .map(v => v.ac_id);
+  const allOriginalAcIds = acs.groups.flatMap(g => g.acs).map(ac => ac.id);
+  const allCompletedIds = [...priorVerdicts.map(v => v.ac_id), ...completedIds];
+  const remainingIds = allOriginalAcIds.filter(id => !allCompletedIds.includes(id));
+
+  const sessionState: SessionState = {
+    specPath,
+    completedAcIds: allCompletedIds,
+    remainingAcIds: remainingIds,
+    learnings: extractLearnings(completedIds, evidenceBaseDir),
+    timestamp: new Date().toISOString(),
+  };
+  writeFileSync(join(runDir, "session-state.json"), JSON.stringify(sessionState, null, 2));
+
+  if (remainingIds.length > 0) {
+    callbacks.onLog(`\n${remainingIds.length} AC(s) remaining: ${remainingIds.join(", ")}. Use --resume to continue.`);
+  }
+
+  // ── Merge prior verdicts with current ─────────────────────────────────
+  const mergedVerdicts = [...priorVerdicts, ...allVerdicts];
+
   // ── All-unclear detection ──────────────────────────────────────────────
-  const unclearCount = allVerdicts.filter(v => v.verdict === "unclear").length;
-  if (unclearCount > allVerdicts.length * 0.5 && allVerdicts.length > 0) {
-    callbacks.onLog(`WARNING: ${unclearCount}/${allVerdicts.length} ACs are 'unclear'. Executor prompt may be too conservative.`);
+  const unclearCount = mergedVerdicts.filter(v => v.verdict === "unclear").length;
+  if (unclearCount > mergedVerdicts.length * 0.5 && mergedVerdicts.length > 0) {
+    callbacks.onLog(`WARNING: ${unclearCount}/${mergedVerdicts.length} ACs are 'unclear'. Executor prompt may be too conservative.`);
   }
 
   // ── Report ─────────────────────────────────────────────────────────────
-  const finalVerdicts: JudgeOutput = { verdicts: allVerdicts };
+  const finalVerdicts: JudgeOutput = { verdicts: mergedVerdicts };
   writeFileSync(join(runDir, "verdicts.json"), JSON.stringify(finalVerdicts, null, 2));
 
   const timeline = readTimeline(runDir);
@@ -363,5 +548,5 @@ export async function runPipeline(
       .map(e => ({ stage: e.stage, durationMs: e.durationMs })),
   }, null, 2));
 
-  return { runDir, verdicts: finalVerdicts };
+  return { runDir, verdicts: finalVerdicts, hasRemaining: remainingIds.length > 0 };
 }
