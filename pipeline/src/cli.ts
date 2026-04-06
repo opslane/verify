@@ -16,16 +16,12 @@ const { positionals, values } = parseArgs({
     "project-dir": { type: "string" },
     output: { type: "string" },
     spec: { type: "string" },
-    group: { type: "string" },
-    condition: { type: "string" },
     ac: { type: "string" },
     timeout: { type: "string" },
     "base-url": { type: "string" },
     email: { type: "string" },
     password: { type: "string" },
     "browse-bin": { type: "string" },
-    legacy: { type: "boolean", default: false },
-    case: { type: "string" },
   },
 });
 
@@ -273,43 +269,6 @@ if (command === "run") {
   console.log(`  Seed IDs: ${Object.values(appIndex.seed_ids).flat().length}`);
   console.log(`  DB URL env: ${appIndex.db_url_env ?? "(not found)"}`);
 
-} else if (command === "eval-setup") {
-  // Setup-writer eval: runs realistic A/B comparison (CLI vs SDK) through actual code path
-  const projectDir = values["project-dir"];
-  if (!projectDir) { console.error("--project-dir required"); process.exit(1); }
-
-  const { loadProjectEnv } = await import("./stages/setup-writer.js");
-  const projectEnv = loadProjectEnv(projectDir);
-  const dbUrlEnv = "DATABASE_URL";
-  const dbUrl = projectEnv[dbUrlEnv] ?? projectEnv.NEXT_PRIVATE_DATABASE_URL ?? "";
-  if (!dbUrl) { console.error(`No DATABASE_URL or NEXT_PRIVATE_DATABASE_URL found in ${projectDir}/.env`); process.exit(1); }
-
-  // Set EVAL_DB_URL for the eval runner
-  process.env.EVAL_DB_URL = dbUrl;
-  process.env.EVAL_PROJECT_DIR = projectDir;
-
-  const { main: runEval } = await import("./evals/setup-writer/realistic-eval.js");
-  await runEval();
-
-} else if (command === "eval-judge") {
-  const { runJudgeEvals, discoverCaseDirs, formatJudgeEvalSummary } = await import("./evals/run-judge-evals.js");
-  const caseFilter = values["case"] as string | undefined;
-  const caseDirs = discoverCaseDirs();
-  if (caseDirs.length === 0) { console.error("No judge eval cases found"); process.exit(1); }
-
-  const results = await runJudgeEvals(caseDirs, caseFilter);
-  for (const result of results) {
-    if (result.passed) {
-      console.log(`PASS ${result.caseId}  ${(result.durationMs / 1000).toFixed(1)}s  accuracy=${(result.verdictAccuracy * 100).toFixed(0)}%`);
-      continue;
-    }
-    console.log(`FAIL ${result.caseId}  ${result.failures.join("; ")}`);
-  }
-  console.log(formatJudgeEvalSummary(results));
-
-  const failCount = results.filter(r => !r.passed).length;
-  process.exit(failCount > 0 ? 1 : 0);
-
 } else if (command === "run-stage" && stageName) {
   const verifyDir = values["verify-dir"]!;
   const runDir = values["run-dir"] ?? join(verifyDir, "runs", `manual-${Date.now()}`);
@@ -343,77 +302,6 @@ if (command === "run") {
       console.log(`Generated ${fanned.groups.length} groups, ${fanned.skipped.length} skipped`);
       break;
     }
-    case "planner": {
-      const { buildPlannerPrompt, parsePlannerOutput } = await import("./stages/planner.js");
-      const acsPath = join(runDir, "acs.json");
-      const prompt = buildPlannerPrompt(acsPath);
-      const result = await runClaude({ prompt, model: "opus", timeoutMs: timeoutOverrideMs ?? 240_000, stage: "planner", runDir, settingSources: "", ...permissions });
-      const plan = parsePlannerOutput(result.stdout);
-      if (!plan) { console.error("Failed to parse plan output. Check logs:", join(runDir, "logs")); process.exit(1); }
-      writeFileSync(join(runDir, "plan.json"), JSON.stringify(plan, null, 2));
-      console.log(`Planned ${plan.criteria.length} ACs`);
-      break;
-    }
-    case "plan-validator": {
-      const { validatePlan } = await import("./stages/plan-validator.js");
-      const { loadAppIndex } = await import("./lib/app-index.js");
-      const plan = JSON.parse(readFileSync(join(runDir, "plan.json"), "utf-8"));
-      const appIndex = loadAppIndex(verifyDir);
-      const result = validatePlan(plan, appIndex);
-      if (result.valid) {
-        console.log("Plan is valid");
-      } else {
-        console.error("Plan has errors:");
-        for (const err of result.errors) console.error(`  - ${err.acId}: ${err.message}`);
-        process.exit(1);
-      }
-      break;
-    }
-    case "setup-writer": {
-      const groupId = values.group ?? "default";
-      const condition = values.condition ?? "";
-
-      if (values.legacy) {
-        // Old monolithic path only
-        const { buildSetupWriterPrompt, parseSetupWriterOutput } = await import("./stages/setup-writer.js");
-        const prompt = buildSetupWriterPrompt(groupId, condition, projectRoot, config.auth?.email);
-        const result = await runClaude({ prompt, model: "sonnet", timeoutMs: 90_000, stage: stageName, runDir, ...permissions });
-        const parsed = parseSetupWriterOutput(result.stdout);
-        if (parsed) {
-          console.log(`Setup writer (legacy): ${parsed.setup_commands.length} setup commands`);
-          writeFileSync(join(runDir, "setup.json"), JSON.stringify(parsed, null, 2));
-        } else {
-          console.error("Failed to parse setup writer output");
-          process.exitCode = 1;
-        }
-      } else {
-        // Graph-informed + fallback via shared function (review fix #7)
-        const { runSetupWriter } = await import("./stages/run-setup-writer.js");
-        const { loadAppIndex } = await import("./lib/app-index.js");
-        const appIndex = loadAppIndex(join(projectRoot, ".verify"));
-        if (!appIndex) {
-          console.error("No app.json found — run index-app first");
-          process.exitCode = 1;
-          break;
-        }
-        const { loadProjectEnv } = await import("./stages/setup-writer.js");
-        const projectEnv = loadProjectEnv(projectRoot);
-        const setupResult = await runSetupWriter({
-          groupId, condition, appIndex, projectEnv, projectRoot,
-          authEmail: config.auth?.email, retryContext: null,
-          runDir, stageName, runClaudeFn: runClaude,
-          permissions, timeoutMs: 90_000,
-        });
-        if (setupResult) {
-          console.log(`Setup writer: ${setupResult.commands.setup_commands.length} setup commands${setupResult.sqlExecuted ? " (SDK — already executed)" : ""}`);
-          writeFileSync(join(runDir, "setup.json"), JSON.stringify(setupResult.commands, null, 2));
-        } else {
-          console.error("Failed to produce setup commands");
-          process.exitCode = 1;
-        }
-      }
-      break;
-    }
     case "browse-agent": {
       const acId = values.ac;
       if (!acId) { console.error("--ac is required for browse-agent"); process.exit(1); }
@@ -444,74 +332,6 @@ if (command === "run") {
       }
       break;
     }
-    case "judge": {
-      const { collectEvidencePaths, buildJudgePrompt, parseJudgeOutput } = await import("./stages/judge.js");
-      const evidenceRefs = collectEvidencePaths(runDir);
-      if (evidenceRefs.length === 0) {
-        console.log('{"verdicts":[]}');
-        break;
-      }
-      const prompt = buildJudgePrompt(evidenceRefs);
-      const result = await runClaude({ prompt, model: "opus", timeoutMs: 120_000, stage: "judge", runDir, settingSources: "", ...permissions });
-      const verdicts = parseJudgeOutput(result.stdout);
-      if (verdicts) {
-        writeFileSync(join(runDir, "verdicts.json"), JSON.stringify(verdicts, null, 2));
-        console.log(JSON.stringify(verdicts, null, 2));
-      } else {
-        console.error("Judge failed to produce valid output. Check logs:", join(runDir, "logs"));
-        process.exit(1);
-      }
-      break;
-    }
-    case "learner": {
-      const { buildLearnerPrompt, backupAndRestore } = await import("./stages/learner.js");
-      const learningsPath = join(verifyDir, "learnings.md");
-      const { restore } = backupAndRestore(learningsPath);
-      const prompt = buildLearnerPrompt({
-        verdictsPath: join(runDir, "verdicts.json"),
-        timelinePath: join(runDir, "logs", "timeline.jsonl"),
-        learningsPath,
-      });
-      await runClaude({ prompt, model: "sonnet", timeoutMs: 60_000, stage: "learner", runDir, settingSources: "", ...permissions });
-      restore();
-      console.log("Learner complete. Learnings at:", learningsPath);
-      break;
-    }
-    case "login-agent": {
-      const baseUrl = values["base-url"];
-      const email = values.email;
-      const password = values.password;
-      const browseBin = values["browse-bin"];
-      if (!baseUrl || !email || !password || !browseBin) {
-        console.error("login-agent requires --base-url, --email, --password, --browse-bin");
-        process.exit(1);
-      }
-      const { buildLoginAgentPrompt, parseLoginAgentOutput } = await import("./stages/login-agent.js");
-      const prompt = buildLoginAgentPrompt({ baseUrl, email, password, browseBin });
-      const result = await runClaude({
-        prompt, model: "sonnet", timeoutMs: 60_000,
-        stage: "login-agent", runDir, settingSources: "", ...permissions,
-      });
-      const parsed = parseLoginAgentOutput(result.stdout);
-      if (!parsed) {
-        console.error("Failed to parse login agent output. Check logs:", join(runDir, "logs"));
-        process.exit(1);
-      }
-      if (!parsed.success) {
-        console.error(`Login agent failed: ${parsed.error}`);
-        process.exit(1);
-      }
-      // Save discovered loginSteps to config.json
-      const updatedConfig = loadConfig(verifyDir);
-      updatedConfig.auth = {
-        email,
-        password,
-        loginSteps: parsed.loginSteps,
-      };
-      writeFileSync(join(verifyDir, "config.json"), JSON.stringify(updatedConfig, null, 2));
-      console.log(`Login recipe saved: ${parsed.loginSteps.length} steps`);
-      break;
-    }
     case "verify-login": {
       const { loginWithCredentials } = await import("./init.js");
       if (!config.auth?.loginSteps?.length) {
@@ -530,42 +350,23 @@ if (command === "run") {
       break;
     }
     default:
-      console.error(`Unknown stage: ${stageName}. Available: ac-generator, planner, plan-validator, setup-writer, browse-agent, judge, learner, login-agent, verify-login`);
+      console.error(`Unknown stage: ${stageName}. Available: ac-generator, browse-agent, verify-login`);
       process.exit(1);
   }
-} else if (command === "eval-planner") {
-  const runDir = values["run-dir"];
-  const args = ["tsx", "src/evals/planner-eval.ts"];
-  if (runDir) args.push("--run-dir", runDir);
-  const { execFileSync } = await import("node:child_process");
-  execFileSync("npx", args, { stdio: "inherit", cwd: process.cwd() });
-
 } else {
   console.error("Usage:");
   console.error("  npx tsx src/cli.ts run --spec <path> [--verify-dir .verify]");
   console.error("  npx tsx src/cli.ts index-app [--project-dir .] [--output .verify/app.json]");
   console.error("  npx tsx src/cli.ts run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
-  console.error("  npx tsx src/cli.ts eval-planner [--run-dir <path>]");
   console.error("");
   console.error("Commands:");
   console.error("  run            Full pipeline run (orchestrator)");
   console.error("  index-app      Build app.json index (routes, selectors, schema, seed IDs)");
   console.error("  run-stage      Run a single stage for debugging");
-  console.error("  eval-planner   Score planner output against baseline");
-  console.error("");
-  console.error("Eval:");
-  console.error("  eval-setup     --project-dir <path>  [EVAL_CASES_SET=calcom]");
-  console.error("  eval-judge     [--case <caseId>]  Run judge eval cases");
   console.error("");
   console.error("Stages:");
   console.error("  ac-generator   --spec <path>");
-  console.error("  planner");
-  console.error("  plan-validator");
-  console.error("  setup-writer   --group <id> [--condition <text>]");
   console.error("  browse-agent   --ac <id>");
-  console.error("  judge");
-  console.error("  learner");
-  console.error("  login-agent    --base-url <url> --email <e> --password <p> --browse-bin <path>");
   console.error("  verify-login");
   process.exit(1);
 }
