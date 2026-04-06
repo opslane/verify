@@ -24,8 +24,8 @@ Also contains `server/` — a SaaS backend (Hono + TypeScript + Postgres) for Gi
 ## Structure
 - `pipeline/` — TypeScript pipeline v2
   - `src/lib/` — shared types, config, app-index, prisma-parser, seed-extractor
-  - `src/stages/` — ac-generator, planner, setup-writer, browse-agent, judge, learner
-  - `src/prompts/` — Claude prompt templates for each stage
+  - `src/stages/` — ac-generator, browse-agent
+  - `src/prompts/` — `ac-generator.txt`, `browse-agent.txt`, `browse-replan.txt`, `executor-session.txt`, `index/`
   - `src/cli.ts` — CLI entry point (`run`, `index-app`, `run-stage`)
   - `src/orchestrator.ts` — full pipeline orchestration
   - `test/` — vitest tests
@@ -40,7 +40,6 @@ Also contains `server/` — a SaaS backend (Hono + TypeScript + Postgres) for Gi
 - `skills/verify/SKILL.md` — the `/verify` Claude Code skill (**source of truth**)
 - `skills/verify-setup/SKILL.md` — the `/verify-setup` skill (**source of truth**)
 - `.verify/` — runtime output (gitignored): `config.json`, `plan.json`, `evidence/`, `auth.json`
-- `docs/evals/` — eval sets for prompt quality testing
 
 ## Skill sync
 The skills in `skills/` are the source of truth. A `PostToolUse` hook (`.claude/hooks/sync-skill.sh`) automatically copies them to `~/.claude/skills/` after every Write or Edit. It also syncs `pipeline/` to `~/.claude/tools/verify/pipeline/` when pipeline files change. Never edit `~/.claude/skills/verify/SKILL.md` directly — edit the project copy instead.
@@ -50,7 +49,7 @@ The skills in `skills/` are the source of truth. A `PostToolUse` hook (`.claude/
 ### Pipeline
 ```
 /verify-setup → index-app (Prisma parser + seed IDs + 4 LLM agents → app.json)
-/verify → ac-generator → planner → setup-writer + browse-agents (parallel) → judge → learner → report
+/verify → ac-generator → single-session executor → report
 ```
 Config lives in `.verify/config.json`. App index lives in `.verify/app.json`. Env vars always override config.
 
@@ -66,7 +65,9 @@ GitHub App webhook → /webhooks/github → HMAC verify → installation.created
 - Typecheck: `cd pipeline && npx tsc --noEmit`
 - Tests: `cd pipeline && npx vitest run`
 - Single test: `cd pipeline && npx vitest run test/prisma-parser.test.ts`
-- Run a stage: `cd pipeline && npx tsx src/cli.ts run-stage <stage> --verify-dir .verify`
+- Run a stage: `cd pipeline && npx tsx src/cli.ts run-stage ac-generator --verify-dir .verify`
+- Run browse-agent: `cd pipeline && npx tsx src/cli.ts run-stage browse-agent --verify-dir .verify`
+- Verify login: `cd pipeline && npx tsx src/cli.ts run-stage verify-login --verify-dir .verify`
 - Full run: `cd pipeline && npx tsx src/cli.ts run --spec .verify/spec.md`
 - Index app: `cd pipeline && npx tsx src/cli.ts index-app --project-dir /path/to/project`
 
@@ -95,7 +96,6 @@ For server changes:
 - **Node 22 ESM**: use `import`, not `require`
 - **Non-interactive Claude**: always use `claude -p`, never interactive mode
 - **Stage permissions**: each stage gets minimal tool access via `STAGE_PERMISSIONS` in types.ts
-- **Deterministic > LLM**: Prisma column mappings and seed IDs are parsed deterministically, not by LLM
 
 ### Server
 - **CSRF protection**: every OAuth callback must validate the `state` cookie — no exceptions, no bypass paths
@@ -114,7 +114,6 @@ For server changes:
 - Don't hardcode URLs — use config or env vars
 - Don't call `claude` interactively — always `claude -p`
 - Don't commit `.verify/` contents — auth, evidence, and plans are gitignored
-- Don't use Prisma field names in SQL — always look up the Postgres column name from `app.json`
 
 ### Server
 - Don't add bypass paths that skip CSRF state validation — session fixation attacks are real (an attacker can craft a callback URL with their own valid code to log a victim into the attacker's account)
@@ -137,5 +136,4 @@ For server changes:
 - Pipeline v1 design: `docs/plans/2026-03-08-verify-implementation.md`
 - Server design: `docs/plans/2026-03-12-saas-auth-design.md`
 - Server implementation plan: `docs/plans/2026-03-12-saas-auth-implementation.md`
-- Eval sets: `docs/evals/eval-set-v1.json`
 - Prompt templates: `pipeline/src/prompts/`
