@@ -28,13 +28,10 @@ export function buildACGeneratorPrompt(specPath: string, verifyDir?: string): st
     if (existsSync(appJsonPath)) {
       try {
         const appIndex = JSON.parse(readFileSync(appJsonPath, "utf-8"));
-        const lines: string[] = [];
-        if (appIndex.example_urls && typeof appIndex.example_urls === "object") {
-          for (const [pattern, example] of Object.entries(appIndex.example_urls as Record<string, string>)) {
-            lines.push(`${pattern} → ${example}`);
-          }
+        if (appIndex.routes && typeof appIndex.routes === "object") {
+          const routes = Object.keys(appIndex.routes as Record<string, unknown>);
+          if (routes.length > 0) appRoutes = routes.join("\n");
         }
-        if (lines.length > 0) appRoutes = lines.join("\n");
       } catch { /* ignore parse errors */ }
     }
 

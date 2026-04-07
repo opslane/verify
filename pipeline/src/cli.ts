@@ -196,136 +196,50 @@ if (command === "run") {
   mkdirSync(join(runDir, "logs"), { recursive: true });
   mkdirSync(dirname(outputPath), { recursive: true });
 
-  const { extractEnvVars, findPrismaSchemaPath, findSeedFiles, mergeIndexResults, dumpDatabaseSchema, dumpSeedData } = await import("./lib/index-app.js");
-  const { parsePrismaSchema, extractJsonFieldAnnotations } = await import("./lib/prisma-parser.js");
-  const { groupSeedIdsByContext } = await import("./lib/seed-extractor.js");
-  const { readFileSync: readFs } = await import("node:fs");
-  const { readFileSync: readPrompt } = await import("node:fs");
-
-  // Step 1: Deterministic parsing (no LLM needed)
   console.log("Indexing app...");
+  const promptDir = join(dirname(fileURLToPath(import.meta.url)), "prompts", "index");
 
-  // Parse Prisma schema for column mappings
-  let prismaMapping: ReturnType<typeof parsePrismaSchema> = {};
-  const schemaPath = findPrismaSchemaPath(projectDir);
-  if (schemaPath) {
-    console.log(`  Found Prisma schema: ${schemaPath}`);
-    prismaMapping = parsePrismaSchema(readFs(schemaPath, "utf-8"));
-    console.log(`  Parsed ${Object.keys(prismaMapping).length} models with column mappings`);
-  }
-
-  // Extract JSONB type annotations from Prisma schema (Prisma-specific)
-  let jsonAnnotations: Record<string, Record<string, string>> = {};
-  if (schemaPath) {
-    jsonAnnotations = extractJsonFieldAnnotations(readFs(schemaPath, "utf-8"));
-    const annotatedFields = Object.values(jsonAnnotations).reduce((n, m) => n + Object.keys(m).length, 0);
-    if (annotatedFields > 0) {
-      console.log(`  Found ${annotatedFields} JSONB type annotations`);
-    }
-  }
-
-  // Extract seed IDs
-  let seedIds: Record<string, string[]> = {};
-  const seedFiles = findSeedFiles(projectDir);
-  if (seedFiles.length > 0) {
-    console.log(`  Found ${seedFiles.length} seed file(s)`);
-    const allContent = seedFiles.map(f => readFs(f, "utf-8")).join("\n");
-    seedIds = groupSeedIdsByContext(allContent);
-    const totalIds = Object.values(seedIds).flat().length;
-    console.log(`  Extracted ${totalIds} seed IDs across ${Object.keys(seedIds).length} models`);
-  }
-
-  // Extract env vars
-  const envVars = extractEnvVars(projectDir);
-
-  // Dump database schema (generic — works for any Postgres project)
-  const { loadProjectEnv } = await import("./lib/env.js");
-  const projectEnvForDump = loadProjectEnv(projectDir);
-  const schemaDdl = dumpDatabaseSchema(projectEnvForDump, envVars.db_url_env);
-  if (schemaDdl) {
-    writeFileSync(join(dirname(outputPath), "schema.sql"), schemaDdl);
-    console.log(`  Dumped database schema: ${Math.round(schemaDdl.length / 1024)}KB`);
-  } else {
-    console.log("  Warning: could not dump database schema (DATABASE_URL missing or pg_dump failed)");
-  }
-
-  // Step 2: LLM-based indexing (4 parallel agents)
-  console.log("  Running 4 parallel index agents...");
-  const promptDir = join(dirname(new URL(import.meta.url).pathname), "prompts", "index");
-
-  const agentConfigs = [
-    { name: "routes", file: "routes.txt", outputFile: join(runDir, "routes.json") },
-    { name: "selectors", file: "selectors.txt", outputFile: join(runDir, "selectors.json") },
-    { name: "schema", file: "schema.txt", outputFile: join(runDir, "schema.json") },
-    { name: "fixtures", file: "fixtures.txt", outputFile: join(runDir, "fixtures.json") },
+  const agents = [
+    { name: "routes",    prompt: "routes.txt",    outputKey: "routes",    outputFile: join(runDir, "routes.json") },
+    { name: "selectors", prompt: "selectors.txt", outputKey: "pages",     outputFile: join(runDir, "selectors.json") },
   ];
 
-  // Build schema hint for the schema agent (avoids wasting time searching)
-  const schemaHint = schemaPath
-    ? `The schema file is at: ${schemaPath}\nRead that file directly. Do NOT search the codebase for schema files.`
-    : "No schema file was pre-detected. Search for Prisma schema, Drizzle schema, SQL migrations, or ORM definitions under packages/, prisma/, db/, src/.";
+  const results = await Promise.all(
+    agents.map(async (agent) => {
+      const promptText = readFileSync(join(promptDir, agent.prompt), "utf-8")
+        .replace(/OUTPUT_FILE/g, agent.outputFile);
 
-  const agentResults = await Promise.all(
-    agentConfigs.map(async (agent) => {
-      const promptTemplate = readPrompt(join(promptDir, agent.file), "utf-8");
-      let prompt = promptTemplate.replace(/OUTPUT_FILE/g, agent.outputFile);
-      if (agent.name === "schema") {
-        prompt = prompt.replace(/SCHEMA_HINT/g, schemaHint);
-      }
       try {
         await runClaude({
-          prompt,
+          prompt: promptText,
           model: "sonnet",
           timeoutMs: 300_000,
           stage: `index-${agent.name}`,
           runDir,
           cwd: projectDir,
-                   ...STAGE_PERMISSIONS["index-agent"], // needs Read, Grep, Glob
+          ...STAGE_PERMISSIONS["index-agent"],
         });
-        // Read the output file the agent wrote
-        const raw = readFs(agent.outputFile, "utf-8");
-        return JSON.parse(raw);
+        return JSON.parse(readFileSync(agent.outputFile, "utf-8")) as Record<string, unknown>;
       } catch {
-        console.error(`  Warning: ${agent.name} agent failed, using empty result`);
-        const key = agent.name === "routes" ? "routes"
-          : agent.name === "selectors" ? "pages"
-          : agent.name === "schema" ? "data_model"
-          : "fixtures";
-        return { [key]: {} };
+        console.warn(`  Warning: ${agent.name} agent failed, using empty result`);
+        return { [agent.outputKey]: {} };
       }
     })
   );
 
-  const [routesResult, selectorsResult, schemaResult, fixturesResult] = agentResults;
-
-  // Step 3: Merge all results
-  const appIndex = mergeIndexResults(
-    routesResult,
-    selectorsResult,
-    schemaResult,
-    fixturesResult,
-    envVars,
-    prismaMapping,
-    seedIds,
-    jsonAnnotations,
-  );
-
-  // Dump seed data — sample actual rows from all data_model tables
-  const seedDataDump = dumpSeedData(appIndex.data_model, projectEnvForDump, appIndex.db_url_env);
-  if (seedDataDump) {
-    writeFileSync(join(dirname(outputPath), "seed-data.txt"), seedDataDump);
-    console.log(`  Dumped seed data: ${Math.round(seedDataDump.length / 1024)}KB`);
-  } else {
-    console.log("  Warning: could not dump seed data (no tables or DB unreachable)");
-  }
+  // Key-based merge — order-independent
+  const merged = Object.assign({}, ...results) as Record<string, unknown>;
+  const appIndex = {
+    indexed_at: new Date().toISOString(),
+    routes: merged.routes ?? {},
+    pages: merged.pages ?? {},
+  };
 
   writeFileSync(outputPath, JSON.stringify(appIndex, null, 2));
-  console.log(`\nApp index written to: ${outputPath}`);
-  console.log(`  Routes: ${Object.keys(appIndex.routes).length}`);
-  console.log(`  Pages: ${Object.keys(appIndex.pages).length}`);
-  console.log(`  Models: ${Object.keys(appIndex.data_model).length}`);
-  console.log(`  Seed IDs: ${Object.values(appIndex.seed_ids).flat().length}`);
-  console.log(`  DB URL env: ${appIndex.db_url_env ?? "(not found)"}`);
+
+  const routeCount = Object.keys(appIndex.routes as Record<string, unknown>).length;
+  const pageCount = Object.keys(appIndex.pages as Record<string, unknown>).length;
+  console.log(`App index: ${routeCount} routes, ${pageCount} pages → ${outputPath}`);
 
 } else if (command === "run-stage" && stageName) {
   const verifyDir = values["verify-dir"]!;

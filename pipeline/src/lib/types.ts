@@ -54,43 +54,6 @@ export interface AppIndex {
     selectors: Record<string, { value: string; source: string }>;
     source_tests: string[];
   }>;
-  data_model: Record<string, {
-    columns: Record<string, string>;    // prismaFieldName → postgresColumnName
-    table_name: string;                 // actual Postgres table name (from @@map, or model name)
-    enums: Record<string, string[]>;
-    source: string;
-    manual_id_columns: string[];        // @id columns with no @default — need explicit IDs in SQL
-  }>;
-  fixtures: Record<string, {
-    description: string;
-    runner: string | null;
-    source: string;
-  }>;
-  db_url_env: string | null;
-  feature_flags: string[];
-  seed_ids: Record<string, string[]>;   // modelName → array of known seed record IDs
-  json_type_annotations: Record<string, Record<string, string>>;  // model → { field → TypeName }
-  example_urls: Record<string, string>;  // parameterized route → concrete example URL
-  /** FK dependency graphs for entity creation — computed by index-app from information_schema. Optional: missing in old app.json files. */
-  entity_graphs?: Record<string, {
-    /** Tables in topological order (parents first) */
-    insert_order: string[];
-    /** Per-table metadata for SQL generation */
-    tables: Record<string, {
-      columns: Array<{
-        name: string;
-        pg_type: string;         // udt_name from information_schema
-        nullable: boolean;
-        has_default: boolean;
-      }>;
-      fk_parents: Array<{
-        column: string;          // FK column in this table
-        parent_table: string;    // referenced table
-        parent_column: string;   // referenced column
-        required: boolean;       // NOT NULL and no default
-      }>;
-    }>;
-  }>;
 }
 
 // ── Stage progress (stream-json observability) ──────────────────────────────

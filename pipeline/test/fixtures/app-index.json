@@ -10,29 +10,5 @@
       "selectors": { "sidebar": { "value": "[data-testid=sidebar]", "source": "tests/dash.spec.ts:12" } },
       "source_tests": ["tests/dash.spec.ts"]
     }
-  },
-  "data_model": {
-    "Organization": {
-      "columns": { "id": "id", "name": "name", "billingStatus": "billing_status" },
-      "table_name": "Organization",
-      "enums": { "BillingStatus": ["active", "trialing", "canceled"] },
-      "source": "prisma/schema.prisma:42",
-      "manual_id_columns": []
-    }
-  },
-  "fixtures": {
-    "createOrg": {
-      "description": "Creates a test organization",
-      "runner": null,
-      "source": "tests/helpers.ts:10"
-    }
-  },
-  "db_url_env": "DATABASE_URL",
-  "feature_flags": ["FF_BILLING_V2"],
-  "seed_ids": {
-    "Organization": ["clseedorg0000000000000"],
-    "Environment": ["clseedenvprod000000000"]
-  },
-  "json_type_annotations": {},
-  "example_urls": {}
+  }
 }

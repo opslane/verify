@@ -22,15 +22,12 @@ describe("loadAppIndex", () => {
     expect(loadAppIndex(verifyDir)).toBeNull();
   });
 
-  it("reads and parses app.json with column mappings", () => {
+  it("reads and parses app.json", () => {
     writeFileSync(join(verifyDir, "app.json"), JSON.stringify(fixture));
     const result = loadAppIndex(verifyDir);
     expect(result).not.toBeNull();
     expect(result!.routes["/dashboard"]).toBeDefined();
-    expect(result!.db_url_env).toBe("DATABASE_URL");
-    expect(result!.data_model.Organization.columns.billingStatus).toBe("billing_status");
-    expect(result!.data_model.Organization.table_name).toBe("Organization");
-    expect(result!.seed_ids.Organization).toContain("clseedorg0000000000000");
+    expect(result!.pages["/dashboard"].selectors.sidebar.value).toBe("[data-testid=sidebar]");
   });
 
   it("returns null for malformed app.json", () => {
