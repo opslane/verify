@@ -630,11 +630,13 @@ COMPLETE — all 6 tasks done, 2 code review gates passed, 413 tests passing (14
   - AppIndex now just: indexed_at, routes, pages
   - index-app runs 2 agents (routes + selectors) instead of 4
 
+- [x] Task 4: Update docs and skills (commit: 936378d)
+  - Files: skills/verify-setup/SKILL.md, README.md, pipeline/CLAUDE.md
+  - Removed --email/--password/--login-steps references, documented zero-input flow
+  - Code review fixes from prior commit already updated pipeline/CLAUDE.md
+
 ### Current
-Task 4: Update docs and skills
+Task 5: End-to-end verification
 
 ### Remaining
-Task 2: Replace credential auth with cookie auth (atomic)
-Task 3: Trim index-app to routes + selectors, update AppIndex type
-Task 4: Update docs and skills
-Task 5: End-to-end verification
+(none — Task 5 is manual testing)
