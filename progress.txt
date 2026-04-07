@@ -635,8 +635,14 @@ COMPLETE — all 6 tasks done, 2 code review gates passed, 413 tests passing (14
   - Removed --email/--password/--login-steps references, documented zero-input flow
   - Code review fixes from prior commit already updated pipeline/CLAUDE.md
 
-### Current
-Task 5: End-to-end verification
+- [x] Task 5: End-to-end verification (commit: dc78ff5)
+  - Tested against Documenso (~/Projects/opslane/evals/documenso)
+  - Port detection: correctly found PORT=3003 from .env
+  - Dev server: verified running (302 response)
+  - Cookies: imported from browser
+  - App index: 112 routes, 20 pages
+  - --base-url override: works correctly
+  - 172 tests passing, typecheck clean
 
-### Remaining
-(none — Task 5 is manual testing)
+### Status
+COMPLETE — all 5 tasks done, E2E verified on Documenso
