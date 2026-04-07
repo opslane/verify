@@ -6,7 +6,7 @@
 
 ## Commands
 - Full run: `npx @opslane/verify run --spec .verify/spec.md`
-- Init setup: `npx @opslane/verify init --base-url <url> --email <email> --password <password>`
+- Init setup: `npx @opslane/verify init [--project-dir .] [--base-url <url>]`
 - Index app: `npx @opslane/verify index --project-dir /path/to/project`
 - Run a stage: `npx @opslane/verify run-stage <stage> --verify-dir .verify`
 - Dev (from source): `npx tsx src/cli.ts run --spec .verify/spec.md`

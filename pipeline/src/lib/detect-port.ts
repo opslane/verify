@@ -22,9 +22,15 @@ export function detectPort(projectDir: string): PortResult | null {
       for (const key of ["dev", "start", "serve"]) {
         const script = scripts[key];
         if (!script) continue;
-        const portMatch = script.match(/(?:-p|--port)[=\s]+(\d+)/);
+        // Match -p <port>, --port <port>, --port=<port>
+        const portMatch = script.match(/(?:-p\s*|--port[=\s]+)(\d+)/);
         if (portMatch) {
           return { port: parseInt(portMatch[1], 10), source: `package.json scripts.${key}` };
+        }
+        // Match PORT=<port> (inline env var or cross-env)
+        const envPortMatch = script.match(/\bPORT=(\d+)\b/);
+        if (envPortMatch) {
+          return { port: parseInt(envPortMatch[1], 10), source: `package.json scripts.${key}` };
         }
       }
     } catch { /* malformed package.json */ }

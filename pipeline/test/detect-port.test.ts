@@ -92,4 +92,25 @@ describe("detectPort", () => {
     });
     expect(detectPort(dir)).toEqual({ port: 3001, source: "package.json scripts.dev" });
   });
+
+  it("extracts PORT= from script (cross-env style)", () => {
+    const dir = makeTempProject({
+      "package.json": JSON.stringify({ scripts: { dev: "cross-env PORT=4200 next dev" } }),
+    });
+    expect(detectPort(dir)).toEqual({ port: 4200, source: "package.json scripts.dev" });
+  });
+
+  it("extracts PORT= inline env var from script", () => {
+    const dir = makeTempProject({
+      "package.json": JSON.stringify({ scripts: { dev: "PORT=3001 node server.js" } }),
+    });
+    expect(detectPort(dir)).toEqual({ port: 3001, source: "package.json scripts.dev" });
+  });
+
+  it("prefers -p flag over PORT= in same script", () => {
+    const dir = makeTempProject({
+      "package.json": JSON.stringify({ scripts: { dev: "PORT=4000 next dev -p 3001" } }),
+    });
+    expect(detectPort(dir)).toEqual({ port: 3001, source: "package.json scripts.dev" });
+  });
 });

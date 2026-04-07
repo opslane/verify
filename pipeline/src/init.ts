@@ -1,7 +1,7 @@
 // pipeline/src/init.ts — Preflight checks + cookie auth (run before any LLM call)
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { resolveBrowseBin, startDaemon } from "./lib/browse.js";
+import { resolveBrowseBin } from "./lib/browse.js";
 
 interface CheckResult {
   ok: boolean;

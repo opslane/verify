@@ -115,8 +115,6 @@ if (command === "run") {
     } else {
       // LLM fallback for unusual project structures
       console.log("  No port in package.json or .env — asking LLM agent...");
-      const { ensureBrowseBin } = await import("./lib/browse.js");
-      await ensureBrowseBin();
       const promptPath = join(dirname(fileURLToPath(import.meta.url)), "prompts", "index", "base-url.txt");
       const prompt = readFileSync(promptPath, "utf-8");
       const detectRunDir = join(verifyDir, "runs", `detect-${Date.now()}`);
@@ -137,7 +135,7 @@ if (command === "run") {
       let port = 3000;
       let source = "default";
       try {
-        const jsonStr = result.stdout.match(/\{[\s\S]*\}/)?.[0];
+        const jsonStr = result.stdout.match(/\{[\s\S]*?\}/)?.[0];
         if (jsonStr) {
           const parsed = JSON.parse(jsonStr) as { port?: number; source?: string };
           port = parsed.port ?? 3000;
