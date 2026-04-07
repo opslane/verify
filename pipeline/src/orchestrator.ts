@@ -9,7 +9,7 @@ import { loadConfig } from "./lib/config.js";
 import { generateRunId } from "./lib/run-id.js";
 import { runClaude } from "./run-claude.js";
 import { ProgressEmitter } from "./lib/progress.js";
-import { runPreflight, loginOnDaemon } from "./init.js";
+import { runPreflight, importCookiesToDaemon } from "./init.js";
 
 import { buildACGeneratorPrompt, parseACGeneratorOutput, fanOutPureUIGroups } from "./stages/ac-generator.js";
 import { buildSessionPrompt, readSessionResults } from "./stages/browse-agent.js";
@@ -61,7 +61,7 @@ export async function runPipeline(
   callbacks.onLog(`Run: ${runId}`);
 
   // ── Preflight ──────────────────────────────────────────────────────────
-  const preflight = await runPreflight(config.baseUrl, specPath, verifyDir, config);
+  const preflight = await runPreflight(config.baseUrl, specPath);
   if (!preflight.ok) {
     for (const err of preflight.errors) callbacks.onError(err);
     return { runDir, verdicts: null };
@@ -158,9 +158,9 @@ export async function runPipeline(
   const browseBin = resolveBrowseBin();
   const { env: daemonEnv, stateDir } = startGroupDaemon("v1", runDir);
 
-  const loginResult = loginOnDaemon(config, daemonEnv);
-  if (!loginResult.ok) {
-    callbacks.onError(`Login failed: ${loginResult.error}`);
+  const cookieResult = importCookiesToDaemon(config.baseUrl, daemonEnv);
+  if (!cookieResult.ok) {
+    callbacks.onError(`Cookie auth failed: ${cookieResult.error}`);
     stopGroupDaemon(stateDir);
     return { runDir, verdicts: null };
   }

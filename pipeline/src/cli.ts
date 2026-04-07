@@ -7,8 +7,6 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "./lib/config.js";
 import { runClaude } from "./run-claude.js";
 import { STAGE_PERMISSIONS } from "./lib/types.js";
-import { resolveExampleUrls, psqlQuery } from "./lib/route-resolver.js";
-import type { RouteResolverContext } from "./lib/route-resolver.js";
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -319,48 +317,6 @@ if (command === "run") {
     console.log(`  Dumped seed data: ${Math.round(seedDataDump.length / 1024)}KB`);
   } else {
     console.log("  Warning: could not dump seed data (no tables or DB unreachable)");
-  }
-
-  // Step 3.5: Route resolver — map parameterized routes to concrete URLs deterministically
-  let psqlCmd = "";
-  const paramRoutes = Object.keys(appIndex.routes).filter(r => r.includes(":"));
-  if (paramRoutes.length > 0) {
-    console.log(`  Resolving ${paramRoutes.length} parameterized routes...`);
-
-    // Build psql connection string (reuse projectEnvForDump already computed above)
-    const dbUrlEnv = appIndex.db_url_env ?? "DATABASE_URL";
-    const dbUrl = (projectEnvForDump[dbUrlEnv] ?? projectEnvForDump.DATABASE_URL ?? "") as string;
-    const cleanDbUrl = dbUrl.split("?")[0];
-    psqlCmd = cleanDbUrl ? `psql "${cleanDbUrl}"` : "";
-
-    // Resolve auth user context for scoping
-    let resolverCtx: RouteResolverContext | null = null;
-    if (psqlCmd) {
-      const config = loadConfig(join(projectDir, ".verify"));
-      if (config.auth?.email) {
-        // Postgres single-quote escaping for email
-        const escapedEmail = config.auth.email.replace(/'/g, "''");
-        const userId = psqlQuery(psqlCmd, `SELECT id FROM "User" WHERE email = '${escapedEmail}' LIMIT 1`);
-
-        if (userId) {
-          const teamRow = psqlQuery(psqlCmd,
-            `SELECT t.id || '|' || t.url FROM "Team" t JOIN "Organisation" o ON o.id = t."organisationId" JOIN "OrganisationMember" om ON om."organisationId" = o.id WHERE om."userId" = ${userId} AND t.url LIKE 'personal_%' LIMIT 1`);
-
-          if (teamRow) {
-            const [teamId, teamUrl] = teamRow.split("|");
-            resolverCtx = { userId, teamId, teamUrl };
-          }
-        }
-      }
-    }
-
-    if (resolverCtx) {
-      const exampleUrls = resolveExampleUrls(appIndex.routes, appIndex.data_model, psqlCmd, resolverCtx);
-      appIndex.example_urls = exampleUrls;
-      console.log(`  Resolved ${Object.keys(exampleUrls).length}/${paramRoutes.length} example URLs (deterministic)`);
-    } else {
-      console.log("  Warning: could not resolve auth user context — skipping route resolution");
-    }
   }
 
   writeFileSync(outputPath, JSON.stringify(appIndex, null, 2));
