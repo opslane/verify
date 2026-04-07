@@ -40,11 +40,13 @@ jq --arg url "THEIR_URL" '.baseUrl = $url' \
   .verify/config.json > .verify/config.tmp && mv .verify/config.tmp .verify/config.json
 ```
 
-### 3. Install browse binary
+### 3. Check browse binary
+
+The browse binary is auto-downloaded by `@opslane/verify` on first run. To check if it's already available:
 
 ```bash
-BROWSE_BIN=$(bash ~/.claude/tools/verify/install-browse.sh | tail -1)
-echo "✓ Browse binary: $BROWSE_BIN"
+BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/browse}"
+[ -x "$BROWSE_BIN" ] && echo "✓ Browse binary: $BROWSE_BIN" || echo "Browse binary will be downloaded on first run."
 ```
 
 ### 4. Check dev server is running
@@ -66,39 +68,39 @@ jq --arg email "THEIR_EMAIL" --arg password "THEIR_PASSWORD" \
   .verify/config.json > .verify/config.tmp && mv .verify/config.tmp .verify/config.json
 ```
 
-### 6. Discover login steps
+### 6. Build login steps
 
-Run the login agent to figure out how to log in. This uses an LLM to navigate the login form once and record the steps.
+Ask the user:
+- "What is the URL of your login page? (e.g., /signin, /login)"
 
-```bash
-BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
-EMAIL=$(jq -r '.auth.email' .verify/config.json)
-PASSWORD=$(jq -r '.auth.password' .verify/config.json)
-BROWSE_BIN="${BROWSE_BIN:-$(cat ~/.cache/verify/browse-path 2>/dev/null || echo ~/.cache/verify/browse)}"
+Build a login steps JSON array based on their app's login form. The standard pattern for email+password login:
 
-cd "$(git rev-parse --show-toplevel)"
-
-npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts run-stage login-agent \
-  --verify-dir .verify \
-  --run-dir .verify/runs/setup-login \
-  --base-url "$BASE_URL" \
-  --email "$EMAIL" \
-  --password "$PASSWORD" \
-  --browse-bin "$BROWSE_BIN"
+```json
+[
+  { "action": "goto", "url": "{{baseUrl}}{{loginPath}}" },
+  { "action": "fill", "selector": "[type='email']", "value": "{{email}}" },
+  { "action": "fill", "selector": "[type='password']", "value": "{{password}}" },
+  { "action": "click", "selector": "button:has-text('Sign In')" }
+]
 ```
 
-If the login agent succeeds, it outputs login steps. The CLI automatically saves them to config.json.
+Adjust the selectors and button text to match the user's actual login form. Use `{{email}}` and `{{password}}` as placeholders — they get substituted at runtime.
 
-If it fails, show the error and ask the user to verify their credentials and dev server.
+Save the steps to config:
+```bash
+LOGIN_STEPS='[{"action":"goto","url":"LOGIN_URL"},{"action":"fill","selector":"[type='"'"'email'"'"']","value":"{{email}}"},{"action":"fill","selector":"[type='"'"'password'"'"']","value":"{{password}}"},{"action":"click","selector":"button:has-text('"'"'Sign In'"'"')"}]'
+jq --argjson steps "$LOGIN_STEPS" '.auth.loginSteps = $steps' \
+  .verify/config.json > .verify/config.tmp && mv .verify/config.tmp .verify/config.json
+```
 
 ### 7. Verify login recipe by replay
 
 Clear cookies and replay the saved steps mechanically to confirm they work:
 
 ```bash
-BROWSE_BIN="${BROWSE_BIN:-$(cat ~/.cache/verify/browse-path 2>/dev/null || echo ~/.cache/verify/browse)}"
+BROWSE_BIN="${BROWSE_BIN:-$HOME/.cache/verify/browse}"
 
-npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts run-stage verify-login \
+npx @opslane/verify run-stage verify-login \
   --verify-dir .verify
 ```
 
@@ -118,7 +120,7 @@ After auth is confirmed, build the app index.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-npx tsx ~/.claude/tools/verify/pipeline/src/cli.ts index-app \
+npx @opslane/verify index-app \
   --project-dir . \
   --output .verify/app.json
 ```

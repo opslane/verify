@@ -5,9 +5,11 @@
 - vitest for unit + integration tests
 
 ## Commands
-- Run a stage: `npx tsx src/cli.ts run-stage <stage> --verify-dir .verify`
-- Full run: `npx tsx src/cli.ts run --spec .verify/spec.md`
-- Index app: `npx tsx src/cli.ts index-app --project-dir /path/to/project`
+- Full run: `npx @opslane/verify run --spec .verify/spec.md`
+- Init setup: `npx @opslane/verify init --base-url <url> --email <email> --password <password>`
+- Index app: `npx @opslane/verify index --project-dir /path/to/project`
+- Run a stage: `npx @opslane/verify run-stage <stage> --verify-dir .verify`
+- Dev (from source): `npx tsx src/cli.ts run --spec .verify/spec.md`
 
 ## Verification (run before every commit)
 1. `npx tsc --noEmit` — fix all type errors
