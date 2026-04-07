@@ -611,10 +611,14 @@ COMPLETE — all 6 tasks done, 2 code review gates passed, 413 tests passing (14
 ## zero-input-init (plan: docs/plans/2026-04-06-zero-input-init-implementation.md)
 
 ### Completed
-(none yet)
+- [x] Task 1: Layered port detection + rewrite init command (commit: a450f04)
+  - Files: detect-port.ts, detect-port.test.ts, base-url.txt, cli.ts, init.ts, cli.test.ts
+  - Deterministic port detection (package.json, .env, vite.config) + LLM fallback + default
+  - Zero-input init handler: scaffold .verify/, detect URL, verify server, import cookies, index app
+  - Removed verify-login stage + updated usage text + updated cli tests
 
 ### Current
-Task 1: Layered port detection + rewrite init command
+Task 2: Replace credential auth with cookie auth (atomic)
 
 ### Remaining
 Task 2: Replace credential auth with cookie auth (atomic)
