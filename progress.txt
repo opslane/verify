@@ -617,8 +617,15 @@ COMPLETE — all 6 tasks done, 2 code review gates passed, 413 tests passing (14
   - Zero-input init handler: scaffold .verify/, detect URL, verify server, import cookies, index app
   - Removed verify-login stage + updated usage text + updated cli tests
 
+- [x] Task 2: Replace credential auth with cookie auth (commit: 0f52187)
+  - Files: types.ts, init.ts, orchestrator.ts, cli.ts, init.test.ts, orchestrator.test.ts, config.test.ts
+  - Removed LoginStep, auth from VerifyConfig, loginOnDaemon, loginWithCredentials, waitForAuth
+  - Added importCookiesToDaemon with extraEnv support for per-group daemons
+  - Simplified runPreflight to spec + dev-server only
+  - Removed auth-dependent route resolver from index-app
+
 ### Current
-Task 2: Replace credential auth with cookie auth (atomic)
+Task 3: Trim index-app to routes + selectors, update AppIndex type
 
 ### Remaining
 Task 2: Replace credential auth with cookie auth (atomic)
