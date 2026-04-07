@@ -47,6 +47,7 @@ describe("detectPort", () => {
   it("reads PORT from .env.local over .env", () => {
     const dir = makeTempProject({
       "package.json": JSON.stringify({ scripts: { dev: "node server.js" } }),
+      ".env": "PORT=4000",
       ".env.local": "PORT=4001",
     });
     expect(detectPort(dir)).toEqual({ port: 4001, source: ".env.local" });

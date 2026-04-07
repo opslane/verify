@@ -38,7 +38,7 @@ if (command === "run") {
   // Full pipeline run via orchestrator
   const { runPipeline } = await import("./orchestrator.js");
   const verifyDir = values["verify-dir"]!;
-  const config = (await import("./lib/config.js")).loadConfig(verifyDir);
+  const config = loadConfig(verifyDir);
   const specPath = values.spec ?? config.specPath;
   if (!specPath) { console.error("No --spec provided and no specPath in config"); process.exit(1); }
 

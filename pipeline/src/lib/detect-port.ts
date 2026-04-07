@@ -37,7 +37,7 @@ export function detectPort(projectDir: string): PortResult | null {
   }
 
   // 2. Check .env files for PORT=
-  for (const envFile of [".env", ".env.local", ".env.development"]) {
+  for (const envFile of [".env.local", ".env.development", ".env"]) {
     const envPath = join(projectDir, envFile);
     if (!existsSync(envPath)) continue;
     try {

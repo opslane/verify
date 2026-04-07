@@ -24,7 +24,6 @@ export function checkSpecFile(specPath: string): CheckResult {
 
 /**
  * Import cookies from the user's Chromium browser into a browse daemon.
- * Replaces the old loginOnDaemon — no credentials or login steps needed.
  * Uses gstack's browse binary: `browse cookie-import-browser chromium <domain>`
  */
 export function importCookiesToDaemon(
@@ -32,10 +31,10 @@ export function importCookiesToDaemon(
   extraEnv: Record<string, string> = {},
 ): CheckResult {
   const bin = resolveBrowseBin();
-  const domain = new URL(baseUrl).hostname;
   const spawnEnv: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
 
   try {
+    const domain = new URL(baseUrl).hostname;
     execFileSync(bin, ["cookie-import-browser", "chromium", domain], {
       timeout: 15_000,
       stdio: "ignore",
