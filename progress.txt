@@ -605,3 +605,19 @@ COMPLETE — all 7 tasks done (0-6), 1 code review gate passed, 395 pipeline tes
 
 ### Status
 COMPLETE — all 6 tasks done, 2 code review gates passed, 413 tests passing (14 new)
+
+---
+
+## zero-input-init (plan: docs/plans/2026-04-06-zero-input-init-implementation.md)
+
+### Completed
+(none yet)
+
+### Current
+Task 1: Layered port detection + rewrite init command
+
+### Remaining
+Task 2: Replace credential auth with cookie auth (atomic)
+Task 3: Trim index-app to routes + selectors, update AppIndex type
+Task 4: Update docs and skills
+Task 5: End-to-end verification
