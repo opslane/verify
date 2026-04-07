@@ -1,7 +1,7 @@
 // pipeline/src/lib/browse.ts — Browse daemon lifecycle management
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, chmodSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, platform, arch } from "node:os";
 
@@ -106,16 +106,6 @@ export function healthCheck(): boolean {
   }
 }
 
-export function stopDaemon(): void {
-  try { execFileSync(resolveBrowseBin(), ["stop"], { timeout: 5000, stdio: "ignore" }); } catch { /* already stopped */ }
-}
-
-export function resetPage(): void {
-  // Intentionally a no-op. Navigating to about:blank between ACs breaks cookie persistence
-  // in gstack/browse, causing login cookies to be lost for subsequent browse agents.
-  // The browse agent's first goto step handles navigation to the correct page.
-}
-
 // ── Per-group daemon isolation ─────────────────────────────────────────────
 
 export interface GroupDaemonEnv {
@@ -153,18 +143,3 @@ export function stopGroupDaemon(stateDir: string): void {
   }
 }
 
-/**
- * Kill all group daemons under a run directory. Safety net for cleanup.
- */
-export function stopAllGroupDaemons(runDir: string): void {
-  try {
-    const entries = readdirSync(runDir);
-    for (const entry of entries) {
-      if (entry.startsWith(".browse-")) {
-        stopGroupDaemon(join(runDir, entry));
-      }
-    }
-  } catch {
-    // runDir doesn't exist or can't be read — nothing to clean up
-  }
-}
