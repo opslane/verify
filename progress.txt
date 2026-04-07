@@ -624,8 +624,14 @@ COMPLETE — all 6 tasks done, 2 code review gates passed, 413 tests passing (14
   - Simplified runPreflight to spec + dev-server only
   - Removed auth-dependent route resolver from index-app
 
+- [x] Task 3: Trim index-app to routes + selectors (commit: 836fe2d)
+  - Files: types.ts, cli.ts, orchestrator.ts, ac-generator.ts, app-index.test.ts, fixtures/app-index.json
+  - Deleted: prisma-parser, seed-extractor, route-resolver, env, index-app helpers, 3 prompts
+  - AppIndex now just: indexed_at, routes, pages
+  - index-app runs 2 agents (routes + selectors) instead of 4
+
 ### Current
-Task 3: Trim index-app to routes + selectors, update AppIndex type
+Task 4: Update docs and skills
 
 ### Remaining
 Task 2: Replace credential auth with cookie auth (atomic)
