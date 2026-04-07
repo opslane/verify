@@ -21,10 +21,7 @@ const { positionals, values } = parseArgs({
     ac: { type: "string" },
     timeout: { type: "string" },
     "base-url": { type: "string" },
-    email: { type: "string" },
-    password: { type: "string" },
     "browse-bin": { type: "string" },
-    "login-steps": { type: "string" },
     version: { type: "boolean", short: "v", default: false },
   },
 });
@@ -84,58 +81,105 @@ if (command === "run") {
   }
 
 } else if (command === "init") {
-  // One-time project setup: create config, discover login, verify auth, index app
-  const baseUrl = values["base-url"] ?? "http://localhost:3000";
-  const email = values.email;
-  const password = values.password;
-  if (!email || !password) {
-    console.error("init requires --email and --password");
-    process.exit(1);
-  }
-
+  // Zero-input project setup: auto-detect URL, import cookies, index app
   const projectDir = values["project-dir"] ?? process.cwd();
   const verifyDir = values["verify-dir"] === ".verify"
     ? join(projectDir, ".verify")
     : values["verify-dir"]!;
 
-  // Step 1: Create .verify/ and config.json
+  // Step 1: Scaffold .verify/ and config
   mkdirSync(verifyDir, { recursive: true });
   const configPath = join(verifyDir, "config.json");
 
-  // Load existing config or start fresh
+  // Update .gitignore
+  const gitignorePath = join(projectDir, ".gitignore");
+  const patterns = [
+    ".verify/config.json", ".verify/evidence/", ".verify/prompts/",
+    ".verify/report.json", ".verify/browse.json", ".verify/report.html",
+    ".verify/progress.jsonl",
+  ];
+  let gitignore = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+  for (const p of patterns) {
+    if (!gitignore.includes(p)) gitignore += `\n${p}`;
+  }
+  writeFileSync(gitignorePath, gitignore.replace(/^\n+/, ""));
+  console.log("✓ .gitignore updated");
+
+  // Step 2: Detect base URL (layered: deterministic → LLM fallback → default)
+  let baseUrl = values["base-url"];
+  if (!baseUrl) {
+    const { detectPort } = await import("./lib/detect-port.js");
+    const detected = detectPort(projectDir);
+
+    if (detected) {
+      baseUrl = `http://localhost:${detected.port}`;
+      console.log(`  Detected: ${baseUrl} (from ${detected.source})`);
+    } else {
+      // LLM fallback for unusual project structures
+      console.log("  No port in package.json or .env — asking LLM agent...");
+      const { ensureBrowseBin } = await import("./lib/browse.js");
+      await ensureBrowseBin();
+      const promptPath = join(dirname(fileURLToPath(import.meta.url)), "prompts", "index", "base-url.txt");
+      const prompt = readFileSync(promptPath, "utf-8");
+      const detectRunDir = join(verifyDir, "runs", `detect-${Date.now()}`);
+      mkdirSync(join(detectRunDir, "logs"), { recursive: true });
+
+      const result = await runClaude({
+        prompt,
+        model: "haiku",
+        timeoutMs: 30_000,
+        stage: "detect-base-url",
+        runDir: detectRunDir,
+        cwd: projectDir,
+        dangerouslySkipPermissions: true,
+        tools: ["Read", "Glob", "Grep"],
+      });
+
+      // Parse JSON from LLM output
+      let port = 3000;
+      let source = "default";
+      try {
+        const jsonStr = result.stdout.match(/\{[\s\S]*\}/)?.[0];
+        if (jsonStr) {
+          const parsed = JSON.parse(jsonStr) as { port?: number; source?: string };
+          port = parsed.port ?? 3000;
+          source = parsed.source ?? "llm-agent";
+        }
+      } catch { /* use defaults */ }
+      baseUrl = `http://localhost:${port}`;
+      console.log(`  Detected: ${baseUrl} (from ${source})`);
+    }
+  }
+
+  // Verify dev server is running
+  try {
+    await fetch(baseUrl, { signal: AbortSignal.timeout(5000) });
+    console.log(`✓ Dev server running at ${baseUrl}`);
+  } catch {
+    console.error(`✗ Dev server not running at ${baseUrl}. Start it and re-run \`npx @opslane/verify init\`.`);
+    process.exit(1);
+  }
+
+  // Write config
   let config: Record<string, unknown> = {};
   if (existsSync(configPath)) {
-    try { config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>; } catch { /* start fresh */ }
+    try { config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>; } catch { /* fresh */ }
   }
   config.baseUrl = baseUrl;
-  config.auth = { email, password, loginSteps: [] };
   writeFileSync(configPath, JSON.stringify(config, null, 2));
-  console.log(`Config written: ${configPath}`);
+  console.log(`✓ Config written: ${configPath}`);
 
-  // Step 2: Load login steps from file
-  const loginStepsPath = values["login-steps"];
-  if (!loginStepsPath) {
-    console.error("--login-steps <path> is required. Use /verify-setup in Claude Code to discover login steps,");
-    console.error("then pass the resulting JSON file: verify init --login-steps .verify/login-steps.json ...");
+  // Step 3: Import cookies
+  console.log("Importing browser cookies...");
+  const { importCookiesToDaemon } = await import("./init.js");
+  const cookieResult = importCookiesToDaemon(baseUrl);
+  if (!cookieResult.ok) {
+    console.error(`✗ ${cookieResult.error}`);
     process.exit(1);
   }
-  const steps = JSON.parse(readFileSync(loginStepsPath, "utf-8")) as unknown[];
-  (config.auth as Record<string, unknown>).loginSteps = steps;
-  writeFileSync(configPath, JSON.stringify(config, null, 2));
-  console.log(`Login steps loaded from: ${loginStepsPath} (${steps.length} steps)`);
+  console.log("✓ Cookies imported from browser");
 
-  // Step 3: Verify login works
-  console.log("Verifying login...");
-  const { loginWithCredentials } = await import("./init.js");
-  const fullConfig = loadConfig(verifyDir);
-  const loginResult = loginWithCredentials(fullConfig);
-  if (!loginResult.ok) {
-    console.error(`Login verification failed: ${loginResult.error}`);
-    process.exit(1);
-  }
-  console.log("Login verified.");
-
-  // Step 4: Index the app
+  // Step 4: Index routes + selectors
   console.log("Indexing app...");
   const { execFileSync } = await import("node:child_process");
   execFileSync(process.execPath, [
@@ -145,7 +189,7 @@ if (command === "run") {
     "--project-dir", projectDir,
   ], { stdio: "inherit" });
 
-  console.log("\nSetup complete. Run `npx @opslane/verify run --spec .verify/spec.md` to verify.");
+  console.log("\n✓ Setup complete. Run `npx @opslane/verify run --spec <spec.md>` to verify.");
 
 } else if (command === "index-app" || command === "index") {
   const projectDir = values["project-dir"] ?? process.cwd();
@@ -390,44 +434,26 @@ if (command === "run") {
       }
       break;
     }
-    case "verify-login": {
-      const { loginWithCredentials } = await import("./init.js");
-      if (!config.auth?.loginSteps?.length) {
-        console.error("No auth config — run /verify-setup to configure login");
-        process.exit(1);
-      }
-      // No startDaemon needed — the first goto in login steps starts the daemon implicitly.
-      // Calling startDaemon/healthCheck/goto about:blank before login breaks cookie persistence.
-      const loginResult = loginWithCredentials(config);
-      if (loginResult.ok) {
-        console.log("Login recipe verified — authentication succeeded.");
-      } else {
-        console.error(loginResult.error);
-        process.exit(1);
-      }
-      break;
-    }
     default:
-      console.error(`Unknown stage: ${stageName}. Available: ac-generator, browse-agent, verify-login`);
+      console.error(`Unknown stage: ${stageName}. Available: ac-generator, browse-agent`);
       process.exit(1);
   }
 } else {
   console.error("Usage:");
   console.error("  verify run --spec <path> [--verify-dir .verify]");
-  console.error("  verify init --base-url <url> --email <email> --password <password> --login-steps <path>");
+  console.error("  verify init [--project-dir .] [--base-url <url>]");
   console.error("  verify index [--project-dir .] [--output .verify/app.json]");
   console.error("  verify run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
   console.error("");
   console.error("Commands:");
   console.error("  run            Full pipeline run (orchestrator)");
-  console.error("  init           One-time project setup (login discovery + app indexing)");
-  console.error("  index          Build app.json index (routes, selectors, schema, seed IDs)");
+  console.error("  init           Zero-input project setup (auto-detects URL, imports cookies, indexes app)");
+  console.error("  index          Build app.json index (routes, selectors)");
   console.error("  index-app      Alias for index");
   console.error("  run-stage      Run a single stage for debugging");
   console.error("");
   console.error("Stages:");
   console.error("  ac-generator   --spec <path>");
   console.error("  browse-agent   --ac <id>");
-  console.error("  verify-login");
   process.exit(1);
 }

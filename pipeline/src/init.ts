@@ -140,6 +140,32 @@ function waitForAuth(
   return { ok: false, error: "Login steps did not authenticate — still on login page after 10s. Re-run /verify-setup." };
 }
 
+/**
+ * Import cookies from the user's browser into the browse daemon.
+ * Extracts cookies for the given domain from Chromium's cookie store.
+ */
+export function importCookiesToDaemon(baseUrl: string): CheckResult {
+  const bin = resolveBrowseBin();
+  const url = new URL(baseUrl);
+  const domain = url.hostname;
+
+  try {
+    // Start daemon first so cookie-import has a target
+    startDaemon({});
+    // Import cookies from the default Chromium browser
+    execFileSync(bin, ["cookie-import-browser", "chromium", domain], {
+      timeout: 15_000,
+      stdio: "ignore",
+    });
+    return { ok: true };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      error: `Cookie import failed: ${err instanceof Error ? err.message : String(err)}. Make sure you're logged in to ${baseUrl} in Chrome.`,
+    };
+  }
+}
+
 export async function runPreflight(
   baseUrl: string,
   specPath: string,
