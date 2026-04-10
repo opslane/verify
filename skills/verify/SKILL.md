@@ -179,9 +179,9 @@ For EACH acceptance criterion, follow this sequence:
 
 4. **Collect evidence** — take a screenshot after verification:
    - `mcp__playwright__browser_take_screenshot`
-   - The file is automatically saved by Playwright MCP to its configured `--output-dir`
+   - The screenshot is returned inline in the tool result. Note the screenshot filename in your result.json.
 
-5. **Check for auth redirect** — if the page URL contains `/login`, `/signin`, `/signup`, `/auth`, or `/forgot-password`, AND the AC does not intentionally target an auth page:
+5. **Check for auth redirect** — if the page URL path contains `/login`, `/signin`, `/signup`, `/auth/` (as a standalone segment, not a prefix like `/authorize`), or `/forgot-password`, AND the AC does not intentionally target an auth page:
    - Write verdict `auth_expired` with observed: "Auth redirect — session may have expired"
 
 6. **Judge the result** — based on what you observed, determine:
@@ -261,7 +261,7 @@ These rules are battle-tested from 15+ real verification runs:
 
 4. **ONE RECOVERY:** If a Playwright command fails, retry once. Then write the result and move on.
 
-5. **NO CODEBASE ACCESS:** Do not use Read, Bash, Glob, Grep, `ls`, `git`, or `rg` to access source code files (.ts, .tsx, .js, .jsx, .py, .rb, etc). You are testing the running app, not the code. The ONLY files you may read/write are under `.verify/`.
+5. **NO CODEBASE ACCESS:** Do not use Read, Bash, Glob, Grep, `ls`, `git`, or `rg` to access source code files (.ts, .tsx, .js, .jsx, .py, .rb, etc). You are testing the running app, not the code. The ONLY files you may read/write are under `.verify/` and the user-provided spec file.
 
 6. **NO DATA MUTATION:** Do not submit forms that change app state, create accounts, or modify data. Read-only verification only.
 

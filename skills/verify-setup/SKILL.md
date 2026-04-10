@@ -48,7 +48,7 @@ cat .verify/app.json | head -20
 
 You should see your `baseUrl` in config and routes in `app.json`.
 
-### 3. Troubleshooting
+### 4. Troubleshooting
 
 **"Dev server not running"** — Start your dev server and re-run `npx @opslane/verify init`.
 
