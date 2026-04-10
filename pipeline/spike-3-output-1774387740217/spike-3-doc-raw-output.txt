@@ -1,3 +1,0 @@
-The condition is already met: there's a draft document (`envelope_zdtwresvavxnnnfh`) in team 7 with a recipient added, and the user (id=9) matches.
-
-{"group_id":"spike-3-doc","condition":"A draft document exists in team with url='personal_mwiasvikdmkwinfh' (teamId=7), with at least one recipient added. The logged-in user's email is ac1-test@test.documenso.com (userId=9). All queries MUST be scoped to this team.","setup_commands":[],"teardown_commands":[]}

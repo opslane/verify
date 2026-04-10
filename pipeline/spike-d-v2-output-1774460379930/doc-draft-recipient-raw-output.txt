@@ -1,3 +1,0 @@
-The condition is already met — there are draft documents for the user's personal team (teamId=7) with recipients. Let me verify one clearly satisfies both parts.
-
-{"group_id":"spike-d-doc-draft-recipient","condition":"A draft document exists for the logged-in user's personal team, with at least one recipient added","setup_commands":[],"teardown_commands":[]}
