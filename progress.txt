@@ -646,3 +646,39 @@ COMPLETE — all 6 tasks done, 2 code review gates passed, 413 tests passing (14
 
 ### Status
 COMPLETE — all 5 tasks done, E2E verified on Documenso
+
+---
+
+## skill-only-verify (plan: docs/plans/2026-04-10-skill-only-verify.md)
+
+### Completed
+- [x] Task 1: Rewrite /verify skill for Playwright MCP (commit: e8d7199)
+  - Files: skills/verify/SKILL.md
+  - Complete rewrite: Playwright MCP tools replace CLI orchestrator subprocess
+  - 5-turn structure preserved, Turn 5 now uses mcp__playwright__* directly
+  - Full 9-value verdict schema, hard constraints, evidence dirs
+
+- [x] Task 2: Update /verify-setup skill (commit: c6bec44)
+  - Files: skills/verify-setup/SKILL.md
+  - Added Step 2: Configure Playwright MCP (--storage-state + --isolated)
+  - Added troubleshooting entries for MCP + auth expiry
+
+- [x] Task 3: Update plugin manifests (commit: 593a091)
+  - Files: .claude-plugin/plugin.json, .claude-plugin/marketplace.json
+  - Added mcp_servers.playwright declaration, bumped to v1.1.0
+
+- [x] Code review gate (commit: f1d2078)
+  - Fixed: duplicate step numbering in verify-setup
+  - Fixed: auth redirect pattern boundary-awareness
+  - Fixed: Hard Constraint #5 allows user spec file
+  - Fixed: screenshot evidence description accuracy
+
+- [x] Task 4: TypeScript checks + tests
+  - Typecheck: PASS (0 errors)
+  - Tests: 143/143 passing
+
+### Current
+Task 5: E2E validation on Documenso (manual — needs running instance + Playwright MCP)
+
+### Status
+Tasks 1-4 COMPLETE — 143 tests passing, typecheck clean
