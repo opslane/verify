@@ -9,7 +9,7 @@ import { loadConfig } from "./lib/config.js";
 import { generateRunId } from "./lib/run-id.js";
 import { runClaude } from "./run-claude.js";
 import { ProgressEmitter } from "./lib/progress.js";
-import { runPreflight, loginOnDaemon } from "./init.js";
+import { runPreflight, importCookiesToDaemon } from "./init.js";
 
 import { buildACGeneratorPrompt, parseACGeneratorOutput, fanOutPureUIGroups } from "./stages/ac-generator.js";
 import { buildSessionPrompt, readSessionResults } from "./stages/browse-agent.js";
@@ -61,7 +61,7 @@ export async function runPipeline(
   callbacks.onLog(`Run: ${runId}`);
 
   // ── Preflight ──────────────────────────────────────────────────────────
-  const preflight = await runPreflight(config.baseUrl, specPath, verifyDir, config);
+  const preflight = await runPreflight(config.baseUrl, specPath);
   if (!preflight.ok) {
     for (const err of preflight.errors) callbacks.onError(err);
     return { runDir, verdicts: null };
@@ -121,27 +121,12 @@ export async function runPipeline(
   if (existsSync(appJsonPath)) {
     try {
       const appIndex = JSON.parse(readFileSync(appJsonPath, "utf-8"));
-      const lines: string[] = [];
-      // Example URLs: resolved parameterized routes → concrete URLs
-      if (appIndex.example_urls && typeof appIndex.example_urls === "object") {
-        const urls = appIndex.example_urls as Record<string, string>;
-        for (const [pattern, example] of Object.entries(urls)) {
-          lines.push(`${pattern} → ${example}`);
-        }
-      }
-      // Route list (unresolved) — only add routes not in example_urls
       if (appIndex.routes && typeof appIndex.routes === "object") {
-        const examplePatterns = new Set(Object.keys(appIndex.example_urls ?? {}));
-        const remaining = Object.keys(appIndex.routes as Record<string, unknown>)
-          .filter(r => !examplePatterns.has(r));
-        if (remaining.length > 0) {
-          lines.push("", "Other routes (no resolved URLs):");
-          for (const r of remaining) lines.push(`  ${r}`);
+        const routes = Object.keys(appIndex.routes as Record<string, unknown>);
+        if (routes.length > 0) {
+          appRoutes = routes.join("\n");
+          callbacks.onLog(`App routes: ${routes.length} entries from app.json`);
         }
-      }
-      if (lines.length > 0) {
-        appRoutes = lines.join("\n");
-        callbacks.onLog(`App routes: ${lines.length} entries from app.json`);
       }
     } catch {
       // app.json parse error — proceed without routes
@@ -158,9 +143,9 @@ export async function runPipeline(
   const browseBin = resolveBrowseBin();
   const { env: daemonEnv, stateDir } = startGroupDaemon("v1", runDir);
 
-  const loginResult = loginOnDaemon(config, daemonEnv);
-  if (!loginResult.ok) {
-    callbacks.onError(`Login failed: ${loginResult.error}`);
+  const cookieResult = importCookiesToDaemon(config.baseUrl, daemonEnv);
+  if (!cookieResult.ok) {
+    callbacks.onError(`Cookie auth failed: ${cookieResult.error}`);
     stopGroupDaemon(stateDir);
     return { runDir, verdicts: null };
   }

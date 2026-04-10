@@ -605,3 +605,44 @@ COMPLETE — all 7 tasks done (0-6), 1 code review gate passed, 395 pipeline tes
 
 ### Status
 COMPLETE — all 6 tasks done, 2 code review gates passed, 413 tests passing (14 new)
+
+---
+
+## zero-input-init (plan: docs/plans/2026-04-06-zero-input-init-implementation.md)
+
+### Completed
+- [x] Task 1: Layered port detection + rewrite init command (commit: a450f04)
+  - Files: detect-port.ts, detect-port.test.ts, base-url.txt, cli.ts, init.ts, cli.test.ts
+  - Deterministic port detection (package.json, .env, vite.config) + LLM fallback + default
+  - Zero-input init handler: scaffold .verify/, detect URL, verify server, import cookies, index app
+  - Removed verify-login stage + updated usage text + updated cli tests
+
+- [x] Task 2: Replace credential auth with cookie auth (commit: 0f52187)
+  - Files: types.ts, init.ts, orchestrator.ts, cli.ts, init.test.ts, orchestrator.test.ts, config.test.ts
+  - Removed LoginStep, auth from VerifyConfig, loginOnDaemon, loginWithCredentials, waitForAuth
+  - Added importCookiesToDaemon with extraEnv support for per-group daemons
+  - Simplified runPreflight to spec + dev-server only
+  - Removed auth-dependent route resolver from index-app
+
+- [x] Task 3: Trim index-app to routes + selectors (commit: 836fe2d)
+  - Files: types.ts, cli.ts, orchestrator.ts, ac-generator.ts, app-index.test.ts, fixtures/app-index.json
+  - Deleted: prisma-parser, seed-extractor, route-resolver, env, index-app helpers, 3 prompts
+  - AppIndex now just: indexed_at, routes, pages
+  - index-app runs 2 agents (routes + selectors) instead of 4
+
+- [x] Task 4: Update docs and skills (commit: 936378d)
+  - Files: skills/verify-setup/SKILL.md, README.md, pipeline/CLAUDE.md
+  - Removed --email/--password/--login-steps references, documented zero-input flow
+  - Code review fixes from prior commit already updated pipeline/CLAUDE.md
+
+- [x] Task 5: End-to-end verification (commit: dc78ff5)
+  - Tested against Documenso (~/Projects/opslane/evals/documenso)
+  - Port detection: correctly found PORT=3003 from .env
+  - Dev server: verified running (302 response)
+  - Cookies: imported from browser
+  - App index: 112 routes, 20 pages
+  - --base-url override: works correctly
+  - 172 tests passing, typecheck clean
+
+### Status
+COMPLETE — all 5 tasks done, E2E verified on Documenso

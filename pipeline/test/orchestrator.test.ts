@@ -74,7 +74,7 @@ vi.mock("../src/lib/browse.js", () => ({
 
 vi.mock("../src/init.js", () => ({
   runPreflight: vi.fn(async () => ({ ok: true, errors: [] })),
-  loginOnDaemon: vi.fn(() => ({ ok: true })),
+  importCookiesToDaemon: vi.fn(() => ({ ok: true })),
 }));
 
 vi.mock("../src/lib/diff-hints.js", () => ({

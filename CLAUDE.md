@@ -7,7 +7,7 @@ Also contains `server/` — a SaaS backend (Hono + TypeScript + Postgres) for Gi
 
 ### Pipeline
 ```
-/verify-setup → index-app (Prisma parser + seed IDs + 4 LLM agents → app.json)
+/verify-setup → init (port detection + cookie import + 2 LLM agents → app.json)
 /verify → ac-generator → single-session executor → report
 ```
 Config lives in `.verify/config.json`. App index lives in `.verify/app.json`. Env vars always override config.

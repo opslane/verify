@@ -24,7 +24,6 @@ describe("cli", () => {
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("run-stage");
     expect(result.stderr).toContain("ac-generator");
-    expect(result.stderr).toContain("verify-login");
   });
 
   it("errors when unknown stage given", () => {
@@ -32,12 +31,4 @@ describe("cli", () => {
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("Unknown stage");
   });
-
-  it("verify-login stage is accepted (not unknown)", () => {
-    const result = runCli(["run-stage", "verify-login",
-      "--verify-dir", "/tmp/nonexistent",
-    ]);
-    expect(result.stderr).not.toContain("Unknown stage: verify-login");
-  });
-
 });

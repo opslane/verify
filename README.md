@@ -37,8 +37,8 @@ cd verify/pipeline && npm install
 ### Standalone CLI
 
 ```bash
-# One-time setup (login discovery + app indexing)
-npx @opslane/verify init --base-url http://localhost:3000 --email test@example.com --password secret
+# One-time setup (auto-detects dev server, imports browser cookies, indexes app)
+npx @opslane/verify init
 
 # Run verification against a spec
 npx @opslane/verify run --spec .verify/spec.md
@@ -50,7 +50,7 @@ npx @opslane/verify index --project-dir .
 ### Claude Code Skills
 
 ```bash
-# One-time setup — installs browser, discovers login steps, indexes your app
+# One-time setup — auto-detects dev server, imports cookies, indexes app
 /verify-setup
 
 # Run verification against a spec

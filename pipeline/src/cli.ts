@@ -7,8 +7,6 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "./lib/config.js";
 import { runClaude } from "./run-claude.js";
 import { STAGE_PERMISSIONS } from "./lib/types.js";
-import { resolveExampleUrls, psqlQuery } from "./lib/route-resolver.js";
-import type { RouteResolverContext } from "./lib/route-resolver.js";
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -21,10 +19,7 @@ const { positionals, values } = parseArgs({
     ac: { type: "string" },
     timeout: { type: "string" },
     "base-url": { type: "string" },
-    email: { type: "string" },
-    password: { type: "string" },
     "browse-bin": { type: "string" },
-    "login-steps": { type: "string" },
     version: { type: "boolean", short: "v", default: false },
   },
 });
@@ -84,58 +79,103 @@ if (command === "run") {
   }
 
 } else if (command === "init") {
-  // One-time project setup: create config, discover login, verify auth, index app
-  const baseUrl = values["base-url"] ?? "http://localhost:3000";
-  const email = values.email;
-  const password = values.password;
-  if (!email || !password) {
-    console.error("init requires --email and --password");
-    process.exit(1);
-  }
-
+  // Zero-input project setup: auto-detect URL, import cookies, index app
   const projectDir = values["project-dir"] ?? process.cwd();
   const verifyDir = values["verify-dir"] === ".verify"
     ? join(projectDir, ".verify")
     : values["verify-dir"]!;
 
-  // Step 1: Create .verify/ and config.json
+  // Step 1: Scaffold .verify/ and config
   mkdirSync(verifyDir, { recursive: true });
   const configPath = join(verifyDir, "config.json");
 
-  // Load existing config or start fresh
+  // Update .gitignore
+  const gitignorePath = join(projectDir, ".gitignore");
+  const patterns = [
+    ".verify/config.json", ".verify/evidence/", ".verify/prompts/",
+    ".verify/report.json", ".verify/browse.json", ".verify/report.html",
+    ".verify/progress.jsonl",
+  ];
+  let gitignore = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+  for (const p of patterns) {
+    if (!gitignore.includes(p)) gitignore += `\n${p}`;
+  }
+  writeFileSync(gitignorePath, gitignore.replace(/^\n+/, ""));
+  console.log("✓ .gitignore updated");
+
+  // Step 2: Detect base URL (layered: deterministic → LLM fallback → default)
+  let baseUrl = values["base-url"];
+  if (!baseUrl) {
+    const { detectPort } = await import("./lib/detect-port.js");
+    const detected = detectPort(projectDir);
+
+    if (detected) {
+      baseUrl = `http://localhost:${detected.port}`;
+      console.log(`  Detected: ${baseUrl} (from ${detected.source})`);
+    } else {
+      // LLM fallback for unusual project structures
+      console.log("  No port in package.json or .env — asking LLM agent...");
+      const promptPath = join(dirname(fileURLToPath(import.meta.url)), "prompts", "index", "base-url.txt");
+      const prompt = readFileSync(promptPath, "utf-8");
+      const detectRunDir = join(verifyDir, "runs", `detect-${Date.now()}`);
+      mkdirSync(join(detectRunDir, "logs"), { recursive: true });
+
+      const result = await runClaude({
+        prompt,
+        model: "haiku",
+        timeoutMs: 30_000,
+        stage: "detect-base-url",
+        runDir: detectRunDir,
+        cwd: projectDir,
+        dangerouslySkipPermissions: true,
+        tools: ["Read", "Glob", "Grep"],
+      });
+
+      // Parse JSON from LLM output
+      let port = 3000;
+      let source = "default";
+      try {
+        const jsonStr = result.stdout.match(/\{[\s\S]*?\}/)?.[0];
+        if (jsonStr) {
+          const parsed = JSON.parse(jsonStr) as { port?: number; source?: string };
+          port = parsed.port ?? 3000;
+          source = parsed.source ?? "llm-agent";
+        }
+      } catch { /* use defaults */ }
+      baseUrl = `http://localhost:${port}`;
+      console.log(`  Detected: ${baseUrl} (from ${source})`);
+    }
+  }
+
+  // Verify dev server is running
+  try {
+    await fetch(baseUrl, { signal: AbortSignal.timeout(5000) });
+    console.log(`✓ Dev server running at ${baseUrl}`);
+  } catch {
+    console.error(`✗ Dev server not running at ${baseUrl}. Start it and re-run \`npx @opslane/verify init\`.`);
+    process.exit(1);
+  }
+
+  // Write config
   let config: Record<string, unknown> = {};
   if (existsSync(configPath)) {
-    try { config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>; } catch { /* start fresh */ }
+    try { config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>; } catch { /* fresh */ }
   }
   config.baseUrl = baseUrl;
-  config.auth = { email, password, loginSteps: [] };
   writeFileSync(configPath, JSON.stringify(config, null, 2));
-  console.log(`Config written: ${configPath}`);
+  console.log(`✓ Config written: ${configPath}`);
 
-  // Step 2: Load login steps from file
-  const loginStepsPath = values["login-steps"];
-  if (!loginStepsPath) {
-    console.error("--login-steps <path> is required. Use /verify-setup in Claude Code to discover login steps,");
-    console.error("then pass the resulting JSON file: verify init --login-steps .verify/login-steps.json ...");
+  // Step 3: Import cookies
+  console.log("Importing browser cookies...");
+  const { importCookiesToDaemon } = await import("./init.js");
+  const cookieResult = importCookiesToDaemon(baseUrl);
+  if (!cookieResult.ok) {
+    console.error(`✗ ${cookieResult.error}`);
     process.exit(1);
   }
-  const steps = JSON.parse(readFileSync(loginStepsPath, "utf-8")) as unknown[];
-  (config.auth as Record<string, unknown>).loginSteps = steps;
-  writeFileSync(configPath, JSON.stringify(config, null, 2));
-  console.log(`Login steps loaded from: ${loginStepsPath} (${steps.length} steps)`);
+  console.log("✓ Cookies imported from browser");
 
-  // Step 3: Verify login works
-  console.log("Verifying login...");
-  const { loginWithCredentials } = await import("./init.js");
-  const fullConfig = loadConfig(verifyDir);
-  const loginResult = loginWithCredentials(fullConfig);
-  if (!loginResult.ok) {
-    console.error(`Login verification failed: ${loginResult.error}`);
-    process.exit(1);
-  }
-  console.log("Login verified.");
-
-  // Step 4: Index the app
+  // Step 4: Index routes + selectors
   console.log("Indexing app...");
   const { execFileSync } = await import("node:child_process");
   execFileSync(process.execPath, [
@@ -145,7 +185,7 @@ if (command === "run") {
     "--project-dir", projectDir,
   ], { stdio: "inherit" });
 
-  console.log("\nSetup complete. Run `npx @opslane/verify run --spec .verify/spec.md` to verify.");
+  console.log("\n✓ Setup complete. Run `npx @opslane/verify run --spec <spec.md>` to verify.");
 
 } else if (command === "index-app" || command === "index") {
   const projectDir = values["project-dir"] ?? process.cwd();
@@ -154,176 +194,50 @@ if (command === "run") {
   mkdirSync(join(runDir, "logs"), { recursive: true });
   mkdirSync(dirname(outputPath), { recursive: true });
 
-  const { extractEnvVars, findPrismaSchemaPath, findSeedFiles, mergeIndexResults, dumpDatabaseSchema, dumpSeedData } = await import("./lib/index-app.js");
-  const { parsePrismaSchema, extractJsonFieldAnnotations } = await import("./lib/prisma-parser.js");
-  const { groupSeedIdsByContext } = await import("./lib/seed-extractor.js");
-
-  // Step 1: Deterministic parsing (no LLM needed)
   console.log("Indexing app...");
+  const promptDir = join(dirname(fileURLToPath(import.meta.url)), "prompts", "index");
 
-  // Parse Prisma schema for column mappings
-  let prismaMapping: ReturnType<typeof parsePrismaSchema> = {};
-  const schemaPath = findPrismaSchemaPath(projectDir);
-  if (schemaPath) {
-    console.log(`  Found Prisma schema: ${schemaPath}`);
-    prismaMapping = parsePrismaSchema(readFileSync(schemaPath, "utf-8"));
-    console.log(`  Parsed ${Object.keys(prismaMapping).length} models with column mappings`);
-  }
-
-  // Extract JSONB type annotations from Prisma schema (Prisma-specific)
-  let jsonAnnotations: Record<string, Record<string, string>> = {};
-  if (schemaPath) {
-    jsonAnnotations = extractJsonFieldAnnotations(readFileSync(schemaPath, "utf-8"));
-    const annotatedFields = Object.values(jsonAnnotations).reduce((n, m) => n + Object.keys(m).length, 0);
-    if (annotatedFields > 0) {
-      console.log(`  Found ${annotatedFields} JSONB type annotations`);
-    }
-  }
-
-  // Extract seed IDs
-  let seedIds: Record<string, string[]> = {};
-  const seedFiles = findSeedFiles(projectDir);
-  if (seedFiles.length > 0) {
-    console.log(`  Found ${seedFiles.length} seed file(s)`);
-    const allContent = seedFiles.map(f => readFileSync(f, "utf-8")).join("\n");
-    seedIds = groupSeedIdsByContext(allContent);
-    const totalIds = Object.values(seedIds).flat().length;
-    console.log(`  Extracted ${totalIds} seed IDs across ${Object.keys(seedIds).length} models`);
-  }
-
-  // Extract env vars
-  const envVars = extractEnvVars(projectDir);
-
-  // Dump database schema (generic — works for any Postgres project)
-  const { loadProjectEnv } = await import("./lib/env.js");
-  const projectEnvForDump = loadProjectEnv(projectDir);
-  const schemaDdl = dumpDatabaseSchema(projectEnvForDump, envVars.db_url_env);
-  if (schemaDdl) {
-    writeFileSync(join(dirname(outputPath), "schema.sql"), schemaDdl);
-    console.log(`  Dumped database schema: ${Math.round(schemaDdl.length / 1024)}KB`);
-  } else {
-    console.log("  Warning: could not dump database schema (DATABASE_URL missing or pg_dump failed)");
-  }
-
-  // Step 2: LLM-based indexing (4 parallel agents)
-  console.log("  Running 4 parallel index agents...");
-  const promptDir = join(dirname(new URL(import.meta.url).pathname), "prompts", "index");
-
-  const agentConfigs = [
-    { name: "routes", file: "routes.txt", outputFile: join(runDir, "routes.json") },
-    { name: "selectors", file: "selectors.txt", outputFile: join(runDir, "selectors.json") },
-    { name: "schema", file: "schema.txt", outputFile: join(runDir, "schema.json") },
-    { name: "fixtures", file: "fixtures.txt", outputFile: join(runDir, "fixtures.json") },
+  const agents = [
+    { name: "routes",    prompt: "routes.txt",    outputKey: "routes",    outputFile: join(runDir, "routes.json") },
+    { name: "selectors", prompt: "selectors.txt", outputKey: "pages",     outputFile: join(runDir, "selectors.json") },
   ];
 
-  // Build schema hint for the schema agent (avoids wasting time searching)
-  const schemaHint = schemaPath
-    ? `The schema file is at: ${schemaPath}\nRead that file directly. Do NOT search the codebase for schema files.`
-    : "No schema file was pre-detected. Search for Prisma schema, Drizzle schema, SQL migrations, or ORM definitions under packages/, prisma/, db/, src/.";
+  const results = await Promise.all(
+    agents.map(async (agent) => {
+      const promptText = readFileSync(join(promptDir, agent.prompt), "utf-8")
+        .replace(/OUTPUT_FILE/g, agent.outputFile);
 
-  const agentResults = await Promise.all(
-    agentConfigs.map(async (agent) => {
-      const promptTemplate = readFileSync(join(promptDir, agent.file), "utf-8");
-      let prompt = promptTemplate.replace(/OUTPUT_FILE/g, agent.outputFile);
-      if (agent.name === "schema") {
-        prompt = prompt.replace(/SCHEMA_HINT/g, schemaHint);
-      }
       try {
         await runClaude({
-          prompt,
+          prompt: promptText,
           model: "sonnet",
           timeoutMs: 300_000,
           stage: `index-${agent.name}`,
           runDir,
           cwd: projectDir,
-                   ...STAGE_PERMISSIONS["index-agent"], // needs Read, Grep, Glob
+          ...STAGE_PERMISSIONS["index-agent"],
         });
-        // Read the output file the agent wrote
-        const raw = readFileSync(agent.outputFile, "utf-8");
-        return JSON.parse(raw);
+        return JSON.parse(readFileSync(agent.outputFile, "utf-8")) as Record<string, unknown>;
       } catch {
-        console.error(`  Warning: ${agent.name} agent failed, using empty result`);
-        const key = agent.name === "routes" ? "routes"
-          : agent.name === "selectors" ? "pages"
-          : agent.name === "schema" ? "data_model"
-          : "fixtures";
-        return { [key]: {} };
+        console.warn(`  Warning: ${agent.name} agent failed, using empty result`);
+        return { [agent.outputKey]: {} };
       }
     })
   );
 
-  const [routesResult, selectorsResult, schemaResult, fixturesResult] = agentResults;
-
-  // Step 3: Merge all results
-  const appIndex = mergeIndexResults(
-    routesResult,
-    selectorsResult,
-    schemaResult,
-    fixturesResult,
-    envVars,
-    prismaMapping,
-    seedIds,
-    jsonAnnotations,
-  );
-
-  // Dump seed data — sample actual rows from all data_model tables
-  const seedDataDump = dumpSeedData(appIndex.data_model, projectEnvForDump, appIndex.db_url_env);
-  if (seedDataDump) {
-    writeFileSync(join(dirname(outputPath), "seed-data.txt"), seedDataDump);
-    console.log(`  Dumped seed data: ${Math.round(seedDataDump.length / 1024)}KB`);
-  } else {
-    console.log("  Warning: could not dump seed data (no tables or DB unreachable)");
-  }
-
-  // Step 3.5: Route resolver — map parameterized routes to concrete URLs deterministically
-  let psqlCmd = "";
-  const paramRoutes = Object.keys(appIndex.routes).filter(r => r.includes(":"));
-  if (paramRoutes.length > 0) {
-    console.log(`  Resolving ${paramRoutes.length} parameterized routes...`);
-
-    // Build psql connection string (reuse projectEnvForDump already computed above)
-    const dbUrlEnv = appIndex.db_url_env ?? "DATABASE_URL";
-    const dbUrl = (projectEnvForDump[dbUrlEnv] ?? projectEnvForDump.DATABASE_URL ?? "") as string;
-    const cleanDbUrl = dbUrl.split("?")[0];
-    psqlCmd = cleanDbUrl ? `psql "${cleanDbUrl}"` : "";
-
-    // Resolve auth user context for scoping
-    let resolverCtx: RouteResolverContext | null = null;
-    if (psqlCmd) {
-      const config = loadConfig(join(projectDir, ".verify"));
-      if (config.auth?.email) {
-        // Postgres single-quote escaping for email
-        const escapedEmail = config.auth.email.replace(/'/g, "''");
-        const userId = psqlQuery(psqlCmd, `SELECT id FROM "User" WHERE email = '${escapedEmail}' LIMIT 1`);
-
-        if (userId) {
-          const teamRow = psqlQuery(psqlCmd,
-            `SELECT t.id || '|' || t.url FROM "Team" t JOIN "Organisation" o ON o.id = t."organisationId" JOIN "OrganisationMember" om ON om."organisationId" = o.id WHERE om."userId" = ${userId} AND t.url LIKE 'personal_%' LIMIT 1`);
-
-          if (teamRow) {
-            const [teamId, teamUrl] = teamRow.split("|");
-            resolverCtx = { userId, teamId, teamUrl };
-          }
-        }
-      }
-    }
-
-    if (resolverCtx) {
-      const exampleUrls = resolveExampleUrls(appIndex.routes, appIndex.data_model, psqlCmd, resolverCtx);
-      appIndex.example_urls = exampleUrls;
-      console.log(`  Resolved ${Object.keys(exampleUrls).length}/${paramRoutes.length} example URLs (deterministic)`);
-    } else {
-      console.log("  Warning: could not resolve auth user context — skipping route resolution");
-    }
-  }
+  // Key-based merge — order-independent
+  const merged = Object.assign({}, ...results) as Record<string, unknown>;
+  const appIndex = {
+    indexed_at: new Date().toISOString(),
+    routes: merged.routes ?? {},
+    pages: merged.pages ?? {},
+  };
 
   writeFileSync(outputPath, JSON.stringify(appIndex, null, 2));
-  console.log(`\nApp index written to: ${outputPath}`);
-  console.log(`  Routes: ${Object.keys(appIndex.routes).length}`);
-  console.log(`  Pages: ${Object.keys(appIndex.pages).length}`);
-  console.log(`  Models: ${Object.keys(appIndex.data_model).length}`);
-  console.log(`  Seed IDs: ${Object.values(appIndex.seed_ids).flat().length}`);
-  console.log(`  DB URL env: ${appIndex.db_url_env ?? "(not found)"}`);
+
+  const routeCount = Object.keys(appIndex.routes as Record<string, unknown>).length;
+  const pageCount = Object.keys(appIndex.pages as Record<string, unknown>).length;
+  console.log(`App index: ${routeCount} routes, ${pageCount} pages → ${outputPath}`);
 
 } else if (command === "run-stage" && stageName) {
   const verifyDir = values["verify-dir"]!;
@@ -358,43 +272,25 @@ if (command === "run") {
       console.log(`Generated ${fanned.groups.length} groups, ${fanned.skipped.length} skipped`);
       break;
     }
-    case "verify-login": {
-      const { loginWithCredentials } = await import("./init.js");
-      if (!config.auth?.loginSteps?.length) {
-        console.error("No auth config — run /verify-setup to configure login");
-        process.exit(1);
-      }
-      // No startDaemon needed — the first goto in login steps starts the daemon implicitly.
-      // Calling startDaemon/healthCheck/goto about:blank before login breaks cookie persistence.
-      const loginResult = loginWithCredentials(config);
-      if (loginResult.ok) {
-        console.log("Login recipe verified — authentication succeeded.");
-      } else {
-        console.error(loginResult.error);
-        process.exit(1);
-      }
-      break;
-    }
     default:
-      console.error(`Unknown stage: ${stageName}. Available: ac-generator, verify-login`);
+      console.error(`Unknown stage: ${stageName}. Available: ac-generator`);
       process.exit(1);
   }
 } else {
   console.error("Usage:");
   console.error("  verify run --spec <path> [--verify-dir .verify]");
-  console.error("  verify init --base-url <url> --email <email> --password <password> --login-steps <path>");
+  console.error("  verify init [--project-dir .] [--base-url <url>]");
   console.error("  verify index [--project-dir .] [--output .verify/app.json]");
   console.error("  verify run-stage <stage> --verify-dir .verify --run-dir /tmp/run [options]");
   console.error("");
   console.error("Commands:");
   console.error("  run            Full pipeline run (orchestrator)");
-  console.error("  init           One-time project setup (login discovery + app indexing)");
-  console.error("  index          Build app.json index (routes, selectors, schema, seed IDs)");
+  console.error("  init           Zero-input project setup (auto-detects URL, imports cookies, indexes app)");
+  console.error("  index          Build app.json index (routes, selectors)");
   console.error("  index-app      Alias for index");
   console.error("  run-stage      Run a single stage for debugging");
   console.error("");
   console.error("Stages:");
   console.error("  ac-generator   --spec <path>");
-  console.error("  verify-login");
   process.exit(1);
 }
