@@ -16,7 +16,6 @@ describe("loadConfig", () => {
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.VERIFY_BASE_URL;
     delete process.env.VERIFY_SPEC_PATH;
-    delete process.env.VERIFY_DIFF_BASE;
   });
 
   it("returns defaults when no config file exists", () => {
@@ -43,11 +42,6 @@ describe("loadConfig", () => {
     expect(config.baseUrl).toBe("http://localhost:5000");
   });
 
-  it("maxParallelGroups defaults to 5", () => {
-    const config = loadConfig(join(tempDir, ".verify"));
-    expect(config.maxParallelGroups).toBe(5);
-  });
-
   it("handles malformed config.json gracefully", () => {
     writeFileSync(join(tempDir, ".verify", "config.json"), "not json{{{");
     const config = loadConfig(join(tempDir, ".verify"));
@@ -57,10 +51,9 @@ describe("loadConfig", () => {
   it("loads config with extra fields gracefully", () => {
     writeFileSync(join(tempDir, ".verify", "config.json"), JSON.stringify({
       baseUrl: "http://localhost:4000",
-      maxParallelGroups: 3,
+      someExtraField: true,
     }));
     const config = loadConfig(join(tempDir, ".verify"));
     expect(config.baseUrl).toBe("http://localhost:4000");
-    expect(config.maxParallelGroups).toBe(3);
   });
 });

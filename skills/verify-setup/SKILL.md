@@ -1,6 +1,6 @@
 ---
 name: verify-setup
-description: One-time setup for /verify. Auto-detects dev server, imports browser cookies, and indexes the app.
+description: One-time setup for /verify. Auto-detects dev server and indexes the app.
 ---
 
 # /verify-setup
@@ -10,7 +10,6 @@ Run once before using /verify on a new project.
 ## Prerequisites
 
 - Dev server running locally (any framework)
-- Logged into the app in Chrome/Arc/Brave (your real browser)
 - Node.js 22+
 
 ## Steps
@@ -24,8 +23,7 @@ npx @opslane/verify init
 This automatically:
 1. Creates `.verify/` directory and updates `.gitignore`
 2. Detects your dev server port from `package.json` and framework configs
-3. Imports session cookies from your default Chromium browser
-4. Indexes your app's routes and selectors
+3. Indexes your app's routes and selectors
 
 ### 2. Configure Playwright MCP
 
@@ -37,7 +35,7 @@ claude mcp add playwright -- npx @playwright/mcp@latest --storage-state .verify/
 
 Restart Claude Code after adding the MCP server.
 
-**Note:** The `--storage-state` flag loads cookies exported by `init`. The `--isolated` flag ensures Playwright uses those cookies instead of its own profile.
+**Note:** The `--storage-state` flag loads auth state from `.verify/auth.json`. The `--isolated` flag ensures Playwright uses that state instead of its own profile.
 
 ### 3. Verify setup worked
 
@@ -52,10 +50,8 @@ You should see your `baseUrl` in config and routes in `app.json`.
 
 **"Dev server not running"** — Start your dev server and re-run `npx @opslane/verify init`.
 
-**"Cookie import failed"** — Open your app in Chrome, log in, then re-run init.
-
 **Wrong port detected** — Override with: `npx @opslane/verify init --base-url http://localhost:YOUR_PORT`
 
 **Playwright MCP not found** — Run `claude mcp add playwright -- npx @playwright/mcp@latest --storage-state .verify/auth.json --isolated` and restart Claude Code.
 
-**Auth expired during /verify** — Re-run `npx @opslane/verify init` to re-import cookies from Chrome, then restart Claude Code.
+**Auth expired during /verify** — Log into your app in the Playwright browser session, or provide credentials when prompted by `/verify`.

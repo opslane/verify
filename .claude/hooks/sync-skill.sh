@@ -14,7 +14,7 @@ case "$FILE_PATH" in
     cp "$FILE_PATH" ~/.claude/skills/verify-setup/SKILL.md
     echo "synced skills/verify-setup/SKILL.md → ~/.claude/skills/verify-setup/SKILL.md" >&2
     ;;
-  *scripts/agent.sh|*scripts/orchestrate.sh|*scripts/preflight.sh|*scripts/planner.sh|*scripts/judge.sh|*scripts/report.sh|*scripts/code-review.sh|*scripts/install-browse.sh)
+  *scripts/agent.sh|*scripts/orchestrate.sh|*scripts/preflight.sh|*scripts/planner.sh|*scripts/judge.sh|*scripts/report.sh|*scripts/code-review.sh)
     SCRIPT_NAME=$(basename "$FILE_PATH")
     mkdir -p ~/.claude/tools/verify
     cp "$FILE_PATH" ~/.claude/tools/verify/"$SCRIPT_NAME"

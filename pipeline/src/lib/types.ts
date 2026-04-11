@@ -5,55 +5,6 @@
 export interface VerifyConfig {
   baseUrl: string;
   specPath?: string;
-  diffBase?: string;
-  maxParallelGroups?: number;           // default 5
-}
-
-// ── AC Generator output ─────────────────────────────────────────────────────
-
-export interface ACGroup {
-  id: string;                           // "group-a"
-  condition: string | null;             // null = pure UI, no setup needed
-  acs: AC[];
-}
-
-export interface AC {
-  id: string;                           // "ac1"
-  description: string;
-}
-
-export interface ACGeneratorOutput {
-  groups: ACGroup[];
-  skipped: Array<{ id: string; reason: string }>;
-}
-
-// ── Judge output (with confidence scoring) ──────────────────────────────────
-
-export type Verdict = "pass" | "fail" | "blocked" | "unclear" | "error" | "timeout" | "skipped"
-  | "auth_expired" | "spec_unclear";
-
-export type Confidence = "high" | "medium" | "low";
-
-export interface ACVerdict {
-  ac_id: string;
-  verdict: Verdict;
-  confidence: Confidence;
-  reasoning: string;
-}
-
-export interface JudgeOutput {
-  verdicts: ACVerdict[];
-}
-
-// ── App Index (from /verify-setup) ──────────────────────────────────────────
-
-export interface AppIndex {
-  indexed_at: string;
-  routes: Record<string, { component: string }>;
-  pages: Record<string, {
-    selectors: Record<string, { value: string; source: string }>;
-    source_tests: string[];
-  }>;
 }
 
 // ── Stage progress (stream-json observability) ──────────────────────────────
@@ -81,7 +32,7 @@ export interface RunClaudeOptions {
   effort?: "low" | "medium" | "high" | "max";
   settingSources?: string;              // defaults to "" (no hooks/skills); set "user,project" to opt in
   onProgress?: (event: StageProgressEvent) => void;
-  env?: Record<string, string>;         // extra env vars merged into subprocess (e.g. BROWSE_STATE_FILE)
+  env?: Record<string, string>;         // extra env vars merged into subprocess
 }
 
 export interface RunClaudeResult {
@@ -98,8 +49,6 @@ export type RunClaudeFn = (opts: RunClaudeOptions) => Promise<RunClaudeResult>;
 // Each stage gets ONLY the tool access it needs. This is the explicit map.
 
 export const STAGE_PERMISSIONS: Record<string, Pick<RunClaudeOptions, "dangerouslySkipPermissions" | "allowedTools" | "tools">> = {
-  // ac-generator: no entry — content inlined in prompt, tools: [] set in orchestrator
-  "executor":      { dangerouslySkipPermissions: true, tools: ["Bash", "Read"] },  // skip-permissions for browse binary + restrict tool set
   "index-agent":   { dangerouslySkipPermissions: true },    // needs Read, Grep, Glob for codebase indexing
 };
 
@@ -111,16 +60,6 @@ export interface TimelineEvent {
   event: "start" | "end" | "error" | "timeout" | "skip";
   durationMs?: number;
   detail?: string;
-}
-
-// ── Progress event (for streaming dashboard) ────────────────────────────────
-
-export type ProgressStatus = "pending" | "running" | "pass" | "fail" | "error" | "timeout" | "skipped";
-
-export interface ProgressEvent {
-  acId: string;
-  status: ProgressStatus;
-  detail?: string;                      // e.g. "navigating...", "waiting for setup"
 }
 
 // ── Auth failure patterns ───────────────────────────────────────────────────

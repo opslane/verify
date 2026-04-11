@@ -21,7 +21,6 @@
     "postbuild": "cp -r src/prompts dist/prompts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
