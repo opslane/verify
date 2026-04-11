@@ -1,14 +1,85 @@
 // pipeline/src/lib/browse.ts — Browse daemon lifecycle management
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, platform, arch } from "node:os";
+
+// ── Browse binary auto-download ─────────────────────────────────────────────
+
+export const BROWSE_TAG = "v0.1.0";
+
+const BROWSE_CHECKSUMS: Record<string, string> = {
+  "darwin-arm64": "PLACEHOLDER_CHECKSUM_DARWIN_ARM64",
+  "darwin-x64": "PLACEHOLDER_CHECKSUM_DARWIN_X64",
+  "linux-x64": "PLACEHOLDER_CHECKSUM_LINUX_X64",
+};
+
+export function detectPlatform(): string {
+  const os = platform();
+  const cpu = arch();
+  const key = `${os}-${cpu}`;
+  if (!(key in BROWSE_CHECKSUMS)) {
+    throw new Error(`Unsupported platform: ${key}. Supported: ${Object.keys(BROWSE_CHECKSUMS).join(", ")}. Set BROWSE_BIN env var to use a custom binary.`);
+  }
+  return key;
+}
+
+/**
+ * Download the browse binary from GitHub releases, verify SHA256, and install atomically.
+ * Uses Node 22 built-in fetch.
+ */
+export async function ensureBrowseBin(): Promise<string> {
+  if (process.env.BROWSE_BIN) return process.env.BROWSE_BIN;
+
+  const cacheDir = join(homedir(), ".cache", "verify");
+  const finalPath = join(cacheDir, "browse");
+  if (existsSync(finalPath)) return finalPath;
+
+  const plat = detectPlatform();
+  const baseUrl = process.env.BROWSE_RELEASE_URL
+    ?? `https://github.com/AshDevFr/gstack/releases/download/${BROWSE_TAG}`;
+  const url = `${baseUrl}/browse-${plat}`;
+
+  mkdirSync(cacheDir, { recursive: true });
+  const tmpPath = join(cacheDir, `browse.tmp.${process.pid}`);
+
+  try {
+    console.log(`Downloading browse binary for ${plat}...`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status} ${response.statusText} from ${url}`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    writeFileSync(tmpPath, buffer);
+
+    // Verify SHA256 checksum
+    const hash = createHash("sha256").update(buffer).digest("hex");
+    const expected = BROWSE_CHECKSUMS[plat];
+    if (hash !== expected) {
+      throw new Error(
+        `Checksum mismatch for browse-${plat}:\n  expected: ${expected}\n  got:      ${hash}\nThe binary may be corrupted or tampered with.`,
+      );
+    }
+
+    // Atomic install: rename + chmod
+    renameSync(tmpPath, finalPath);
+    chmodSync(finalPath, 0o755);
+    console.log(`Browse binary installed: ${finalPath}`);
+    return finalPath;
+  } catch (err) {
+    // Clean up temp file on any failure
+    try { unlinkSync(tmpPath); } catch { /* already gone */ }
+    throw err;
+  }
+}
 
 export function resolveBrowseBin(): string {
   if (process.env.BROWSE_BIN) return process.env.BROWSE_BIN;
   const cached = join(homedir(), ".cache", "verify", "browse");
   if (existsSync(cached)) return cached;
-  throw new Error("Browse binary not found. Run /verify-setup or set BROWSE_BIN env var.");
+  throw new Error("Browse binary not found. Run `npx @opslane/verify init` or set BROWSE_BIN env var.");
 }
 
 // These functions use execFileSync (blocking) intentionally — the browse daemon
@@ -33,16 +104,6 @@ export function healthCheck(): boolean {
   } catch {
     return false;
   }
-}
-
-export function stopDaemon(): void {
-  try { execFileSync(resolveBrowseBin(), ["stop"], { timeout: 5000, stdio: "ignore" }); } catch { /* already stopped */ }
-}
-
-export function resetPage(): void {
-  // Intentionally a no-op. Navigating to about:blank between ACs breaks cookie persistence
-  // in gstack/browse, causing login cookies to be lost for subsequent browse agents.
-  // The browse agent's first goto step handles navigation to the correct page.
 }
 
 // ── Per-group daemon isolation ─────────────────────────────────────────────
@@ -79,22 +140,6 @@ export function stopGroupDaemon(stateDir: string): void {
     }
   } catch {
     // State file missing or unparseable — daemon was never started or already cleaned up
-  }
-}
-
-/**
- * Kill all group daemons under a run directory. Safety net for cleanup.
- */
-export function stopAllGroupDaemons(runDir: string): void {
-  try {
-    const entries = readdirSync(runDir);
-    for (const entry of entries) {
-      if (entry.startsWith(".browse-")) {
-        stopGroupDaemon(join(runDir, entry));
-      }
-    }
-  } catch {
-    // runDir doesn't exist or can't be read — nothing to clean up
   }
 }
 

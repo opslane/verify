@@ -1,0 +1,21 @@
+{
+  "name": "opslane-verify",
+  "description": "Browser-based acceptance criteria verification for frontend PRs using Claude + Playwright",
+  "version": "1.1.0",
+  "author": {
+    "name": "opslane",
+    "url": "https://github.com/opslane"
+  },
+  "homepage": "https://github.com/opslane/opslane-v3",
+  "repository": "https://github.com/opslane/opslane-v3",
+  "license": "MIT",
+  "mcp_servers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest", "--storage-state", ".verify/auth.json", "--isolated"],
+      "description": "Browser automation for verification"
+    }
+  },
+  "skills": ["verify", "verify-setup"],
+  "keywords": ["verify", "playwright", "frontend", "acceptance-criteria", "qa"]
+}

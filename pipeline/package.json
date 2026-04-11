@@ -1,24 +1,33 @@
 {
-  "name": "@verify/pipeline",
+  "name": "@opslane/verify",
   "version": "0.1.0",
   "type": "module",
-  "private": true,
+  "private": false,
+  "bin": {
+    "verify": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "src/prompts/"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "tsc",
+    "postbuild": "cp -r src/prompts dist/prompts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "eval:browse": "tsx src/evals/run-browse-evals.ts",
-    "eval:browse:dom": "tsx src/evals/run-browse-dom-evals.ts"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
     "vitest": "^3.0.0"
-  },
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.89",
-    "postgres": "^3.4.8",
-    "zod": "^4.3.6"
   }
 }

@@ -19,9 +19,12 @@ node_modules/
 .env
 .env.local
 .gstack/
-pipeline/distu/
-.claude/
-.claude-plugin/
-.tmp-merge-backup/
-pipeline/spike-*-output-*/
+pipeline/dist/
+pipeline/spike-*-output*/
 pipeline/spikes/
+.claude/worktrees/
+.claude/projects/
+.tmp-merge-backup/
+docs/plans/
+progress.txt
+.omx/

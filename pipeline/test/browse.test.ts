@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { resolveBrowseBin, startGroupDaemon, stopGroupDaemon, stopAllGroupDaemons } from "../src/lib/browse.js";
+import { resolveBrowseBin, ensureBrowseBin, detectPlatform, startGroupDaemon, stopGroupDaemon } from "../src/lib/browse.js";
 
 describe("resolveBrowseBin", () => {
   afterEach(() => { delete process.env.BROWSE_BIN; });
@@ -26,6 +26,33 @@ describe("resolveBrowseBin", () => {
   });
 });
 
+describe("detectPlatform", () => {
+  it("returns a valid platform string", () => {
+    const plat = detectPlatform();
+    expect(["darwin-arm64", "darwin-x64", "linux-x64"]).toContain(plat);
+  });
+});
+
+describe("ensureBrowseBin", () => {
+  afterEach(() => { delete process.env.BROWSE_BIN; });
+
+  it("returns BROWSE_BIN env var when set", async () => {
+    process.env.BROWSE_BIN = "/tmp/fake-browse";
+    const path = await ensureBrowseBin();
+    expect(path).toBe("/tmp/fake-browse");
+  });
+
+  it("returns cached path when binary exists", async () => {
+    delete process.env.BROWSE_BIN;
+    const cached = join(homedir(), ".cache", "verify", "browse");
+    if (existsSync(cached)) {
+      const path = await ensureBrowseBin();
+      expect(path).toBe(cached);
+    }
+    // If not cached, skip — we don't want to trigger a real download in tests
+  });
+});
+
 const TEST_RUN_DIR = "/tmp/verify-browse-test-" + process.pid;
 
 describe("group daemon helpers", () => {
@@ -34,7 +61,6 @@ describe("group daemon helpers", () => {
   });
 
   afterEach(() => {
-    try { stopAllGroupDaemons(TEST_RUN_DIR); } catch { /* ignore */ }
     try { rmSync(TEST_RUN_DIR, { recursive: true }); } catch { /* ignore */ }
   });
 
@@ -61,18 +87,4 @@ describe("group daemon helpers", () => {
     });
   });
 
-  describe("stopAllGroupDaemons", () => {
-    it("is a no-op when no group dirs exist", () => {
-      expect(() => stopAllGroupDaemons(TEST_RUN_DIR)).not.toThrow();
-    });
-
-    it("finds and processes all .browse-* dirs", () => {
-      for (const g of ["g1", "g2", "g3"]) {
-        const dir = join(TEST_RUN_DIR, `.browse-${g}`);
-        mkdirSync(dir, { recursive: true });
-        writeFileSync(join(dir, "browse.json"), JSON.stringify({ pid: 999999999, port: 12345, token: "test" }));
-      }
-      expect(() => stopAllGroupDaemons(TEST_RUN_DIR)).not.toThrow();
-    });
-  });
 });

@@ -4,7 +4,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { startGroupDaemon, stopGroupDaemon, stopAllGroupDaemons, resolveBrowseBin } from "../src/lib/browse.js";
+import { startGroupDaemon, stopGroupDaemon, resolveBrowseBin } from "../src/lib/browse.js";
 
 const TEST_RUN_DIR = "/tmp/verify-parallel-test-" + process.pid;
 const BASE_URL = process.env.TEST_BASE_URL ?? "http://localhost:3003";
@@ -20,7 +20,6 @@ const canRun = (() => {
 
 describe.skipIf(!canRun)("parallel browse daemon isolation", () => {
   afterEach(() => {
-    try { stopAllGroupDaemons(TEST_RUN_DIR); } catch { /* ignore */ }
     try { rmSync(TEST_RUN_DIR, { recursive: true }); } catch { /* ignore */ }
   });
 

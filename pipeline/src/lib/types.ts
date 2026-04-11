@@ -2,22 +2,11 @@
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-export type LoginStep =
-  | { action: "goto"; url: string }
-  | { action: "fill"; selector: string; value: string }
-  | { action: "click"; selector: string }
-  | { action: "sleep"; ms: number };
-
 export interface VerifyConfig {
   baseUrl: string;
   specPath?: string;
   diffBase?: string;
   maxParallelGroups?: number;           // default 5
-  auth?: {
-    email: string;
-    password: string;
-    loginSteps: LoginStep[];
-  };
 }
 
 // ── AC Generator output ─────────────────────────────────────────────────────
@@ -38,66 +27,10 @@ export interface ACGeneratorOutput {
   skipped: Array<{ id: string; reason: string }>;
 }
 
-// ── Planner output ──────────────────────────────────────────────────────────
-
-export interface PlannedAC {
-  id: string;
-  group: string;                        // matches ACGroup.id
-  description: string;
-  url: string;                          // relative, e.g. "/settings"
-  steps: string[];
-  screenshot_at: string[];
-  timeout_seconds: number;              // 60-300
-}
-
-export interface PlannerOutput {
-  criteria: PlannedAC[];
-}
-
-// ── Plan Validator ──────────────────────────────────────────────────────────
-
-export interface PlanValidationError {
-  acId: string;
-  field: string;
-  message: string;
-}
-
-export interface PlanValidationResult {
-  valid: boolean;
-  errors: PlanValidationError[];
-}
-
-// ── Setup Writer output ─────────────────────────────────────────────────────
-
-export interface SetupCommands {
-  group_id: string;
-  condition: string;
-  setup_commands: string[];
-  teardown_commands: string[];
-}
-
-// ── Browse Agent output ─────────────────────────────────────────────────────
-
-export interface NavFailure {
-  kind?: "navigation" | "interaction";
-  failed_step: string;
-  error: string;
-  page_snapshot: string;
-}
-
-export interface BrowseResult {
-  ac_id: string;
-  observed: string;
-  screenshots: string[];                // filenames relative to evidence dir
-  commands_run: string[];
-  nav_failure?: NavFailure;             // present when element not found on current view
-}
-
 // ── Judge output (with confidence scoring) ──────────────────────────────────
 
 export type Verdict = "pass" | "fail" | "blocked" | "unclear" | "error" | "timeout" | "skipped"
-  | "setup_failed" | "setup_unsupported" | "plan_error" | "auth_expired"
-  | "login_failed" | "spec_unclear";
+  | "auth_expired" | "spec_unclear";
 
 export type Confidence = "high" | "medium" | "low";
 
@@ -112,8 +45,6 @@ export interface JudgeOutput {
   verdicts: ACVerdict[];
 }
 
-// ── Learner (no structured output — writes learnings.md) ────────────────────
-
 // ── App Index (from /verify-setup) ──────────────────────────────────────────
 
 export interface AppIndex {
@@ -122,43 +53,6 @@ export interface AppIndex {
   pages: Record<string, {
     selectors: Record<string, { value: string; source: string }>;
     source_tests: string[];
-  }>;
-  data_model: Record<string, {
-    columns: Record<string, string>;    // prismaFieldName → postgresColumnName
-    table_name: string;                 // actual Postgres table name (from @@map, or model name)
-    enums: Record<string, string[]>;
-    source: string;
-    manual_id_columns: string[];        // @id columns with no @default — need explicit IDs in SQL
-  }>;
-  fixtures: Record<string, {
-    description: string;
-    runner: string | null;
-    source: string;
-  }>;
-  db_url_env: string | null;
-  feature_flags: string[];
-  seed_ids: Record<string, string[]>;   // modelName → array of known seed record IDs
-  json_type_annotations: Record<string, Record<string, string>>;  // model → { field → TypeName }
-  example_urls: Record<string, string>;  // parameterized route → concrete example URL
-  /** FK dependency graphs for entity creation — computed by index-app from information_schema. Optional: missing in old app.json files. */
-  entity_graphs?: Record<string, {
-    /** Tables in topological order (parents first) */
-    insert_order: string[];
-    /** Per-table metadata for SQL generation */
-    tables: Record<string, {
-      columns: Array<{
-        name: string;
-        pg_type: string;         // udt_name from information_schema
-        nullable: boolean;
-        has_default: boolean;
-      }>;
-      fk_parents: Array<{
-        column: string;          // FK column in this table
-        parent_table: string;    // referenced table
-        parent_column: string;   // referenced column
-        required: boolean;       // NOT NULL and no default
-      }>;
-    }>;
   }>;
 }
 
@@ -207,8 +101,6 @@ export const STAGE_PERMISSIONS: Record<string, Pick<RunClaudeOptions, "dangerous
   // ac-generator: no entry — content inlined in prompt, tools: [] set in orchestrator
   "executor":      { dangerouslySkipPermissions: true, tools: ["Bash", "Read"] },  // skip-permissions for browse binary + restrict tool set
   "index-agent":   { dangerouslySkipPermissions: true },    // needs Read, Grep, Glob for codebase indexing
-  "browse-agent":  { dangerouslySkipPermissions: true, tools: ["Bash", "Read"] },  // legacy — kept for run-stage debugging
-  "login-agent":   { dangerouslySkipPermissions: true, tools: ["Bash"] },           // Bash for browse CLI only
 };
 
 // ── Timeline event ──────────────────────────────────────────────────────────

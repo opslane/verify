@@ -1,0 +1,14 @@
+Find the dev server URL for this project. Check:
+
+1. package.json scripts — look for "dev", "start", "serve" commands. Extract port numbers from flags like `-p 3000`, `--port 5173`, or env refs like `PORT`.
+2. Framework configs — next.config.js/ts/mjs, vite.config.ts/js, nuxt.config.ts, angular.json. Look for port settings.
+3. .env / .env.local / .env.development — look for PORT= or similar.
+4. docker-compose.yml — look for port mappings like "3000:3000".
+
+Return ONLY a JSON object to stdout:
+
+{"port": 3000, "source": "package.json scripts.dev"}
+
+If you find multiple ports, pick the one from the "dev" script. If you can't determine the port, return:
+
+{"port": 3000, "source": "default"}

@@ -66,22 +66,16 @@ vi.mock("../src/run-claude.js", () => ({
 // ── Mock browse helpers ─────────────────────────────────────────────────────
 vi.mock("../src/lib/browse.js", () => ({
   resolveBrowseBin: vi.fn(() => "/mock/browse"),
-  resetPage: vi.fn(),
   startGroupDaemon: vi.fn((_groupId: string, runDir: string) => ({
     env: { BROWSE_STATE_FILE: `${runDir}/.browse/browse.json` },
     stateDir: `${runDir}/.browse`,
   })),
   stopGroupDaemon: vi.fn(),
-  stopAllGroupDaemons: vi.fn(),
-}));
-
-vi.mock("../src/lib/video.js", () => ({
-  findAndRenameVideo: vi.fn(() => null),
 }));
 
 vi.mock("../src/init.js", () => ({
   runPreflight: vi.fn(async () => ({ ok: true, errors: [] })),
-  loginOnDaemon: vi.fn(() => ({ ok: true })),
+  importCookiesToDaemon: vi.fn(() => ({ ok: true })),
 }));
 
 vi.mock("../src/lib/diff-hints.js", () => ({

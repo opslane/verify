@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { writeFileSync, createWriteStream, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { RunClaudeOptions, RunClaudeResult } from "./lib/types.js";
 import { appendTimelineEvent } from "./lib/timeline.js";
@@ -54,16 +54,13 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
 
     const pid = child.pid;
 
-    // Collect stdout and stderr via streams, streaming to disk incrementally
-    // so partial output is preserved even on timeout/kill
+    // Collect stdout and stderr in memory; final writeFileSync in close handler
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
     const stdoutPath = join(logsDir, `${stage}-output.txt`);
     const streamPath = join(logsDir, `${stage}-stream.jsonl`);
     const stderrPath = join(logsDir, `${stage}-stderr.txt`);
     const diagPath = join(logsDir, `${stage}-diag.txt`);
-    const streamFile = createWriteStream(streamPath);
-    const stderrStream = createWriteStream(stderrPath);
     const diagLines: string[] = [];
 
     const diag = (msg: string) => {
@@ -82,7 +79,6 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
 
     child.stdout.on("data", (chunk: Buffer) => {
       stdoutChunks.push(chunk);
-      streamFile.write(chunk);  // raw JSONL to {stage}-stream.jsonl
 
       // Parse events for progress reporting
       const lines = chunk.toString("utf-8").split("\n").filter(Boolean);
@@ -113,7 +109,6 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderrChunks.push(chunk);
-      stderrStream.write(chunk);
     });
 
     // Handle spawn errors (e.g., binary not found, permission denied)
@@ -205,9 +200,7 @@ export async function runClaude(opts: RunClaudeOptions): Promise<RunClaudeResult
         }
       }
 
-      // Close incremental streams, then write final files synchronously
-      streamFile.end();
-      stderrStream.end();
+      // Write final files synchronously — single authoritative write per file
       writeFileSync(stdoutPath, finalText);           // {stage}-output.txt = extracted final answer
       writeFileSync(streamPath, rawStream);            // {stage}-stream.jsonl = full event stream
       writeFileSync(stderrPath, stderrStr);

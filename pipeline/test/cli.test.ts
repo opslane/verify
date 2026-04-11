@@ -1,8 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 
 const CLI_PATH = join(__dirname, "..", "src", "cli.ts");
 
@@ -25,93 +23,12 @@ describe("cli", () => {
     const result = runCli([]);
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("run-stage");
-    expect(result.stderr).toContain("judge");
-    expect(result.stderr).toContain("learner");
+    expect(result.stderr).toContain("ac-generator");
   });
 
   it("errors when unknown stage given", () => {
     const result = runCli(["run-stage", "bogus", "--run-dir", "/tmp"]);
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("Unknown stage");
-  });
-
-  it("login-agent stage is accepted (not unknown)", () => {
-    const result = runCli(["run-stage", "login-agent",
-      "--verify-dir", "/tmp/nonexistent",
-      "--base-url", "http://localhost:3000",
-      "--email", "a@b.com",
-      "--password", "x",
-      "--browse-bin", "/nonexistent/browse",
-    ]);
-    // Should not error with "Unknown stage" — may fail for other reasons (no browse binary, etc.)
-    expect(result.stderr).not.toContain("Unknown stage: login-agent");
-  });
-
-  it("verify-login stage is accepted (not unknown)", () => {
-    const result = runCli(["run-stage", "verify-login",
-      "--verify-dir", "/tmp/nonexistent",
-    ]);
-    expect(result.stderr).not.toContain("Unknown stage: verify-login");
-  });
-
-  it("judge with empty evidence outputs empty verdicts", () => {
-    const runDir = join(tmpdir(), `verify-cli-${Date.now()}`);
-    mkdirSync(join(runDir, "logs"), { recursive: true });
-    const result = runCli(["run-stage", "judge", "--run-dir", runDir]);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('"verdicts":[]');
-    rmSync(runDir, { recursive: true, force: true });
-  });
-
-  it("browse-agent stage honors per-AC timeout_seconds", () => {
-    const rootDir = join(tmpdir(), `verify-cli-${Date.now()}`);
-    const verifyDir = join(rootDir, ".verify");
-    const runDir = join(rootDir, "run");
-    const claudeStubPath = join(rootDir, "claude-stub.js");
-
-    mkdirSync(join(runDir, "logs"), { recursive: true });
-    mkdirSync(verifyDir, { recursive: true });
-    writeFileSync(join(verifyDir, "config.json"), JSON.stringify({ baseUrl: "http://localhost:3000" }));
-    writeFileSync(join(runDir, "plan.json"), JSON.stringify({
-      criteria: [{
-        id: "ac1",
-        group: "group-a",
-        description: "Check timeout wiring",
-        url: "/settings",
-        steps: ["Go to /settings"],
-        screenshot_at: [],
-        timeout_seconds: 7,
-      }],
-    }));
-    writeFileSync(claudeStubPath, [
-      "#!/usr/bin/env node",
-      "process.stdin.resume();",
-      "process.stdin.on('data', () => {});",
-      "process.stdin.on('end', () => {",
-      "  process.stdout.write(JSON.stringify({ type: 'result', result: process.env.CLAUDE_STUB_RESULT ?? '' }) + '\\n');",
-      "});",
-    ].join("\n"));
-    chmodSync(claudeStubPath, 0o755);
-
-    const result = runCli([
-      "run-stage",
-      "browse-agent",
-      "--verify-dir",
-      verifyDir,
-      "--run-dir",
-      runDir,
-      "--ac",
-      "ac1",
-    ], {
-      CLAUDE_BIN: claudeStubPath,
-      CLAUDE_STUB_RESULT: JSON.stringify({ ac_id: "ac1", observed: "ok", screenshots: [], commands_run: [] }),
-      BROWSE_BIN: "/tmp/fake-browse",
-    });
-
-    expect(result.exitCode).toBe(0);
-    const diag = readFileSync(join(runDir, "logs", "browse-agent-ac1-diag.txt"), "utf-8");
-    expect(diag).toContain("timeout: 7000ms");
-
-    rmSync(rootDir, { recursive: true, force: true });
   });
 });
