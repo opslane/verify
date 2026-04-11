@@ -1,3 +1,0 @@
-A draft document with a recipient already exists in team 7. The condition is already met.
-
-{"group_id":"spike-3-doc","condition":"A draft document exists in team with url='personal_mwiasvikdmkwinfh' (teamId=7), with at least one recipient added. The logged-in user's email is ac1-test@test.documenso.com (userId=9). All queries MUST be scoped to this team.","setup_commands":[],"teardown_commands":[]}

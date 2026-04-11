@@ -2,14 +2,19 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AC } from "../lib/types.js";
+import type { AC, Verdict } from "../lib/types.js";
 import { parseJsonOutput } from "../lib/parse-json.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+const VALID_VERDICTS: Verdict[] = [
+  "pass", "fail", "blocked", "unclear", "error",
+  "timeout", "skipped", "auth_expired", "spec_unclear",
+];
+
 export interface ExecutorResult {
   ac_id: string;
-  verdict: "pass" | "fail" | "blocked" | "unclear";
+  verdict: Verdict;
   confidence: "high" | "medium" | "low";
   reasoning: string;
   observed: string;
@@ -21,7 +26,7 @@ export interface ExecutorResult {
 export function parseExecutorResult(raw: string): ExecutorResult | null {
   const parsed = parseJsonOutput<ExecutorResult>(raw);
   if (!parsed || typeof parsed.verdict !== "string") return null;
-  const validVerdicts = ["pass", "fail", "blocked", "unclear"];
+  const validVerdicts: string[] = VALID_VERDICTS;
   if (!validVerdicts.includes(parsed.verdict)) return null;
   if (!parsed.confidence) parsed.confidence = "medium";
   if (!parsed.reasoning) parsed.reasoning = "";

@@ -27,7 +27,19 @@ This automatically:
 3. Imports session cookies from your default Chromium browser
 4. Indexes your app's routes and selectors
 
-### 2. Verify setup worked
+### 2. Configure Playwright MCP
+
+If not already installed:
+
+```bash
+claude mcp add playwright -- npx @playwright/mcp@latest --storage-state .verify/auth.json --isolated
+```
+
+Restart Claude Code after adding the MCP server.
+
+**Note:** The `--storage-state` flag loads cookies exported by `init`. The `--isolated` flag ensures Playwright uses those cookies instead of its own profile.
+
+### 3. Verify setup worked
 
 ```bash
 cat .verify/config.json
@@ -36,10 +48,14 @@ cat .verify/app.json | head -20
 
 You should see your `baseUrl` in config and routes in `app.json`.
 
-### 3. Troubleshooting
+### 4. Troubleshooting
 
 **"Dev server not running"** — Start your dev server and re-run `npx @opslane/verify init`.
 
 **"Cookie import failed"** — Open your app in Chrome, log in, then re-run init.
 
 **Wrong port detected** — Override with: `npx @opslane/verify init --base-url http://localhost:YOUR_PORT`
+
+**Playwright MCP not found** — Run `claude mcp add playwright -- npx @playwright/mcp@latest --storage-state .verify/auth.json --isolated` and restart Claude Code.
+
+**Auth expired during /verify** — Re-run `npx @opslane/verify init` to re-import cookies from Chrome, then restart Claude Code.

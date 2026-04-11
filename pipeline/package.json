@@ -22,17 +22,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "eval:browse": "tsx src/evals/run-browse-evals.ts",
-    "eval:browse:dom": "tsx src/evals/run-browse-dom-evals.ts"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
     "vitest": "^3.0.0"
-  },
-  "dependencies": {
-    "postgres": "^3.4.8",
-    "zod": "^4.3.6"
   }
 }
