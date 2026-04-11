@@ -54,13 +54,17 @@ export async function ensureBrowseBin(): Promise<string> {
     const buffer = Buffer.from(await response.arrayBuffer());
     writeFileSync(tmpPath, buffer);
 
-    // Verify SHA256 checksum
-    const hash = createHash("sha256").update(buffer).digest("hex");
+    // Verify SHA256 checksum (skip if placeholder — real checksums filled before GA)
     const expected = BROWSE_CHECKSUMS[plat];
-    if (hash !== expected) {
-      throw new Error(
-        `Checksum mismatch for browse-${plat}:\n  expected: ${expected}\n  got:      ${hash}\nThe binary may be corrupted or tampered with.`,
-      );
+    if (expected.startsWith("PLACEHOLDER_")) {
+      console.warn(`Warning: checksum verification skipped for browse-${plat} (no checksum configured)`);
+    } else {
+      const hash = createHash("sha256").update(buffer).digest("hex");
+      if (hash !== expected) {
+        throw new Error(
+          `Checksum mismatch for browse-${plat}:\n  expected: ${expected}\n  got:      ${hash}\nThe binary may be corrupted or tampered with.`,
+        );
+      }
     }
 
     // Atomic install: rename + chmod

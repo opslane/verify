@@ -92,9 +92,10 @@ if (command === "run") {
   // Update .gitignore
   const gitignorePath = join(projectDir, ".gitignore");
   const patterns = [
-    ".verify/config.json", ".verify/evidence/", ".verify/prompts/",
-    ".verify/report.json", ".verify/browse.json", ".verify/report.html",
-    ".verify/progress.jsonl",
+    ".verify/config.json", ".verify/auth.json", ".verify/app.json",
+    ".verify/seed-data.txt", ".verify/runs/", ".verify/evidence/",
+    ".verify/prompts/", ".verify/report.json", ".verify/browse.json",
+    ".verify/report.html", ".verify/progress.jsonl",
   ];
   let gitignore = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
   for (const p of patterns) {
@@ -165,17 +166,49 @@ if (command === "run") {
   writeFileSync(configPath, JSON.stringify(config, null, 2));
   console.log(`✓ Config written: ${configPath}`);
 
-  // Step 3: Import cookies
+  // Step 3: Ensure browse binary is available (downloads on first run)
+  const { ensureBrowseBin } = await import("./lib/browse.js");
+  try {
+    await ensureBrowseBin();
+    console.log("✓ Browse binary ready");
+  } catch (err: unknown) {
+    console.error(`✗ Failed to install browse binary: ${err instanceof Error ? err.message : String(err)}`);
+    console.error("  Set BROWSE_BIN env var to use a custom binary.");
+    process.exit(1);
+  }
+
+  // Step 4: Import cookies
   console.log("Importing browser cookies...");
   const { importCookiesToDaemon } = await import("./init.js");
-  const cookieResult = importCookiesToDaemon(baseUrl);
+  // Purpose: (a) validate Chrome cookies are available, (b) export to auth.json for Playwright MCP
+  // Note: The orchestrator re-imports to per-run daemons; init's daemon state is not reused.
+  const cookieResult = importCookiesToDaemon(baseUrl, {}, { interactive: true });
   if (!cookieResult.ok) {
     console.error(`✗ ${cookieResult.error}`);
     process.exit(1);
   }
   console.log("✓ Cookies imported from browser");
 
-  // Step 4: Index routes + selectors
+  // Step 5: Validate auth works (warning only — app may be public)
+  const { validateCookieAuth, exportAuthState } = await import("./init.js");
+  const authResult = validateCookieAuth(baseUrl);
+  if (authResult.ok) {
+    console.log("✓ Auth validated — cookies grant access");
+  } else {
+    console.warn(`⚠ ${authResult.error}`);
+    console.warn("  Continuing — some verification may fail due to auth.");
+  }
+
+  // Step 6: Export cookies to .verify/auth.json for Playwright MCP
+  const authJsonPath = join(verifyDir, "auth.json");
+  const exportResult = exportAuthState(authJsonPath);
+  if (exportResult.ok) {
+    console.log(`✓ Auth state exported to ${authJsonPath}`);
+  } else {
+    console.warn(`⚠ ${exportResult.error}`);
+  }
+
+  // Step 7: Index routes + selectors
   console.log("Indexing app...");
   const { execFileSync } = await import("node:child_process");
   execFileSync(process.execPath, [

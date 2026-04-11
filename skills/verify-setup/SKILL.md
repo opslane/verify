@@ -24,8 +24,10 @@ npx @opslane/verify init
 This automatically:
 1. Creates `.verify/` directory and updates `.gitignore`
 2. Detects your dev server port from `package.json` and framework configs
-3. Imports session cookies from your default Chromium browser
-4. Indexes your app's routes and selectors
+3. Downloads the browse binary (first run only)
+4. Opens a cookie picker — select cookies from your Chromium browser to import
+5. Validates cookies authenticate you, exports to `.verify/auth.json`
+6. Indexes your app's routes and selectors
 
 ### 2. Configure Playwright MCP
 
