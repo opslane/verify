@@ -26,4 +26,5 @@ pipeline/spikes/
 .claude/projects/
 .tmp-merge-backup/
 docs/plans/
+progress.txt
 .omx/
