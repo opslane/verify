@@ -7,11 +7,11 @@ Also contains `server/` — a SaaS backend (Hono + TypeScript + Postgres) for Gi
 
 ### Pipeline
 ```
-/verify-setup → init (port detection + cookie import + 2 LLM agents → app.json)
-/verify → ac-generator → single-session executor → report
+/verify-setup → init (port detection + 2 LLM agents → app.json)
+/verify → spec interpreter → AC extractor → Playwright MCP verification → report
 ```
 Config lives in `.verify/config.json`. App index lives in `.verify/app.json`. Env vars always override config.
-`.verify/` is runtime output (gitignored) — config, plans, evidence, auth. `scripts/` is the legacy bash pipeline, being replaced by `pipeline/`.
+`.verify/` is runtime output (gitignored) — config, plans, evidence, auth.
 
 ### Server
 ```

@@ -22,13 +22,7 @@ describe("cli", () => {
   it("shows usage when no command given", () => {
     const result = runCli([]);
     expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain("run-stage");
-    expect(result.stderr).toContain("ac-generator");
-  });
-
-  it("errors when unknown stage given", () => {
-    const result = runCli(["run-stage", "bogus", "--run-dir", "/tmp"]);
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr).toContain("Unknown stage");
+    expect(result.stderr).toContain("init");
+    expect(result.stderr).toContain("index");
   });
 });

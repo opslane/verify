@@ -4,20 +4,6 @@ Deferred work captured from plan reviews. Each item includes enough context to p
 
 ---
 
-## P1 — Upstream: gstack browse stop hangs ~30s
-
-**What:** `browse stop` and `browse restart` hang for ~30 seconds when the daemon won't shut down cleanly, then time out. This causes orphaned daemon accumulation.
-
-**Why:** This is the root cause of the ETIMEDOUT errors in verify-login. The verify pipeline works around it by not calling stop/restart, but the underlying browse bug remains. Orphaned daemons accumulate over time and compete for the port.
-
-**Context:** Reproduced consistently: `time ~/.cache/verify/gstack/browse/dist/browse stop` → 31s, exit 1, "The operation timed out". This happens when multiple browse daemons are running (common when multiple Claude sessions use browse). The `startDaemon` function in `browse.ts` also calls `stop` and is affected. File upstream on gstack.
-
-**Depends on:** Nothing — this is an upstream gstack issue.
-
-**Effort:** XS human (file issue) → XS with CC+gstack
-
----
-
 ## P2 — Demo PR auto-close
 
 **What:** After a user's first real (non-demo) PR gets a successful review, automatically close the `opslane/demo` PR with a note.
@@ -130,20 +116,6 @@ Deferred work captured from plan reviews. Each item includes enough context to p
 
 ---
 
-## P2 — Conditional parallelism for independent ACs
-
-**What:** After v1 proves sequential execution works, add back optional parallel execution for ACs that don't share page state or navigation context.
-
-**Why:** 10+ ACs running sequentially at ~25s each = 4+ minutes. Parallel execution for independent ACs (e.g., checking text on different pages) could cut runtime to ~1-2 minutes. The current pipeline already has parallel execution infrastructure (per-group browse daemons).
-
-**Context:** The v1 pipeline runs all ACs sequentially in one browser session. To add parallelism: (1) classify ACs as "independent" (different pages, no shared state) vs "dependent" (same page, sequential interaction), (2) run independent groups in parallel with separate browse daemons, (3) run dependent ACs sequentially within each group. Reuse existing `startGroupDaemon`/`stopGroupDaemon` from `lib/browse.ts`.
-
-**Depends on:** v1 stability proven over 10+ real runs.
-
-**Effort:** M human → S with CC+gstack
-
----
-
 ## P3 — CI mode with GitHub comment reporting
 
 **What:** Add a `--ci` flag to the pipeline CLI that outputs JSON results and posts a GitHub PR comment with the verdict summary and evidence links.
@@ -174,27 +146,13 @@ Deferred work captured from plan reviews. Each item includes enough context to p
 
 ## P1 — Publish smoke test in CI
 
-**What:** Add a GH Actions job (in the publish workflow or as a separate PR check) that runs `npm pack`, installs the tarball in a temp dir, and runs `npx @opslane/verify --version` + `npx @opslane/verify run --help` to verify the package installs and boots correctly.
+**What:** Add a GH Actions job (in the publish workflow or as a separate PR check) that runs `npm pack`, installs the tarball in a temp dir, and runs `npx @opslane/verify --version` to verify the package installs and boots correctly.
 
 **Why:** `npm publish` can silently ship broken packages (missing `dist/`, wrong `bin` path, missing prompt templates). A 30-second smoke test catches all of these before publish.
 
 **Context:** Run as a prerequisite step before `npm publish` in the GH Actions workflow. Uses `npm pack` → `npm install -g ./opslane-verify-*.tgz` → verify CLI entry point works. Also catches the prompt template copy issue (postbuild step must run).
 
 **Depends on:** Automated npm publish workflow.
-
-**Effort:** XS human → XS with CC+gstack
-
----
-
-## P2 — Platform support docs in package README
-
-**What:** Add a "Supported Platforms" section to the package README listing macOS (arm64, x64) and Linux (x64), with a note that Windows is unsupported due to browse binary availability.
-
-**Why:** Users on unsupported platforms get a confusing error from the browse auto-downloader. Clear docs set expectations upfront.
-
-**Context:** The browse binary is only built for macOS and Linux. The auto-download function in `browse.ts` will throw "Unsupported platform" on Windows. README should explain this and point to `BROWSE_BIN` env var override as an escape hatch.
-
-**Depends on:** Standalone CLI shipping first.
 
 **Effort:** XS human → XS with CC+gstack
 

@@ -2,27 +2,17 @@
 
 A verification layer for Claude Code. Reads your spec, runs a browser agent against your local dev server for each acceptance criterion, and returns pass/fail with screenshots — before you push. No CI. No infrastructure.
 
-```mermaid
-graph LR
-    A[spec] --> B[AC extractor]
-    B --> C[single-session executor]
-    C --> D[report]
-```
-
-![Verify Report](docs/report-screenshot.png)
-
 ## Install
 
 ### Prerequisites
 
 - Node 22+
 - Claude Code with OAuth login (`claude login`)
+- Playwright MCP configured (see below)
 
 ```bash
 npx @opslane/verify --version
 ```
-
-The browse binary is auto-downloaded on first run.
 
 **Manual (contributors):**
 ```bash
@@ -34,39 +24,41 @@ cd verify/pipeline && npm install
 
 ## Usage
 
-### Standalone CLI
-
-```bash
-# One-time setup (auto-detects dev server, imports browser cookies, indexes app)
-npx @opslane/verify init
-
-# Run verification against a spec
-npx @opslane/verify run --spec .verify/spec.md
-
-# Re-index the app after schema/route changes
-npx @opslane/verify index --project-dir .
-```
-
 ### Claude Code Skills
 
 ```bash
-# One-time setup — auto-detects dev server, imports cookies, indexes app
+# One-time setup — auto-detects dev server, indexes app
 /verify-setup
 
 # Run verification against a spec
 /verify
 ```
 
-`/verify` asks for your spec, reviews it for ambiguities, then runs the pipeline. Results appear inline with a link to the full HTML report.
+`/verify` asks for your spec, reviews it for ambiguities, then verifies each acceptance criterion using Playwright MCP. Results appear inline with screenshots.
+
+### CLI (setup only)
+
+```bash
+# One-time setup (auto-detects dev server, indexes app)
+npx @opslane/verify init
+
+# Re-index the app after schema/route changes
+npx @opslane/verify index --project-dir .
+```
+
+### Playwright MCP Setup
+
+```bash
+claude mcp add playwright -- npx @playwright/mcp@latest --storage-state .verify/auth.json --isolated
+```
+
+Restart Claude Code after adding the MCP server.
 
 ## Debugging failures
 
 After a run, evidence lives in `.verify/runs/<run_id>/`:
 
 ```bash
-# Open the HTML report (screenshots, verdicts, and steps in one page)
-open .verify/runs/*/report.html
-
 # Browse raw evidence for a specific AC
 ls .verify/runs/*/evidence/<ac_id>/
 ```
@@ -77,19 +69,12 @@ Each AC's evidence directory contains:
 
 ## Architecture
 
-The pipeline runs two stages, then generates a report:
+`/verify` runs as a Claude Code skill using Playwright MCP for browser interaction:
 
-**1. AC Extractor** — an LLM call (no tools) that parses the spec into grouped acceptance criteria. Groups share a precondition (e.g., "logged in as admin"). Pure UI checks get their own group with no setup.
-
-**2. Single-Session Executor** — one browser session runs all ACs in sequence. A supervisor enforces a per-AC command budget. If the executor exceeds its budget or abandons an AC, the supervisor writes a "blocked" verdict automatically.
-
-There is no separate judge stage — the executor writes `result.json` directly for each AC, and the orchestrator collects them into `verdicts.json` and generates an HTML report.
-
-### Why single-session?
-
-- Login happens once, cookies persist across all ACs
-- No cold-start overhead per criterion
-- Supervisor can enforce budgets without executor cooperation
+1. **Spec Interpreter** — reviews acceptance criteria for ambiguities, asks clarifying questions
+2. **AC Extractor** — parses the spec into concrete, testable acceptance criteria using seed data and known routes
+3. **Browser Verification** — navigates the app via Playwright MCP, checks each AC, collects screenshots
+4. **Report** — writes per-AC `result.json` and a combined `verdicts.json`
 
 ### Dev setup
 
