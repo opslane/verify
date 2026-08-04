@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-08-04
+
+### Fixed
+- Two examples in the skill taught the phrasing the skill forbids. One asked "needs a
+  production job to fail" while the very next line said to force the failure on the local
+  stack; the other carried the same wording under a GOOD label. A model reading either
+  copies the header, not the correction. Both now name the setup instead of an
+  environment, and "needs a production job" appears only as a BAD example.
+
 ## [2.3.0] - 2026-08-04
 
 ### Changed

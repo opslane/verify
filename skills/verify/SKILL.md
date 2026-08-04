@@ -261,12 +261,16 @@ a fixture built, or a service stood up that nothing else in the run needs.
 them choose:
 
 ```
-AC5 needs a production job to fail with a key in its error text before the admin
-    endpoint will show anything. Roughly 15 minutes: force a job failure on the local
-    stack, then read it back through the admin surface.
+AC5 needs a job that fails with a key in its error text before the admin endpoint
+    shows anything. Roughly 15 minutes on the local stack: seed a job, force it to
+    fail with a key in the message, then read it back through the admin surface.
 
     Drive it, or record it as not checked?
 ```
+
+Note what that does not say. It does not say "needs production". The cost is the
+fifteen minutes of setup, and naming the setup is what lets the user judge it. Naming an
+environment instead hides the real reason and sounds like a wall.
 
 Ask before half two finishes, while the stack is still up and the answer is still cheap
 to act on. If the user declines, the `Not checked` reason is what it would have taken,
@@ -307,11 +311,14 @@ If you also believe something else covers it, that claim has to be checkable by 
 who was not present. Name it, and state plainly that this run did not re-run it:
 
 ```
-GOOD  not driven: needs a production job to fail with a key in its error text.
+GOOD  not driven: the user declined the 15 minutes of fixture setup it needed.
       A test exists: TestRedactAdminErrorSwallowsEndpointBearingProjectKey
       (Go handler suite). This run did not execute it.
 
 BAD   covered by unit canaries
+
+BAD   needs a production job to fail with a key in its error text
+      (an environment standing in for setup work; see the section above)
 ```
 
 Never write that something is covered by tests you did not run without naming them. An
