@@ -276,6 +276,28 @@ If several criteria are expensive, list them together with their costs and let t
 pick which ones are worth it. Say which one you would drive if they only pick one, and
 why — usually the one whose failure would be worst.
 
+### Assume it can be reproduced locally
+
+Before writing that a criterion needs production, staging, a live service, or "a real
+failure", ask what actually stops you from causing that locally. Usually nothing does.
+
+A job that fails with a key in its error text is a job you can make fail. A worker run is
+a worker you can start. A queue message is a message you can publish. The stack is already
+up, because half two brought it up.
+
+Only these are real blockers, and each has to be named specifically:
+
+- A credential or identity only a human can obtain (a real OAuth grant, an SSO login).
+- A third-party service you do not control and cannot fake at the boundary that matters.
+- An action that is irreversible or visible to others: a real publish, a real payment, a
+  message into a channel people read.
+- Something that genuinely cannot be induced in this environment, where you say why.
+
+"Needs production" is almost never one of these. If the reason you wrote names an
+environment, replace it with the specific thing that environment has and yours does not.
+If you cannot name that thing, the blocker is effort, and effort is the user's decision
+(see above).
+
 ### Citing coverage you did not observe
 
 A `Not checked` reason explains why the criterion was not driven here. That is all it is
