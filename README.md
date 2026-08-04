@@ -1,146 +1,105 @@
-# Opslane
+# Opslane Verify
 
-Opslane is self-serve QA for your PR. You paste the ticket; Verify drives a real browser against your local dev server, checks each acceptance criterion, and reports pass/fail with screenshots — inline in Claude Code, before you push.
+Verification for Claude Code. You point it at the plan for your change. It turns that into acceptance criteria, shows them to you before running anything, then drives your real system to check each one and keeps the evidence.
+
+It works on whatever surface the change touches: an HTTP API, a database, a CLI, a queue or webhook, or a web UI in a real browser.
 
 ## How it works
 
-When you finish a feature and run `/verify`, it doesn't just lint the code. It reads the ticket, extracts the concrete acceptance criteria, and asks you about anything ambiguous. Then it drives the actual app via Playwright MCP — clicking, typing, navigating like a person would — and checks each AC against what it sees. You get a per-AC verdict with screenshots, and a Playwright video + trace on anything that didn't pass.
+Two halves, with a stop in between.
 
-This is the sanity pass you'd otherwise do manually with the PM ticket open in one tab and your dev server in another. It runs locally, against your real app, with no test code to write and no CI to wire up.
-
-## Demo
-
-[Demo](https://youtu.be/Pq21t894udM)
-
-![Verify report screenshot](docs/report-screenshot.png)
-
-## Installation
-
-**Prerequisites:** Claude Code with OAuth login (`claude login`).
-
-In Claude Code, register the marketplace first:
-
-```bash
-/plugin marketplace add opslane/verify
-```
-
-Then install the plugin:
-
-```bash
-/plugin install opslane-verify@opslane-verify-marketplace
-```
-
-That's it. The plugin registers two slash commands — `/verify-setup` and `/verify` — and wires up the Playwright MCP server automatically. No separate `claude mcp add` step.
-
-## Setup: `/verify-setup`
-
-Run this **once per repo** from your repo root, with your dev server running:
+**Half one writes the criteria and stops.** It finds the plan for your change, turns it into concrete checks, and prints them for you to correct. Every criterion says where it came from — a line in the plan, an inference from the diff, or an assumption it made and is telling you about:
 
 ```
-/verify-setup
+AC1  an SDK ingest key can no longer read incidents
+     Do        curl -H 'X-API-KEY: <key>' /api/v1/projects/<id>/incidents
+     Expect    HTTP 401
+     From      Stage 1 QA gate, item 1
+
+AC4  opslane errors list still works for a logged-in human
+     From      INVENTED. Plan item 4 says "per whichever option Task 1.2 chose"
+               and does not say which. I assumed session login.
 ```
 
-It does the following inline (no `npm install`, no CLI binary):
+Nothing runs until you say go.
 
-1. **Scaffolds `.verify/`** in your repo and adds it to `.gitignore` if missing.
-2. **Detects your dev server port** by reading `package.json` scripts (`dev`/`start`/`serve` flags), then `.env*` files, then framework configs (`vite.config.*`, `next.config.*`). Falls back to `3000` and tells you. If it picks the wrong one, you can correct it (e.g. "my dev server runs on 5173").
-3. **Pings the dev server** at the detected port. If it can't reach it, it stops here and tells you to start the server first.
-4. **Writes `.verify/config.json`** with the resolved `baseUrl`.
-5. **Indexes your routes.** Walks your codebase looking for user-facing pages — works for Next.js (`app/`, `pages/`), Remix (`routes/`), React Router (`<Route>` / `createBrowserRouter`), SvelteKit (`routes/`), Nuxt (`pages/`), and Express/Hono/Fastify route definitions. Skips `/api/*`. Handles monorepos.
-6. **Indexes your selectors** by reading any existing Playwright (`*.spec.ts`) or Cypress (`*.cy.ts`) tests and extracting the URLs they navigate to and the selectors they use. Prefers `data-testid` and role-based selectors.
-7. **Writes `.verify/app.json`** — a single JSON map of routes + per-page selectors that `/verify` reads later for grounded AC extraction.
-8. **Confirms Playwright MCP is registered** and prints a setup summary.
-
-Re-run `/verify-setup` any time your routes change or you've added new tests — the index gets refreshed.
-
-## Running: `/verify`
-
-Once setup is done, verify any change with:
+**Half two runs them and reports.** It drives the real system with real tools, records the run, and reports on four separate axes:
 
 ```
-/verify                          # auto-discovers a likely spec file
-/verify path/to/spec.md          # or point it at a specific spec
+AC1  ✔  HTTP 401 at the HTTP layer, no tool dispatched
+AC2  ✔  good Bearer + stale X-API-KEY authorized; bad Bearer + good key denied
+AC3  ~  could not run, staging rejected the create
+
+Behaviour  2 passed, 0 failed
+Ran        3 criteria, 1 could not run
+Covered    3 criteria, 2 changed files have none
+
+Not checked
+  the OAuth grant flow    needs a real identity; only the reject path ran
+  vue3 settings UI        16 changed files, needs a logged-in session
 ```
 
-Here's what happens, turn by turn:
+Those axes are separate on purpose. "Your code is wrong", "the database container died", and "we never looked at half the branch" are three different answers, and one word cannot carry all three.
 
-1. **Spec intake.** If you didn't pass a path, it greps your repo for files matching `*spec*`, `*plan*`, `*requirements*`, `*acceptance*` and either suggests one or asks you to pick. You can also paste the ticket inline.
-2. **Pre-flight.** Confirms Playwright MCP is responding and your dev server is up. Then navigates to the app and checks whether you're logged in. If not, it tries a `credentials` field in `.verify/config.json` (path must live under `.verify/`), then asks you to paste creds inline. Logs you in via the browser; the session persists in `.verify/auth.json` for next time.
-3. **Spec interpretation.** Reads each AC and flags anything ambiguous — vague reveal actions ("shown" without saying how), missing preconditions, unclear targets, no clear pass/fail. Asks one clarifying question at a time. If nothing is ambiguous, it skips this turn.
-4. **AC extraction.** Pulls concrete, testable ACs grounded in your `.verify/app.json` routes and any seed data you've stashed in `.verify/seed-data.txt`. Splits multi-behavior ACs apart. Skips ACs that need external services (Stripe, email, OAuth).
-5. **Browser verification.** For each AC: navigate → start video + trace recording → snapshot the page → interact (click, type, hover, wait) → screenshot → judge the verdict (`pass`, `fail`, `blocked`, `unclear`, `error`, `timeout`, `auth_expired`, `spec_unclear`) → write `result.json`. Recordings get **deleted on pass** (no clutter) and **kept on every non-pass verdict** (so you can replay exactly what happened).
-6. **Report.** Writes `verdicts.json` (machine-readable) + `report.html` (single-file, embeds verdict cards, screenshots, and inline video) to `.verify/runs/<run_id>/`, and prints an inline pass/fail summary in Claude Code with `npx playwright show-trace` commands for any failures.
+`Not checked` is always printed, even when empty. A tool that quietly omits what it skipped is worse than one that finds nothing.
 
-Hard limits keep runs tight: ~12 Playwright commands per AC, bail after 3 nav attempts, one retry per failed command, no source-code reads, no data mutation.
+## What it will not do
 
-## Example
+It never fixes the code it is judging. A tool that repairs its own failures grades its own work.
 
-You paste a ticket like this:
+It never invents acceptance criteria from the diff alone. Criteria come from a plan, because a check derived from the diff confirms the implementation against itself. If it cannot find a plan, it asks for one.
 
-> **As a user, I want to save a draft of my document.**
->
-> Acceptance criteria:
-> 1. The "Save Draft" button appears on the document edit page
-> 2. Clicking it persists the document state without publishing
-> 3. A confirmation toast appears with text "Draft saved"
+It never claims a pass it did not observe.
 
-Verify drives the browser through each AC and produces a verdict for every one:
+## Install
 
-```json
-{
-  "ac_1": { "verdict": "pass", "confidence": "high", "reasoning": "Save Draft button visible on /docs/edit", "screenshots": ["save_draft_button.png"] },
-  "ac_2": { "verdict": "pass", "confidence": "high", "reasoning": "Draft persisted; reload shows the saved state", "screenshots": ["draft_persisted.png"] },
-  "ac_3": { "verdict": "fail", "confidence": "high", "reasoning": "Toast text was 'Saved' not 'Draft saved'", "screenshots": ["toast_mismatch.png"] }
-}
+Requires Claude Code with `claude login`.
+
+```
+/plugin marketplace add opslane/opslane
+/plugin install opslane-verify
 ```
 
-You see the failing AC inline with the screenshot — before you push.
+The plugin registers the `/verify` command and a Playwright MCP server for browser criteria. On first run it installs the engine's dependencies inside the plugin directory, pinned to a lockfile.
 
-## Debugging failures
+Optional, for terminal recordings: `brew install asciinema agg`. Without them the run still completes and records the absence.
 
-After a run, evidence lives in `.verify/runs/<run_id>/`:
+## Use
 
-```bash
-# Open the HTML report in a browser
-open .verify/runs/*/report.html
+From your repo, on a branch with a change and a plan:
 
-# Or browse raw evidence for a specific AC
-ls .verify/runs/*/evidence/<ac_id>/
+```
+/verify
 ```
 
-Each AC's evidence directory contains:
-- `result.json` — verdict, confidence, reasoning, steps taken, screenshot filenames
-- `*.png` — screenshots captured during execution
-- On non-pass verdicts: `{run_id}-{ac_id}.webm` (video) + `trace.zip` (Playwright trace) — replay the run with `npx playwright show-trace .verify/runs/<run_id>/evidence/<ac_id>/trace.zip`
+It prints the criteria and stops. Correct anything wrong, then say `go`.
 
-## Why this exists
+Artifacts land in `.verify/runs/<timestamp>/`:
 
-Built this because I kept shipping PRs that passed my eyeball check but failed the PM's check. Verify is the sanity pass I always did manually, automated against a real browser — not a mock, not a unit test, the actual app.
+```
+criteria.md      what you approved
+report.md        results per criterion, four axes, what was not checked
+run.cast         asciinema recording of the real commands
+run.gif
+run.sh           re-runnable by hand
+```
 
-## Recently shipped
+## Surfaces
 
-See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
+**API** — calls the real route, authenticates through the public path, and checks the side effect rather than the status code alone.
 
-**Latest (v1.1.0 — 2026-04-23):**
-- Per-AC video + trace evidence on non-pass verdicts
-- Inline `/verify-setup` skill (no CLI binary)
-- Playwright MCP-based `/verify` (one-command install via `/plugin install`)
+**Datastore** — diffs affected rows before and after. For migrations it tests the direction actually claimed rather than assuming reversibility.
 
-## FAQ
+**CLI** — runs the real binary, checking the exit code separately from the output shape.
 
-**How is this different from Playwright alone?**
-Playwright is a browser library — you still write tests, run them, maintain them. Verify takes a PM ticket and executes intent-level checks via Claude + Playwright MCP. No test code to write, no selectors to maintain, no CI to wire up.
+**Async** — fires the trigger and waits on the effect with a deadline and a correlation id. A local sink proves the app emitted; it does not prove public delivery, and the report says which one it proved.
 
-**What about auth?**
-The plugin launches Playwright with `--storage-state .verify/auth.json --isolated`. On first `/verify` run, the skill walks you through logging in once and re-uses the session for every subsequent run.
+**UI** — drives a real browser through Playwright, interacts the way the criterion describes, and screenshots at the moment of observation. Fetching HTML with `curl` is not a UI check.
 
-**What about flaky selectors?**
-The browser agent navigates by intent (clicks "the submit button" via the accessibility tree), not brittle CSS selectors. If something does break, `.verify/runs/<run_id>/evidence/<ac_id>/` has the video + trace so you can see exactly what happened.
+## Requirements
 
-## Dev setup
-
-See [CLAUDE.md](./CLAUDE.md) for dev commands, conventions, and test instructions.
+A plan describing the change: `docs/plans/`, `.omx/plans/`, a PR body, or the conversation. Whatever the change needs in order to actually run, which usually means your normal local stack. Nothing else.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT

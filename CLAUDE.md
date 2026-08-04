@@ -1,19 +1,42 @@
 ## Project
-opslane/verify — automated acceptance criteria verification for Claude Code changes. Runs browser agents against a spec, judges pass/fail, and reports results before you push.
+opslane-verify — a Claude Code plugin that verifies a change works. It turns the change's
+plan into acceptance criteria, stops for approval, then drives the real system and reports
+what it observed.
 
 ## Architecture
 ```
-/verify-setup → Claude reads project files → .verify/config.json + app.json
-/verify → spec interpreter → AC extractor → Playwright MCP verification → report
+skills/verify/SKILL.md   the workflow. Claude is the control loop.
+pipeline/                the engine. Three CLI verbs over three pure modules.
 ```
-Config lives in `.verify/config.json`. App index lives in `.verify/app.json`. Env vars always override config.
-`.verify/` is runtime output (gitignored) — config, plans, evidence, auth.
+
+The skill decides what to check and judges the result. The engine only does plumbing that
+would be silly to do in markdown:
+
+- `criteria`      renders the approval artifact from JSON
+- `report`        renders the four-axis report from JSON
+- `changed-files` lists behaviour-bearing changed files, and coverage gaps given claims
+
+Run artifacts land in the target repository under `.verify/runs/<id>/` and are gitignored
+there. The engine holds no state.
+
+## Boundaries
+The skill never fixes what it judges. It never derives acceptance criteria from the diff
+alone. It never reads source to decide pass or fail — a criterion that cannot be checked
+without reading code is the wrong criterion.
 
 ## Skill sync
-The skills in `skills/` are the source of truth. A `PostToolUse` hook (`.claude/hooks/sync-skill.sh`) automatically copies them to `~/.claude/skills/` after every Write or Edit. Never edit `~/.claude/skills/verify/SKILL.md` directly — edit the project copy instead.
+`skills/` is the source of truth. A `PostToolUse` hook (`.claude/hooks/sync-skill.sh`)
+copies the skill to `~/.claude/skills/` after every Write or Edit. Never edit the copy
+under `~/.claude/` directly.
 
-## Module-specific instructions
-- For server work, see `server/CLAUDE.md`
+Note: an installed plugin resolves the engine through `CLAUDE_PLUGIN_ROOT`. Set
+`VERIFY_PIPELINE` only when running from a development checkout.
 
-## References
-- Design docs and implementation plans: `docs/plans/`
+## Engine work
+```
+cd pipeline && npm ci
+npm test          # vitest
+npm run typecheck # tsc --noEmit, expected clean
+```
+The three lib modules are pure functions over plain data. Keep them that way: everything
+that touches the filesystem, git, or the network lives in `cli.ts`.

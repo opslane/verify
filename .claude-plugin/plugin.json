@@ -1,7 +1,7 @@
 {
   "name": "opslane-verify",
-  "description": "Self-serve QA for your PR — browser-based verification of ticket requirements before you push.",
-  "version": "1.1.0",
+  "description": "Verify a change works by driving the real system the way a user does. Approved acceptance criteria, a recorded run, and a four-axis report.",
+  "version": "2.0.0",
   "author": {
     "name": "opslane",
     "url": "https://github.com/opslane"
@@ -9,12 +9,21 @@
   "homepage": "https://github.com/opslane/verify",
   "repository": "https://github.com/opslane/verify",
   "license": "MIT",
-  "mcp_servers": {
+  "keywords": [
+    "verify",
+    "acceptance-criteria",
+    "evidence",
+    "integration-testing",
+    "qa"
+  ],
+  "mcpServers": {
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp@next", "--storage-state", ".verify/auth.json", "--isolated", "--caps=devtools", "--output-dir", ".verify/mcp-output"],
-      "description": "Browser automation for verification"
+      "args": [
+        "@playwright/mcp@latest",
+        "--isolated"
+      ],
+      "description": "Drives a real browser for UI acceptance criteria"
     }
-  },
-  "keywords": ["verify", "playwright", "frontend", "acceptance-criteria", "qa"]
+  }
 }

@@ -11,9 +11,4 @@ case "$FILE_PATH" in
     cp "$FILE_PATH" ~/.claude/skills/verify/SKILL.md
     echo "synced skills/verify/SKILL.md → ~/.claude/skills/verify/SKILL.md" >&2
     ;;
-  *skills/verify-setup/SKILL.md)
-    mkdir -p ~/.claude/skills/verify-setup
-    cp "$FILE_PATH" ~/.claude/skills/verify-setup/SKILL.md
-    echo "synced skills/verify-setup/SKILL.md → ~/.claude/skills/verify-setup/SKILL.md" >&2
-    ;;
 esac
