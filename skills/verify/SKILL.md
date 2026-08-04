@@ -1,515 +1,293 @@
 ---
 name: verify
-description: Verify frontend changes against spec acceptance criteria. Uses Playwright MCP for browser interaction.
+description: Verify any change surface against approved acceptance criteria, run the real system, and preserve a four-axis report and test artifacts.
 ---
 
 # /verify
 
-Verify your frontend changes before pushing.
+Verify that a change does what its plan said. Report what you observe and keep the receipts. Never fix the code being judged.
 
-## Prerequisites
-- Dev server running (e.g. `npm run dev`)
-- Playwright MCP configured in Claude Code (see install section below)
-- Auth set up if app requires login (`/verify-setup`)
+This workflow has exactly two halves. Half one creates acceptance criteria and stops for approval. Half two runs only after the user approves those criteria by saying `go` or an equally explicit instruction.
 
-## Playwright MCP Install
+## Hard rules
 
-If Playwright MCP is not available, show this:
+- Never fix what you judge. Report only.
+- Mutation is allowed. Writing to shared or staging systems needs the user to say yes first.
+- Provisioning anything that costs money needs the user to say yes first.
+- `Not checked` is always printed, even when empty.
+- Drive the system the way a user does. This workflow does not read or run the repository's unit tests.
+- Never invent acceptance criteria from the diff alone. The diff can refine or expose gaps in criteria sourced from a plan.
+- Generated tests stay under the run's `tests/` directory until the user explicitly chooses to check them in.
+- Make one observation per approved criterion. Do not collapse a harness failure into a behavior failure.
 
-> /verify requires Playwright MCP for browser interaction.
->
-> **Install:**
-> ```
-> claude mcp add playwright -- npx @playwright/mcp@next --storage-state .verify/auth.json --isolated --caps=devtools --output-dir .verify/mcp-output
-> ```
->
-> `@next` is required — video + trace tools ship only in the alpha. `--caps=devtools` exposes them; `--output-dir` pins a known drop zone.
-> Restart Claude Code, then re-run `/verify`.
+## Engine calls
 
-## Conversation Flow
+The engine is a local TypeScript package with no installed `verify` binary. Every invocation must be self-contained because shell variables and working directories do not survive between tool calls.
 
-This skill is turn-based. Each turn has a trigger and a bounded set of actions. **Never skip ahead.**
-
----
-
-## Turn 1: Spec Intake
-
-**Trigger:** User invokes `/verify`.
-
-**Check for arguments first.** If the user passed a file path as an argument (e.g. `/verify path/to/spec.md`), skip this turn entirely — go straight to Turn 2 using that path.
-
-**Otherwise**, try smart spec discovery first:
+Use this exact resolution rule at every call site, replacing the verb and arguments as needed:
 
 ```bash
-find . -maxdepth 3 -name "*.md" \( -name "*spec*" -o -name "*plan*" -o -name "*requirements*" -o -name "*acceptance*" \) -not -path "./.verify/*" -not -path "./node_modules/*" -not -path "./.git/*" 2>/dev/null | head -5
+VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts <verb> [arguments])
 ```
 
-- If **exactly 1 file** found: suggest it. "Found a likely spec: `path/to/spec.md`. Use this? (y/n)"
-- If **multiple files** found: show the list and ask the user to pick one.
-- If **no files** found: "What spec are you verifying? Paste the spec content or give a file path."
+`CLAUDE_PLUGIN_ROOT` is set by Claude Code for an installed plugin. Set `VERIFY_PIPELINE`
+yourself only when running from a development checkout. Never hardcode a path to someone's
+home directory; if neither variable resolves, stop and say so rather than guessing.
 
-Do not call any other tools. End your response and wait.
-
----
-
-## Turn 2: Pre-flight + MCP Check
-
-**Trigger:** User has provided a spec (pasted content, file path, or confirmed a discovered file).
-
-1. If they gave a **file path** — read the file with the Read tool.
-2. If they **pasted content** — `mkdir -p .verify` then write to `.verify/spec.md`.
-
-**MCP preflight:** Check if Playwright MCP is available:
-
-```
-Use ListMcpResourcesTool with server="playwright"
-```
-
-- If the server exists → Playwright MCP is available, proceed.
-- If "Server not found" → show the install instructions from the Prerequisites section. Stop.
-- If MCP is configured but non-responsive (e.g. connection error), show: "Playwright MCP is configured but not responding. Try restarting Claude Code."
-
-**Dev server check:**
+**Once per machine, install the engine's dependencies.** The plugin ships TypeScript source
+and no `node_modules`, so the first call fails without this. It is a lockfile-pinned install
+inside the plugin's own directory, it touches nothing in the target repository, and it is
+safe to re-run:
 
 ```bash
-BASE_URL=$(cat .verify/config.json 2>/dev/null | grep -o '"baseUrl"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o 'http[^"]*' || echo "http://localhost:3000")
-curl -sf "$BASE_URL" > /dev/null 2>&1 || { echo "Dev server not running at $BASE_URL"; exit 1; }
+VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
+if [ ! -x "$VERIFY_PIPELINE/node_modules/.bin/tsx" ]; then
+  (cd "$VERIFY_PIPELINE" && npm ci)
+fi
 ```
 
-**Auth check:** Navigate to the app and check if you're logged in:
+Run that before the first engine call of a session. Do not fall back to plain `npx`, which
+would fetch an unpinned package from the network.
 
-```
-Use mcp__playwright__browser_navigate to go to $BASE_URL
-Use mcp__playwright__browser_snapshot to read the page
-```
+**Optional recorders.** `asciinema` and `agg` produce `run.cast` and `run.gif`. Neither is
+required: when either is missing, run the verification anyway and record the absence under
+`Not checked`. On a fresh box: `brew install asciinema agg`, or the equivalent for the
+platform.
 
-If the page shows a login/signup form instead of authenticated content, try these sources in order:
+The skill runs in the target repository, not the plugin repository. Resolve every target-repository path with `pwd -P` and pass absolute paths for `--repo`, `--dir`, `--criteria`, `--results`, and `--claims`.
 
-**1. Credentials file referenced from `.verify/config.json`.** Check for a `credentials` field:
+## Half one: criteria, then stop
+
+### 1. Find the plan
+
+Look in this order:
+
+1. The current conversation, including an explicit path supplied with `/verify`.
+2. `docs/plans/`.
+3. `.omx/plans/`.
+4. The current pull request body, when available.
+
+Use the newest plan that clearly describes the current change. If no plan is available, ask the user for one and stop. Do not derive criteria from the diff alone.
+
+If an earlier run on the current branch has a `criteria.md`, show its path and offer to start from it. Stop for the user's choice before replacing or reusing it.
+
+### 2. Create the run
+
+Ensure `.verify/` is ignored by the target repository. Add `.verify/` to its `.gitignore` when missing.
+
+Create the run and persist its identity in one tool call:
 
 ```bash
-python3 -c "import json; c=json.load(open('.verify/config.json')); print(c.get('credentials',''))" 2>/dev/null
+TARGET_REPO="$(pwd -P)"
+RUN_ID="$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$TARGET_REPO/.verify/runs/$RUN_ID/tests"
+printf '%s\n' "$RUN_ID" > "$TARGET_REPO/.verify/current-run"
 ```
 
-If the printed path is non-empty AND starts with `.verify/` (the skill's allowed file zone — reject anything outside), use the **Read tool** to read the file directly. Parse the email and password in-head — never echo them to the shell or print them to stdout.
+The empty `tests/` directory is intentional and must exist even when no test is generated.
 
-Supported formats:
-- **key=value** (one per line):
-  ```
-  email=user@example.com
-  password=secret
-  ```
-- **JSON**: `{"email": "user@example.com", "password": "secret"}`
+### 3. List changed behavior files
 
-Then log in via Playwright:
-- `mcp__playwright__browser_type` into the email textbox (use the `ref` from the snapshot) — pass the email as the `text` argument
-- `mcp__playwright__browser_type` into the password textbox — pass the password as the `text` argument
-- `mcp__playwright__browser_click` on the submit button (usually labeled "Sign In", "Log in", or equivalent)
-- `mcp__playwright__browser_snapshot` — confirm the page URL no longer matches `/signin`/`/login`/`/auth`
+Choose the branch's merge base. Prefer the PR base or upstream merge base; do not guess a different branch when repository metadata supplies one.
 
-Tell the user briefly: "Logged in using credentials from `{CREDS_FILE}`." Never include the email or password in any output, result.json, or report.
-
-**2. User-provided credentials in chat.** If no `credentials` field is set (or the file is missing / unreadable), fall back to asking:
-
-> "You're not logged in. Either add a `credentials` field to `.verify/config.json` pointing at a file under `.verify/`, or paste an email/password here and I'll log in via the browser."
-
-If the user pastes creds, use the same Playwright type+click sequence to log in, then snapshot to confirm.
-
-**3. Neither worked.** Write verdict `auth_expired` for each AC and stop — tell the user to set up credentials and retry.
-
-Proceed to Turn 3.
-
----
-
-## Turn 3: Spec Interpreter
-
-**Trigger:** Pre-flight passed.
-
-Review the spec inline. For each AC, check:
-
-1. **Reveal action** — does it say "shown/displayed/visible" without saying how? → flag
-2. **Preconditions** — requires specific data to exist? → flag
-3. **Target** — UI element identifiable by label or text? If too vague → flag
-4. **Success** — clear pass/fail? If not → flag
-
-If **no ambiguities**: skip Turn 4, go directly to Turn 5.
-If **ambiguities found**: ask the first flagged question. End response and wait.
-
----
-
-## Turn 4: Clarification Loop
-
-**Trigger:** User answered a clarifying question.
-
-Keep a running list of AC annotations, e.g.:
-- AC3: expiry date revealed via hover on Pending badge
-- AC1: expiration field is inline in the send dialog
-
-Note the answer and add it to the list. If more ambiguities remain — ask the next one and wait.
-
-When all answered — proceed to Turn 5.
-
----
-
-## Turn 5: Extract ACs + Verify with Playwright MCP
-
-**Trigger:** All ambiguities resolved (or there were none).
-
-This turn has three phases: AC extraction, verification, and reporting.
-
-### Phase 1: Extract Acceptance Criteria
-
-Read the spec content and any clarifications. Also read context files if they exist:
-
-- `.verify/app.json` — known routes, use for specific navigation paths in AC descriptions
-- `.verify/seed-data.txt` — actual database records, use for specific data references (limit: first 8000 chars)
-- `.verify/learnings.md` — corrections from past verification runs
-
-Extract testable ACs. Each AC must be concrete enough for browser verification:
-
-**AC quality standard — this is critical:**
-- BAD: "The settings form shows an expiration field"
-- GOOD: "The team document settings page (/t/{teamUrl}/settings/document) shows a 'Default Envelope Expiration' combobox with options 'Never expires' and 'Custom duration'"
-
-USE THE SEED DATA. If the spec says "a document with expiration set" and seed data shows a recipient "recipient-expiry@test.documenso.com", reference those exact values.
-
-USE THE ROUTES. If app routes show `/t/personal_xyz/settings/document`, reference that navigation path.
-
-**Extraction rules:**
-- Each AC: one specific testable behavior
-- Skip ACs requiring external services (Stripe, email, OAuth)
-- Pure UI ACs with multiple checks on the same page should be split into individual ACs (one behavior each)
-- NEVER use template variables like {envId}, {orgId} — resolve to actual values from routes or seed data
-
-Present the AC list to the user: "I've extracted N acceptance criteria. Here's the plan: [list ACs]. Starting verification now."
-
-### Phase 2: Verify Each AC with Playwright MCP
-
-Set up the evidence directory:
+Run:
 
 ```bash
-RUN_ID=$(date +%Y%m%d-%H%M%S)
-mkdir -p .verify/runs/$RUN_ID/evidence
-mkdir -p .verify/mcp-output/traces
-# Purge stale artifacts from prior crashed runs so this run's recordings don't collide
-rm -f .verify/mcp-output/*.webm 2>/dev/null || true
-rm -f .verify/mcp-output/traces/trace-*.trace .verify/mcp-output/traces/trace-*.network .verify/mcp-output/traces/trace-*.stacks 2>/dev/null || true
+TARGET_REPO="$(pwd -P)"
+RUN_ID="$(cat "$TARGET_REPO/.verify/current-run")"
+VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts changed-files \
+  --repo "$TARGET_REPO" --base <merge-base>) \
+  > "$TARGET_REPO/.verify/runs/$RUN_ID/changed-files.json"
 ```
 
-For EACH acceptance criterion, follow this sequence:
+The result includes committed branch changes, staged and unstaged changes, and untracked behavior files. Test files are excluded.
 
-1. **Navigate** to the right page using `mcp__playwright__browser_navigate`.
-   - Use known routes from `.verify/app.json` for direct URLs.
-   - REUSE navigation context from previous ACs — the browser session persists.
+### 4. Draft criteria
 
-1a. **Start recording evidence — ALWAYS, immediately after navigate, before any snapshot.** This is mandatory. Even if you suspect the AC will be blocked, start recording first — the recording itself is evidence. First clear any stale loose trace files so the post-hoc zip picks up exactly this AC's run:
-   ```bash
-   rm -f .verify/mcp-output/traces/trace-*.trace .verify/mcp-output/traces/trace-*.network .verify/mcp-output/traces/trace-*.stacks 2>/dev/null || true
-   ```
-   Then:
-   - `mcp__playwright__browser_start_tracing` (takes NO args — writes loose `.verify/mcp-output/traces/trace-<timestamp>.{trace,network,stacks}` + `resources/`)
-   - `mcp__playwright__browser_start_video` with `filename: ".verify/mcp-output/${RUN_ID}-{ac_id}.webm"` (CWD-relative path — the file lands exactly where you point it)
+Translate the plan into concrete, observable criteria. Each criterion has:
 
-2. **Check preconditions** — use `mcp__playwright__browser_snapshot` to read the page.
-   - If required data is not visible after the first snapshot → verdict `blocked`. Do NOT jump to the next AC — skip to step 4a (stop recording) so evidence flushes, then step 7 (write result).
+- `id`: stable `AC1`, `AC2`, and so on.
+- `title`: one behavior.
+- `doIt`: the real action to perform.
+- `expectIt`: a measurable observation.
+- `source`: `{ "kind": "plan", "ref": "..." }`, `{ "kind": "inferred", "from": "..." }`, or `{ "kind": "invented", "note": "..." }`.
 
-3. **Interact** as needed:
-   - `mcp__playwright__browser_click` — click elements (use `ref` from snapshot)
-   - `mcp__playwright__browser_type` — type into inputs
-   - `mcp__playwright__browser_hover` — hover for tooltips
-   - `mcp__playwright__browser_press_key` — keyboard actions
-   - `mcp__playwright__browser_wait_for` — wait for animations/loads
+**Write every criterion as a user would experience it, not as the code is structured.** A
+criterion names a request, a command, a message, or a screen, and the observable it
+produces. It never names a function, a class, or an internal call. If a criterion cannot be
+checked without reading source, it is the wrong criterion: rewrite it as something a
+customer could do.
 
-4. **Collect evidence** — take a screenshot after verification:
-   - `mcp__playwright__browser_take_screenshot`
-   - The screenshot is returned inline in the tool result. Note the screenshot filename in your result.json.
+Good: `POST /api/v1/events with a staging key, then read the row: environment_id is the
+staging environment.`
 
-4a. **Stop recording evidence — ALWAYS, before writing result.json.** This is mandatory on every AC regardless of verdict (pass, fail, blocked, error, timeout, auth_expired — all of them). Without stop, the video/trace never flushes to disk and you lose the evidence.
-   - `mcp__playwright__browser_stop_video` (takes NO args — uses the filename given at start)
-   - `mcp__playwright__browser_stop_tracing` (takes NO args — flushes loose files to `.verify/mcp-output/traces/`)
-   - Step 7 decides keep (non-pass) or drop (pass).
+Bad: `resolvePayloadEnvironment returns the key-bound environment.`
 
-5. **Check for auth redirect** — if the page URL path contains `/login`, `/signin`, `/signup`, `/auth/` (as a standalone segment, not a prefix like `/authorize`), or `/forgot-password`, AND the AC does not intentionally target an auth page:
-   - Write verdict `auth_expired` with observed: "Auth redirect — session may have expired"
+This is why the workflow does not inspect the repository's existing tests. Whether a unit
+test exists, and whether it mocks something, is a question about the test suite. This
+workflow answers one question only: does the change work when driven the way a user drives
+it.
 
-6. **Judge the result** — based on what you observed, determine:
-   - `verdict`: one of `pass`, `fail`, `blocked`, `unclear`, `error`, `timeout`, `skipped`, `auth_expired`, `spec_unclear`
-   - `confidence`: `high`, `medium`, or `low`
-   - `reasoning`: what you saw and why you reached this verdict
+### 5. Compute criterion coverage
 
-   Verdict meanings:
-   - `pass` — AC verified successfully
-   - `fail` — AC clearly not met
-   - `blocked` — precondition missing, cannot test
-   - `unclear` — partial evidence, cannot determine
-   - `error` — Playwright command failed unexpectedly
-   - `timeout` — page or element didn't load in time
-   - `skipped` — AC skipped (depends on failed prior AC)
-   - `auth_expired` — redirected to login page unexpectedly
-   - `spec_unclear` — AC description too vague to verify
+Write `.verify/runs/<id>/claims.json` as a mapping from criterion id to changed files it claims, for example:
 
-7. **Write the result** — create the evidence dir and handle recorded artifacts based on verdict.
+```json
+{
+  "AC1": ["src/assets.ts"],
+  "AC2": ["src/auth.ts"]
+}
+```
 
-   ```bash
-   mkdir -p .verify/runs/$RUN_ID/evidence/{ac_id}
-   ```
-
-   All artifact handling is **tolerant** — missing files are not fatal. Each shell step uses `2>/dev/null || true`.
-
-   - If `verdict == "pass"`: delete this AC's recordings. Set `video: null` and `trace: null` in result.json.
-     ```bash
-     rm -f .verify/mcp-output/${RUN_ID}-{ac_id}.webm 2>/dev/null || true
-     rm -f .verify/mcp-output/traces/trace-*.trace .verify/mcp-output/traces/trace-*.network .verify/mcp-output/traces/trace-*.stacks 2>/dev/null || true
-     ```
-
-   - Otherwise (any non-pass verdict): move the video and pack a trace zip. The MCP writes **loose files** named `trace-<timestamp>.{trace,network,stacks}`; `playwright show-trace` only loads a zip whose internal files are named `trace.*`, so we rename while zipping.
-     ```bash
-     # Video: simple move
-     mv .verify/mcp-output/${RUN_ID}-{ac_id}.webm .verify/runs/$RUN_ID/evidence/{ac_id}/ 2>/dev/null || true
-
-     # Trace: rename loose files to trace.* and zip with resources/
-     TRACE_TRACE=$(ls -t .verify/mcp-output/traces/trace-*.trace 2>/dev/null | head -1)
-     if [ -n "$TRACE_TRACE" ]; then
-       TRACE_BASE=${TRACE_TRACE%.trace}
-       TMPDIR=$(mktemp -d)
-       cp "$TRACE_TRACE" "$TMPDIR/trace.trace"
-       cp "${TRACE_BASE}.network" "$TMPDIR/trace.network" 2>/dev/null || true
-       cp "${TRACE_BASE}.stacks"  "$TMPDIR/trace.stacks"  2>/dev/null || true
-       cp -r .verify/mcp-output/traces/resources "$TMPDIR/" 2>/dev/null || true
-       ZIP_DEST="$PWD/.verify/runs/$RUN_ID/evidence/{ac_id}/trace.zip"
-       (cd "$TMPDIR" && zip -qr "$ZIP_DEST" .)
-       rm -f "$TRACE_BASE".trace "$TRACE_BASE".network "$TRACE_BASE".stacks 2>/dev/null || true
-     fi
-     ```
-     In result.json: set `video` to `"${RUN_ID}-{ac_id}.webm"` iff that file now exists in the evidence dir, else `null`. Set `trace` to `"trace.zip"` iff that file now exists in the evidence dir, else `null`.
-
-   Then use the Write tool to create `.verify/runs/$RUN_ID/evidence/{ac_id}/result.json`:
-
-   ```json
-   {
-     "ac_id": "{ac_id}",
-     "verdict": "pass",
-     "confidence": "high",
-     "reasoning": "What you observed and why",
-     "observed": "Exact text/state on the page",
-     "steps_taken": ["navigate to /settings", "snapshot", "click @ref"],
-     "screenshots": ["screenshot-filename.png"],
-     "video": null,
-     "trace": null,
-     "blocker": null
-   }
-   ```
-
-8. **Move to next AC.** Do NOT close or reset the browser between ACs.
-
-### Phase 3: Report Results
-
-After all ACs are verified:
-
-1. Read each `result.json` from the evidence subdirectories and show inline summary:
-
-   For each AC:
-   - `pass` → `✓ ac1: pass`
-   - anything else → verdict line, then a `replay:` line for the trace zip and a `video:` line for the webm, printed only for artifacts that are non-null in result.json:
-     ```
-     ✗ ac3: fail — Envelope expiration combobox not rendered on team settings page
-         replay: npx playwright show-trace .verify/runs/{RUN_ID}/evidence/ac3/trace.zip
-         video:  .verify/runs/{RUN_ID}/evidence/ac3/{RUN_ID}-ac3.webm
-     ```
-     Skip the line for any artifact whose field is `null` (e.g., if `stop_video` failed and only the trace was retained).
-
-2. Write combined `verdicts.json` using the Write tool to `.verify/runs/$RUN_ID/verdicts.json`. Include `target_url` (from `.verify/config.json`) and `spec` (the spec path or `inline`) so the report has context:
-
-   ```json
-   {
-     "run_id": "{RUN_ID}",
-     "target_url": "https://...",
-     "spec": "docs/spec.md",
-     "verdicts": [
-       {"ac_id": "ac1", "verdict": "pass", "confidence": "high", "reasoning": "..."},
-       {"ac_id": "ac2", "verdict": "fail", "confidence": "high", "reasoning": "..."}
-     ],
-     "summary": {"total": 2, "pass": 1, "fail": 1}
-   }
-   ```
-
-3. **Collect screenshots into the run dir.** Playwright MCP writes screenshots into the current working directory, not into `.verify/runs/$RUN_ID/`. Move them in so the report can reference them:
-
-   ```bash
-   for png in $(cat .verify/runs/$RUN_ID/evidence/*/result.json 2>/dev/null | grep -o '"[^"]*\.png"' | tr -d '"' | sort -u); do
-     [ -f "$png" ] && mv "$png" ".verify/runs/$RUN_ID/evidence/$png"
-   done
-   ```
-
-4. **Generate `report.html`** — single-file HTML report that embeds verdict cards, reasoning, steps, and screenshots. Run this Python script via Bash (pass `RUN_ID` via env so the quoted heredoc stays safe):
-
-   ```bash
-   RUN_ID=$RUN_ID python3 - <<'PYEOF'
-   import json, os, html
-   from pathlib import Path
-
-   def e(v):
-       return html.escape("" if v is None else str(v))
-
-   run_dir = Path(f".verify/runs/{os.environ['RUN_ID']}")
-   verdicts = json.loads((run_dir / "verdicts.json").read_text())
-
-   badge_color = {"pass": "#16a34a", "fail": "#dc2626", "blocked": "#f59e0b",
-                  "unclear": "#6b7280", "error": "#dc2626", "timeout": "#dc2626",
-                  "skipped": "#6b7280", "auth_expired": "#dc2626",
-                  "spec_unclear": "#f59e0b"}
-
-   cards = []
-   for v in verdicts["verdicts"]:
-       ac_id = v["ac_id"]
-       result_path = run_dir / "evidence" / ac_id / "result.json"
-       if not result_path.exists():
-           continue
-       result = json.loads(result_path.read_text())
-       color = badge_color.get(result["verdict"], "#6b7280")
-       shots = "".join(
-           f'<div class="shot"><img src="evidence/{e(s)}" alt="{e(s)}"/></div>'
-           for s in (result.get("screenshots") or [])
-       )
-       steps = "".join(f"<li>{e(s)}</li>" for s in (result.get("steps_taken") or []))
-       video = result.get("video")
-       video_html = (
-           f'<div class="video"><video controls preload="metadata" src="evidence/{e(ac_id)}/{e(video)}"></video></div>'
-           if video else ""
-       )
-       trace = result.get("trace")
-       trace_html = (
-           f'<div class="trace"><code>npx playwright show-trace .verify/runs/{e(os.environ["RUN_ID"])}/evidence/{e(ac_id)}/{e(trace)}</code></div>'
-           if trace else ""
-       )
-       cards.append(f'''
-       <section class="ac">
-         <header>
-           <span class="badge" style="background:{color}">{e(result["verdict"]).upper()}</span>
-           <h2>{e(ac_id)}</h2>
-           <span class="conf">confidence: {e(result.get("confidence","—"))}</span>
-         </header>
-         <p class="reasoning">{e(result.get("reasoning",""))}</p>
-         <details><summary>observed</summary><pre>{e(result.get("observed",""))}</pre></details>
-         <details><summary>steps ({len(result.get("steps_taken") or [])})</summary><ol>{steps}</ol></details>
-         {video_html}
-         {trace_html}
-         {shots}
-       </section>''')
-
-   summary = verdicts.get("summary") or {}
-   total = summary.get("total", len(verdicts["verdicts"]))
-   passed = summary.get("pass", sum(1 for v in verdicts["verdicts"] if v["verdict"] == "pass"))
-   failed = total - passed
-
-   html = f"""<!doctype html>
-   <html lang="en">
-   <head>
-   <meta charset="utf-8">
-   <title>Verify report — {e(verdicts["run_id"])}</title>
-   <style>
-     :root {{ --bg:#fafafa; --card:#fff; --text:#111; --muted:#6b7280; --line:#e5e7eb; }}
-     * {{ box-sizing: border-box; }}
-     body {{ font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 32px; }}
-     main {{ max-width: 900px; margin: 0 auto; }}
-     h1 {{ font-size: 24px; margin: 0 0 8px; }}
-     h2 {{ font-size: 16px; margin: 0; font-family: ui-monospace, monospace; }}
-     .meta {{ color: var(--muted); font-size: 14px; margin-bottom: 24px; }}
-     .meta code {{ background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 13px; }}
-     .summary {{ display: flex; gap: 12px; margin-bottom: 32px; }}
-     .summary .chip {{ padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; }}
-     .summary .chip.pass {{ background: #dcfce7; color: #166534; }}
-     .summary .chip.fail {{ background: #fee2e2; color: #991b1b; }}
-     .summary .chip.total {{ background: #e5e7eb; color: #374151; }}
-     .ac {{ background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }}
-     .ac header {{ display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }}
-     .badge {{ color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; }}
-     .conf {{ color: var(--muted); font-size: 13px; margin-left: auto; }}
-     .reasoning {{ margin: 8px 0 12px; line-height: 1.5; }}
-     details {{ margin: 8px 0; font-size: 14px; }}
-     summary {{ cursor: pointer; color: var(--muted); }}
-     pre {{ background: #f3f4f6; padding: 8px; border-radius: 6px; overflow-x: auto; font-size: 13px; }}
-     ol {{ padding-left: 20px; }}
-     .shot {{ margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }}
-     .shot img {{ display: block; width: 100%; height: auto; }}
-     .video {{ margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #000; }}
-     .video video {{ display: block; width: 100%; height: auto; }}
-     .trace {{ margin-top: 12px; padding: 10px 12px; background: #f3f4f6; border-radius: 6px; font-size: 13px; color: var(--muted); }}
-     .trace code {{ background: transparent; padding: 0; font-family: ui-monospace, monospace; color: #111; word-break: break-all; }}
-   </style>
-   </head>
-   <body>
-   <main>
-     <h1>Verify report</h1>
-     <div class="meta">
-       Run: <code>{e(verdicts["run_id"])}</code> &nbsp;·&nbsp;
-       Target: <code>{e(verdicts.get("target_url","(unknown)"))}</code> &nbsp;·&nbsp;
-       Spec: <code>{e(verdicts.get("spec","(inline)"))}</code>
-     </div>
-     <div class="summary">
-       <span class="chip pass">✓ {passed} pass</span>
-       <span class="chip fail">✗ {failed} fail</span>
-       <span class="chip total">{total} total</span>
-     </div>
-     {"".join(cards)}
-   </main>
-   </body>
-   </html>
-   """
-
-   (run_dir / "report.html").write_text(html)
-   print(f"wrote {run_dir / 'report.html'}")
-   PYEOF
-   ```
-
-5. Show pass/fail summary counts and the report path: "Report: `.verify/runs/$RUN_ID/report.html`".
-
----
-
-## Hard Constraints — DO NOT VIOLATE
-
-These rules are battle-tested from 15+ real verification runs:
-
-1. **BUDGET:** Aim for 12 Playwright commands per AC max. If you've done 10 commands and haven't resolved the AC, write your best verdict and move on.
-
-2. **PRECONDITION CHECK:** After your first snapshot on the target page, if required data is not visible, write `blocked` immediately. Do NOT explore the entire app looking for data.
-
-3. **BAIL EARLY:** If after 3 navigation attempts you haven't found the target page, write `blocked` and move on.
-
-4. **ONE RECOVERY:** If a Playwright command fails, retry once. Then write the result and move on.
-
-5. **NO CODEBASE ACCESS:** Do not use Read, Bash, Glob, Grep, `ls`, `git`, or `rg` to access source code files (.ts, .tsx, .js, .jsx, .py, .rb, etc). You are testing the running app, not the code. The ONLY files you may read/write are under `.verify/` and the user-provided spec file.
-
-6. **NO DATA MUTATION:** Do not submit forms that change app state, create accounts, or modify data. Read-only verification only.
-
-7. **AUTH REDIRECT:** If you land on a login page unexpectedly, write verdict `auth_expired`. Suggest the user re-run `/verify-setup`.
-
-8. **ALWAYS WRITE RESULT:** Before moving to the next AC, you MUST write the result JSON. A partial result is better than no result. **Also always handle recorded artifacts before moving on** — delete on pass, move video + zip trace on non-pass, tolerant of missing files. Orphaned `.webm` or loose `trace-*.*` files in `.verify/mcp-output/` will be purged at the start of the next run, but can collide within a single run if left in place.
-
-9. **RECORDING BOOKENDS ARE MANDATORY:** Every AC must call `browser_start_tracing` + `browser_start_video` (step 1a) right after navigate, and `browser_stop_video` + `browser_stop_tracing` (step 4a) right before writing result.json. Every verdict — including `blocked`, `error`, `timeout`, `auth_expired` — runs the full bookend. Without `stop_*`, Playwright never flushes the files to disk and you lose the evidence.
-
----
-
-## Error Handling
-
-| Failure | Action |
-|---------|--------|
-| Dev server not running | Print error, stop |
-| Playwright MCP not available | Show install instructions, stop |
-| Playwright MCP configured but crashed | "Playwright MCP not responding. Try restarting Claude Code." |
-| Auth redirect on all ACs | "Auth cookies expired. Re-run `/verify-setup` to import fresh cookies." |
-| Playwright command timeout | Write `timeout` for current AC, continue to next |
-| All ACs blocked | "Check dev server and auth. Run `/verify-setup` to reconfigure." |
-
----
-
-## Quick Reference
+Then compute uncovered files from that artifact:
 
 ```bash
-/verify-setup                       # one-time setup (port detection + cookie export + app indexing)
-/verify                             # run verification
-/verify path/to/spec.md             # run with specific spec
-open .verify/runs/*/report.html     # open the HTML report in a browser
-cat .verify/runs/*/verdicts.json    # check verdicts as JSON
-ls .verify/runs/*/evidence/         # browse evidence (each AC has a subdirectory)
+TARGET_REPO="$(pwd -P)"
+RUN_ID="$(cat "$TARGET_REPO/.verify/current-run")"
+RUN_DIR="$TARGET_REPO/.verify/runs/$RUN_ID"
+VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts changed-files \
+  --repo "$TARGET_REPO" --base <merge-base> --claims "$RUN_DIR/claims.json") \
+  > "$RUN_DIR/coverage.json"
 ```
+
+Write `.verify/runs/<id>/criteria.json` in this shape, copying `coverage.json.uncovered` into `uncoveredFiles`:
+
+```json
+{
+  "criteria": [],
+  "uncoveredFiles": []
+}
+```
+
+Render the approval artifact:
+
+```bash
+TARGET_REPO="$(pwd -P)"
+RUN_ID="$(cat "$TARGET_REPO/.verify/current-run")"
+RUN_DIR="$TARGET_REPO/.verify/runs/$RUN_ID"
+VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts criteria \
+  --criteria "$RUN_DIR/criteria.json") > "$RUN_DIR/criteria.md"
+```
+
+Print `criteria.md`, including invented specifics and uncovered changed files. Ask the user to edit it, identify corrections, or say `go`.
+
+**Stop here. Run no verification command and perform no system mutation until the user approves the criteria.**
+
+## Half two: run and report
+
+Enter this half only after explicit approval. Read the persisted run id; never rely on an earlier shell variable:
+
+```bash
+TARGET_REPO="$(pwd -P)"
+RUN_ID="$(cat "$TARGET_REPO/.verify/current-run")"
+RUN_DIR="$TARGET_REPO/.verify/runs/$RUN_ID"
+test -f "$RUN_DIR/criteria.json" && test -f "$RUN_DIR/criteria.md"
+```
+
+If the user requested changes to the criteria instead of approving them, update and re-render half one, then stop again.
+
+### 1. Prepare recording
+
+Check both optional recorders:
+
+```bash
+command -v asciinema >/dev/null || echo "asciinema missing: brew install asciinema"
+command -v agg >/dev/null || echo "agg missing: brew install agg"
+```
+
+If either is missing, run verification anyway and add a `Not checked` entry saying no terminal recording was made and why. A missing recorder never blocks the run.
+
+When both exist, record the actual commands and their output from start to finish. Either:
+
+- run all verification commands in one persistent PTY after starting `asciinema rec <absolute-run.cast>`, then exit that PTY cleanly; or
+- generate a bounded verification script under the run directory and use `asciinema rec --command "bash <absolute-script>" <absolute-run.cast>`.
+
+Do not start `asciinema` in one shell and run the evidence commands through unrelated shell tool calls; those commands will not be captured. After recording, render:
+
+```bash
+agg <absolute-run.cast> <absolute-run.gif>
+```
+
+If recording or rendering fails, keep running the criteria and add the failure to `Not checked`.
+
+### 2. Drive the real system
+
+Choose the cheapest sufficient proof for each criterion and use the repository's own commands:
+
+- API: call the real route, authenticate through the public path, and observe the side effect rather than status alone.
+- Datastore: inspect affected rows before and after; for migrations, test the direction actually claimed.
+- CLI: run the real binary, checking exit code separately from output shape. Avoid a PTY when machine-readable output is the criterion.
+- Async: fire the trigger, wait with a deadline and correlation id, then inspect the real effect. A local sink proves emission, not public delivery.
+- UI: drive a real browser. See below.
+
+**UI criteria, in detail.** A web interface is the surface where "drive it the way a user
+does" is most literal, so it gets a real browser rather than an HTTP client. The plugin
+declares Playwright MCP, so `mcp__playwright__*` tools are available once the plugin is
+installed.
+
+1. Confirm the tools are present. If they are not, record every UI criterion as
+   `could-not-run` with the reason, exactly as with a missing recorder. Never substitute
+   a `curl` against the page and call it a UI check: fetching HTML does not prove a user
+   can complete the flow.
+2. Navigate to the page named in the criterion. Prefer a route the criterion states over
+   one you infer.
+3. Interact the way the criterion describes: click, type, select. Read the page between
+   steps rather than assuming a click landed.
+4. Read the observable the criterion names. Prefer text and state a user could see over
+   internal attributes.
+5. Capture a screenshot at the moment of observation and keep it under the run's
+   directory. The screenshot is the evidence for that criterion, not decoration.
+
+A UI criterion that cannot be judged without reading the page source is the wrong
+criterion. Rewrite it as something a person could confirm by looking.
+
+Mutation in a disposable local system is allowed. Before writing to a shared or staging system, describe the exact mutation and obtain a specific yes. Before provisioning anything that costs money, obtain a specific yes. If permission is not given, record the criterion as `could-not-run`; do not count it as a behavior failure.
+
+Record exactly one result for every approved criterion:
+
+```json
+{
+  "id": "AC1",
+  "outcome": "pass",
+  "observed": "50 rows (was HTTP 500)"
+}
+```
+
+`outcome` is `pass`, `fail`, or `could-not-run`. `observed` describes only what the command showed.
+
+### 3. Preserve generated tests
+
+If a useful regression test is generated, write it only to `.verify/runs/<id>/tests/`. Never put it in the source tree during verification. Preserve an empty `tests/` directory when no test is generated.
+
+### 4. Render the report
+
+Write `.verify/runs/<id>/results.json`:
+
+```json
+{
+  "results": [],
+  "coverage": { "filesWithoutCriterion": 0 },
+  "notChecked": []
+}
+```
+
+There must be one result per approved criterion. Set `coverage.filesWithoutCriterion` from the persisted `coverage.json`, not from memory. Include every skipped surface, permission denial, harness problem, recorder problem, and uncovered file in `notChecked`. Keep the list present even when empty.
+
+Render:
+
+```bash
+TARGET_REPO="$(pwd -P)"
+RUN_ID="$(cat "$TARGET_REPO/.verify/current-run")"
+RUN_DIR="$TARGET_REPO/.verify/runs/$RUN_ID"
+VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts report \
+  --results "$RUN_DIR/results.json") > "$RUN_DIR/report.md"
+```
+
+Print `report.md` and the artifact paths. When recording succeeded, confirm `run.cast` and `run.gif` exist and that the cast contains real commands and output. Confirm `criteria.json`, `criteria.md`, `claims.json`, `coverage.json`, `results.json`, `report.md`, and `tests/` exist. Confirm the target repository has no verification changes outside `.verify/`.
+
+For each generated test, print its artifact path and the source-tree path where it would belong. Ask separately whether the user wants that test checked in. Do not move or commit any test without that explicit choice.

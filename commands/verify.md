@@ -1,6 +1,6 @@
 ---
-description: "Verify frontend changes against acceptance criteria using browser agents"
+description: "Verify any change surface against approved acceptance criteria and preserve evidence"
 disable-model-invocation: true
 ---
 
-Invoke the opslane-verify:verify skill and follow it exactly as presented to you.
+Invoke the opslane-verify:verify skill and follow its two-half approval workflow exactly.

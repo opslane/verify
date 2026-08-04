@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-04
+
+### Changed
+- `/verify` works on any change surface, not only a browser. API, datastore, CLI, async,
+  and UI each get a real check driven the way a user would drive it.
+- The workflow is two halves with a stop between them. Half one writes acceptance criteria
+  from the change's plan and waits for approval. Half two runs them and reports.
+- Criteria record where they came from: a plan line, an inference from the diff, or an
+  assumption the tool made and is telling you about.
+- Results report on four separate axes. Whether the code is right, whether the harness
+  worked, how much of the branch was covered, and whether causality was established are
+  four different answers.
+- `Not checked` is always printed, even when empty.
+
+### Removed
+- `/verify-setup`. The repository already declares how to run itself; a separate
+  onboarding step was skipped in practice and its artifacts never survived a worktree.
+- The pipeline: orchestrator, staged prompts, and the headless `claude -p` runner. That is
+  a different control loop from a skill, and the skill never called it.
+- Existing-test inspection. Whether a unit test exists, and whether it mocks something, is
+  a question about the test suite. This plugin answers whether the change works.
+
+### Fixed
+- `changed-files` reports an unknown revision with the available refs instead of a stack
+  trace, and refuses a base that git would read as an option.
+- Files inside `tests/`, `__tests__/`, and `spec/` are excluded, not only files whose name
+  ends in `.test.ts`.
+
+
 ## [1.1.0] — 2026-04-23
 
 ### Added

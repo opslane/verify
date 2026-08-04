@@ -12,3 +12,8 @@ node_modules/
 docs/plans/
 progress.txt
 .omx/
+pipeline/dist/
+pipeline/spike-*/
+server/
+pipeline/BASELINE-*.txt
+pipeline/check-baseline.sh
