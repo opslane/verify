@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-08-04
+
+### Changed
+- Cost is the user's decision. A criterion that can be driven but needs real setup is
+  presented with what it would take, while the stack is still up, rather than being moved
+  to `Not checked` unilaterally. "Cheapest sufficient proof" means the least setup that
+  still observes the behaviour, not permission to skip inconvenient checks.
+- A `Not checked` reason must say why the criterion was not driven. If it also claims
+  something else covers it, that thing must be named, with a plain statement that this run
+  did not re-run it. Observed in the wild: three entries reading "covered by unit
+  canaries", where the workflow had not run those tests and could not know.
+
+
 ## [2.0.0] - 2026-08-04
 
 ### Changed

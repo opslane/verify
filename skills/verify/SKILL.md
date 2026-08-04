@@ -15,6 +15,8 @@ This workflow has exactly two halves. Half one creates acceptance criteria and s
 - Mutation is allowed. Writing to shared or staging systems needs the user to say yes first.
 - Provisioning anything that costs money needs the user to say yes first.
 - `Not checked` is always printed, even when empty.
+- Expense is not a reason to skip. If a criterion can be driven but costs real setup, say what it would take and let the user decide. Never decide that on their behalf.
+- A `Not checked` reason states why it was not driven. It never asserts that something else covers it, unless it names that thing and says plainly this run did not re-run it.
 - Drive the system the way a user does. This workflow does not read or run the repository's unit tests.
 - Never invent acceptance criteria from the diff alone. The diff can refine or expose gaps in criteria sourced from a plan.
 - Generated tests stay under the run's `tests/` directory until the user explicitly chooses to check them in.
@@ -216,7 +218,9 @@ If recording or rendering fails, keep running the criteria and add the failure t
 
 ### 2. Drive the real system
 
-Choose the cheapest sufficient proof for each criterion and use the repository's own commands:
+Choose the cheapest way to *actually check* each criterion, using the repository's own
+commands. Cheapest sufficient proof means the least setup that still observes the
+behaviour. It does not mean skipping a criterion because driving it is inconvenient.
 
 - API: call the real route, authenticate through the public path, and observe the side effect rather than status alone.
 - Datastore: inspect affected rows before and after; for migrations, test the direction actually claimed.
@@ -246,6 +250,52 @@ A UI criterion that cannot be judged without reading the page source is the wron
 criterion. Rewrite it as something a person could confirm by looking.
 
 Mutation in a disposable local system is allowed. Before writing to a shared or staging system, describe the exact mutation and obtain a specific yes. Before provisioning anything that costs money, obtain a specific yes. If permission is not given, record the criterion as `could-not-run`; do not count it as a behavior failure.
+
+### When driving a criterion is expensive
+
+Some criteria are drivable but costly: they need a failure induced, a long-running job,
+a fixture built, or a service stood up that nothing else in the run needs.
+
+**Cost is the user's decision, not yours.** Do not quietly move a criterion to
+`Not checked` because it would take a while. Present it, with what it would cost, and let
+them choose:
+
+```
+AC5 needs a production job to fail with a key in its error text before the admin
+    endpoint will show anything. Roughly 15 minutes: force a job failure on the local
+    stack, then read it back through the admin surface.
+
+    Drive it, or record it as not checked?
+```
+
+Ask before half two finishes, while the stack is still up and the answer is still cheap
+to act on. If the user declines, the `Not checked` reason is what it would have taken,
+not a judgement that it did not matter.
+
+If several criteria are expensive, list them together with their costs and let the user
+pick which ones are worth it. Say which one you would drive if they only pick one, and
+why — usually the one whose failure would be worst.
+
+### Citing coverage you did not observe
+
+A `Not checked` reason explains why the criterion was not driven here. That is all it is
+required to do.
+
+If you also believe something else covers it, that claim has to be checkable by a reader
+who was not present. Name it, and state plainly that this run did not re-run it:
+
+```
+GOOD  not driven: needs a production job to fail with a key in its error text.
+      A test exists: TestRedactAdminErrorSwallowsEndpointBearingProjectKey
+      (Go handler suite). This run did not execute it.
+
+BAD   covered by unit canaries
+```
+
+Never write that something is covered by tests you did not run without naming them. An
+unnamed claim of coverage cannot be checked, reads as reassurance, and is exactly the
+thing this report exists to avoid. A named test that turns out to be inadequate is a
+finding; an unnamed one is noise.
 
 Record exactly one result for every approved criterion:
 
