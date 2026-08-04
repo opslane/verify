@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-08-04
+
+### Changed
+- Assume a criterion can be reproduced locally until something specific stops it. A job
+  that fails with a key in its error text is a job you can make fail; a worker run is a
+  worker you can start. Only four things count as real blockers: a credential a human must
+  obtain, a third-party service that cannot be faked at the boundary that matters, an
+  irreversible or publicly visible action, or something that genuinely cannot be induced
+  here, with the reason named. "Needs production" is almost never one of them. Observed in
+  the wild alongside the 2.1.0 fixes: two criteria skipped for needing "a production job"
+  and "a live worker run", both reproducible on the stack the run had already started.
+
+
+## [2.1.0] - 2026-08-04
+
+### Changed
+- Cost is the user's decision. A criterion that can be driven but needs real setup is
+  presented with what it would take, while the stack is still up, rather than being moved
+  to `Not checked` unilaterally. "Cheapest sufficient proof" means the least setup that
+  still observes the behaviour, not permission to skip inconvenient checks.
+- A `Not checked` reason must say why the criterion was not driven. If it also claims
+  something else covers it, that thing must be named, with a plain statement that this run
+  did not re-run it. Observed in the wild: three entries reading "covered by unit
+  canaries", where the workflow had not run those tests and could not know.
+
+
 ## [2.0.0] - 2026-08-04
 
 ### Changed
