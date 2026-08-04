@@ -38,7 +38,8 @@ describe('criteria', () => {
     );
 
     const output = runCli(['criteria', '--criteria', input]);
-    expect(output).toContain('AC1  search_assets returns rows');
+    expect(output).toContain('| AC | From | Behaviour | How it is driven | Expect |');
+    expect(output).toMatch(/^\| AC1 \| plan line 12 \|/m);
     expect(output).toContain('No criterion covers: src/log.ts');
   });
 });

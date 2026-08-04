@@ -1,7 +1,7 @@
 {
   "name": "opslane-verify",
   "description": "Verify a change works by driving the real system the way a user does. Approved acceptance criteria, a recorded run, and a four-axis report.",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "author": {
     "name": "opslane",
     "url": "https://github.com/opslane"

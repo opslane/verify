@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-08-04
+
+### Changed
+- Criteria render as a table with the source requirement in its own column, so the mapping
+  from criterion to requirement can be scanned rather than read. Anything not straight from
+  the plan is marked INVENTED or INFERRED in the table and explained underneath, where the
+  assumption is stated in full. Pipes inside a cell are escaped so a command containing one
+  cannot silently corrupt the table.
+
+
 ## [2.2.0] - 2026-08-04
 
 ### Changed
