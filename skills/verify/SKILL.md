@@ -72,6 +72,21 @@ Look in this order:
 
 Use the newest plan that clearly describes the current change. If no plan is available, ask the user for one and stop. Do not derive criteria from the diff alone.
 
+**Then read the diff for what the plan does not explain.** Criteria come from the plan;
+gaps in the plan come from the diff. A change that does something the plan never asked for
+is the single strongest signal that a criterion is missing, and it is cheap to spot: read
+the diff with the plan open and mark every addition you cannot point at a plan line for.
+
+Real example. A diff added two `clear()` calls, one in an early return and one in an error
+handler. The plan asked for clearing in two situations, neither of which was either of
+those. Nobody wrote a criterion for them, and one of them was the bug. The signal was on
+screen while the criteria were being drafted.
+
+Anything you mark this way becomes a criterion with
+`{"kind": "inferred", "from": "..."}`, naming the change that prompted it. If you decide a
+change needs no criterion, that is fine, but it belongs in the uncovered-files list where
+the user can see it and disagree.
+
 If an earlier run on the current branch has a `criteria.md`, show its path and offer to start from it. Stop for the user's choice before replacing or reusing it.
 
 ### 2. Create the run
@@ -131,6 +146,34 @@ This is why the workflow does not inspect the repository's existing tests. Wheth
 test exists, and whether it mocks something, is a question about the test suite. This
 workflow answers one question only: does the change work when driven the way a user drives
 it.
+
+**Ask what the laziest implementation that passes would look like.** For every criterion,
+before it goes in the table: could a stub, a constant, or a function that always does the
+same thing pass this? If yes, the criterion is an observation, not a check.
+
+Real example. A criterion read *"a stale selection is cleared from state, URL, and local
+storage."* It passed. Code that clears the selection **unconditionally, always** passes it
+just as cleanly, and that was the bug: a valid selection was being thrown away on every
+page load. The criterion tested the rule in one direction only, and the broken build
+satisfied it.
+
+**So every rule with an on and an off gets both criteria.** If a criterion says something
+is cleared, hidden, rejected, disabled, filtered, or logged out, write its opposite: a
+valid one is kept, shown, accepted, enabled, passed through, stayed logged in.
+
+The negative side is nearly always where the bug lives, because over-eager code satisfies
+the positive side by accident:
+
+| the plan says | the obvious criterion | the one that catches bugs |
+|---|---|---|
+| clear a stale selection | a stale one is cleared | a **valid** one survives |
+| reject an invalid key | an invalid key gets 401 | a **valid** key still works |
+| hide the panel when empty | empty hides it | **non-empty still shows it** |
+| retry on failure | a failure retries | a **success does not** retry |
+
+A plan describes what a change adds. Criteria copied from a plan inherit that blind spot,
+and nothing in the plan describes what must not break. Writing the opposite criterion is
+how you get it back.
 
 ### 5. Compute criterion coverage
 
@@ -248,6 +291,20 @@ installed.
 
 A UI criterion that cannot be judged without reading the page source is the wrong
 criterion. Rewrite it as something a person could confirm by looking.
+
+**Arrive at state, do not plant it.** It is tempting to set local storage, cookies, or
+query parameters and then load the page you care about. That is faster, and it hides every
+bug that lives in the transition: what the page does on its first pass, before something
+has resolved, is exactly where these sit.
+
+At least one criterion per run should walk a real path end to end in a single session —
+land on the first page, click through, and observe on the last one — rather than loading
+each page cold with values planted by hand.
+
+Real example. Every check for one change opened a single page with local storage set
+directly. The bug was in what the sessions page did on its first pass, before the project
+id resolved, on the way in from the issues page. Nobody ever made that journey, so nobody
+saw it.
 
 Mutation in a disposable local system is allowed. Before writing to a shared or staging system, describe the exact mutation and obtain a specific yes. Before provisioning anything that costs money, obtain a specific yes. If permission is not given, record the criterion as `could-not-run`; do not count it as a behavior failure.
 

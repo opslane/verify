@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-08-04
+
+### Changed
+- Criteria are checked against the laziest implementation that would pass them. A stub, a
+  constant, or code that always does the same thing should fail; if it would pass, the
+  criterion is an observation rather than a check.
+- Every rule with an on and an off gets both criteria. "A stale selection is cleared"
+  passes against code that clears unconditionally, which was a real bug: valid selections
+  were being thrown away on every load. The preserving side is where bugs live, because
+  over-eager code satisfies the clearing side by accident.
+- The diff is read for what the plan does not explain, and each unexplained change becomes
+  an inferred criterion or goes in the uncovered list. Two clear() calls the plan never
+  asked for were on screen while criteria were drafted, and one of them was the bug.
+- UI criteria arrive at state instead of planting it. At least one path per run is walked
+  end to end in a single session, because bugs in what a page does on its first pass are
+  invisible when every check starts from a page loaded cold with values set by hand.
+
+
 ## [2.3.1] - 2026-08-04
 
 ### Fixed
