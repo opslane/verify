@@ -13,7 +13,7 @@ The skill decides what to check and judges the result. The engine only does plum
 would be silly to do in markdown:
 
 - `criteria`      renders the approval artifact from JSON
-- `report`        renders the four-axis report from JSON
+- `report`        renders the report from JSON
 - `changed-files` lists behaviour-bearing changed files, and coverage gaps given claims
 
 Run artifacts land in the target repository under `.verify/runs/<id>/` and are gitignored

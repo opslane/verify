@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-08-06
+
+### Added
+- Every criterion declares `intent` (`changes` or `preserves`), `baseline` (what the base
+  commit does with it), and `witness` (`success` or `refusal`). `intent` and `baseline` are
+  separate fields on purpose: defining `changes` as "fails on base" is wrong for real
+  criteria. A rolling-upgrade check needs both versions running at once, and a
+  "with the new flag off, behaviour is unchanged" check cannot run on a base binary that
+  refuses to start with an unknown flag. Both get `baseline: not-applicable`.
+- The engine rejects a criterion missing any of the three, and names the free passes: an
+  `intent: changes` criterion with `baseline: pass` passed before the change existed, so it
+  proved nothing. On a real run, four of six criteria were free passes and the report came
+  back green.
+- The approval artifact prints an intent-by-witness grid. A set where every criterion checks
+  that something is refused is satisfied by an implementation that refuses everything, which
+  is what happened: six criteria, not one of which exercised a working credential.
+- `baseline: unknown` is a first-class answer and prints as something to confirm before
+  approving. An honest unknown is a smaller failure than a confident claim that turns out to
+  be a free pass.
+
+### Changed
+- **Reverses part of 2.4.0.** That release turned each unexplained change in the diff into
+  an inferred criterion. It now becomes a question in the approval artifact instead. An
+  expectation comes from the plan, from the behaviour that existed before the change, or
+  from an assumption labelled `invented`. Never from the implementation being verified,
+  because such a criterion agrees with whatever the code does and cannot fail. A run pinned
+  a timeout at 30 seconds purely because `DEFAULT_TIMEOUT = (5, 30)` was in the diff.
+- The diff is still read once for what the plan does not explain, and now for removals and
+  narrowings as well as additions. The previous wording said "addition", so a deleted
+  production route in the same hunk as a new one was invisible.
+
+### Fixed
+- The criteria table escaped pipes in most cells but not in `id` or the source label, so a
+  pipe in either shifted every column after it. The test that claimed to cover "any cell"
+  counted escaped pipes as delimiters and could not have caught it.
+- Four files described a four-axis report. The engine renders three, and the README's own
+  sample output showed three. The claim is now what the code does.
+
 ## [2.4.0] - 2026-08-04
 
 ### Changed

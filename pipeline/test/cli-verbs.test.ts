@@ -16,31 +16,60 @@ function runCli(args: string[]): string {
 }
 
 
+function criterion(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'AC1',
+    title: 'search_assets returns rows for a working credential',
+    doIt: 'POST tools/call search_assets with a live token',
+    // A bare status code proves the transport worked, not that the tool did. The skill
+    // asks for the side effect, so the fixture models one.
+    expectIt: 'HTTP 200 whose result carries at least one asset row',
+    source: { kind: 'plan', ref: 'plan line 12' },
+    intent: 'changes',
+    baseline: 'fail',
+    witness: 'success',
+    ...overrides,
+  };
+}
+
+function writeInput(body: unknown): string {
+  const dir = mkdtempSync(join(tmpdir(), 'verify-cli-'));
+  const input = join(dir, 'in.json');
+  writeFileSync(input, JSON.stringify(body));
+  return input;
+}
+
 describe('criteria', () => {
   it('renders criteria.md from a json file', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'verify-cli-'));
-    const input = join(dir, 'in.json');
-    writeFileSync(
-      input,
-      JSON.stringify({
-        criteria: [
-          {
-            id: 'AC1',
-            title: 'search_assets returns rows',
-            doIt: 'POST tools/call',
-            expectIt: 'HTTP 200',
-            source: { kind: 'plan', ref: 'plan line 12' },
-            existing: { kind: 'none' },
-          },
-        ],
-        uncoveredFiles: ['src/log.ts'],
-      }),
-    );
+    const input = writeInput({
+      criteria: [criterion()],
+      uncoveredFiles: ['src/log.ts'],
+    });
 
     const output = runCli(['criteria', '--criteria', input]);
-    expect(output).toContain('| AC | From | Behaviour | How it is driven | Expect |');
-    expect(output).toMatch(/^\| AC1 \| plan line 12 \|/m);
+    expect(output).toContain('| AC | From | Intent | Base | Shows | Behaviour | How it is driven | Expect |');
+    expect(output).toMatch(/^\| AC1 \| plan line 12 \| changes \| fail \| success \|/m);
     expect(output).toContain('No criterion covers: src/log.ts');
+    expect(output).toContain('What these criteria prove');
+  });
+
+  // The engine cannot judge whether a declaration is truthful, but it can refuse to
+  // render one that is missing. Otherwise the rule lives only in prose the model may skip.
+  it('exits non-zero when a criterion omits its declarations', () => {
+    const { intent, ...undeclared } = criterion();
+    const input = writeInput({ criteria: [undeclared] });
+
+    expect(() => runCli(['criteria', '--criteria', input])).toThrow(/intent/);
+  });
+
+  // Still rendered, not rejected: the artifact exists for a human to correct, and a
+  // free pass is something they need to see rather than something to hide behind an
+  // exit code. Missing declarations are different, because there is nothing to show.
+  it('renders a free pass loudly instead of suppressing the artifact', () => {
+    const input = writeInput({ criteria: [criterion({ baseline: 'pass' })] });
+    const output = runCli(['criteria', '--criteria', input]);
+    expect(output).toContain('FREE PASS');
+    expect(output).toContain('Do not approve as they stand.');
   });
 });
 
