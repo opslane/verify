@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Verify any change surface against approved acceptance criteria, run the real system, and preserve a four-axis report and test artifacts.
+description: Verify any change surface against approved acceptance criteria, run the real system, and preserve the report and test artifacts.
 ---
 
 # /verify
@@ -18,7 +18,7 @@ This workflow has exactly two halves. Half one creates acceptance criteria and s
 - Expense is not a reason to skip. If a criterion can be driven but costs real setup, say what it would take and let the user decide. Never decide that on their behalf.
 - A `Not checked` reason states why it was not driven. It never asserts that something else covers it, unless it names that thing and says plainly this run did not re-run it.
 - Drive the system the way a user does. This workflow does not read or run the repository's unit tests.
-- Never invent acceptance criteria from the diff alone. The diff can refine or expose gaps in criteria sourced from a plan.
+- An expectation comes from the plan or from the base commit. Never from the diff. The diff can only expose gaps, and a gap is a question for the user, not a criterion you answer yourself.
 - Generated tests stay under the run's `tests/` directory until the user explicitly chooses to check them in.
 - Make one observation per approved criterion. Do not collapse a harness failure into a behavior failure.
 
@@ -72,6 +72,48 @@ Look in this order:
 
 Use the newest plan that clearly describes the current change. If no plan is available, ask the user for one and stop. Do not derive criteria from the diff alone.
 
+**The diff raises questions. It never answers them.**
+
+This is the line that keeps verification black box. An expectation comes from the plan, or
+from the behavior that existed before the change, or from an assumption you label
+`invented` so the user can correct it. Never from the implementation you are verifying.
+
+That is what the `source` field records, and why `invented` is a legitimate value rather
+than an admission of failure. A plan that says "field values persist" without naming a
+field leaves you a choice. Making it and flagging it loudly is honest. Resolving it by
+opening the code and testing whatever it happens to do is not, because that criterion
+cannot fail.
+
+So do not go reading the implementation for things to test. If the plan says "bound every
+outbound call with a timeout" and does not say what the budget is, the criterion is not
+"raises at 30 seconds" because you found `DEFAULT_TIMEOUT = (5, 30)` in the diff. That
+criterion passes by construction. Ask what the budget should be.
+
+**What the diff is for.** Once the criteria are drafted from the plan, read the diff once
+to find gaps. Mark two things:
+
+- additions the plan never asked for
+- anything removed or narrowed: a deleted route, a dropped case, a tightened pattern, a
+  reordered rule, a changed default
+
+Each one goes in the approval artifact **as a question**, naming the change that prompted
+it and asking what the behavior should be. You do not answer it yourself. A question the
+user answers becomes a criterion with `{"kind": "inferred", "from": "..."}` whose
+expectation is theirs. A question they wave off goes in the uncovered list, where it stays
+visible.
+
+The difference is between asking "the `/confluence/*` route was deleted and the plan never
+mentions it, was that intended?" and deciding for yourself what that route ought to do. The
+first found a production regression. The second writes a criterion that agrees with
+whatever the code now does.
+
+Two real examples of what one pass catches. A diff added two `clear()` calls, in an early
+return and an error handler, that the plan never asked for; one of them was the bug, and it
+was on screen while the criteria were being drafted. A different diff deleted an ingress
+route in the same hunk that added a new one, while the backend still served it; nothing in
+the plan mentioned the deletion, because a plan records what someone meant to add and is
+silent on what went out with it.
+
 If an earlier run on the current branch has a `criteria.md`, show its path and offer to start from it. Stop for the user's choice before replacing or reusing it.
 
 ### 2. Create the run
@@ -115,6 +157,53 @@ Translate the plan into concrete, observable criteria. Each criterion has:
 - `doIt`: the real action to perform.
 - `expectIt`: a measurable observation.
 - `source`: `{ "kind": "plan", "ref": "..." }`, `{ "kind": "inferred", "from": "..." }`, or `{ "kind": "invented", "note": "..." }`.
+- `intent`: `"changes"` or `"preserves"`. What the criterion is for.
+- `baseline`: `"fail"`, `"pass"`, `"not-applicable"`, or `"unknown"`. What you expect the
+  base commit to do with it.
+- `witness`: `"success"` or `"refusal"`. Does this criterion show something working, or
+  show something correctly turned away?
+
+**`intent` is what the criterion is for. `baseline` is a separate claim about the base
+commit.** Keeping them apart matters, because the obvious shortcut of defining `changes` as
+"fails on base" is wrong for real criteria:
+
+- *A v1 worker consumes a job written by v2, and a v2 worker consumes a job written by v1.*
+  A legitimate criterion for a schema change. It needs both versions running at once, so
+  the base commit alone cannot pass or fail it. `intent: changes`, `baseline: not-applicable`.
+- *With the new flag off, the old behavior is unchanged.* Preservation. But the base binary
+  rejects the unknown flag and will not start. `intent: preserves`, `baseline: not-applicable`.
+
+`changes` means the criterion exists to prove the change did something. Its normal baseline
+is `fail`.
+
+`preserves` means it guards something the change could have broken. Its normal baseline is
+`pass`, and that is the point rather than a defect. A `preserves` criterion names what it
+guards against: the changed route, setting, or file that could plausibly have broken it.
+
+**The check is one line: `intent: changes` with `baseline: pass` is a defect.** That
+criterion passed before the change existed, so it proves nothing. Everything else is a
+question of honesty about the baseline, not a rule violation.
+
+Declaring a baseline obliges you to picture the base commit while you are drafting. That is
+the whole mechanism. Most free passes are visible the moment you ask "would this have
+passed last week?" and invisible three steps later when the run comes back green.
+
+`unknown` is a real answer and a cheap one. It goes in the approval artifact as a question.
+An honest `unknown` is a much smaller failure than a confident `fail` that turns out to be
+a free pass.
+
+**`witness` exists because a set can be all-refusal and look complete.** Six criteria that
+all check something is rejected are satisfied by an implementation that rejects everything.
+Count the boxes before you submit:
+
+|  | preserves | changes |
+|---|---|---|
+| **success** | the old path still works | **the new capability works** |
+| **refusal** | the old guard still holds | the new guard holds |
+
+Every new capability needs at least one `success` + `changes` criterion: the thing works,
+end to end, driven the way a user drives it. That box being empty is the most common way a
+criteria set passes while proving nothing.
 
 **Write every criterion as a user would experience it, not as the code is structured.** A
 criterion names a request, a command, a message, or a screen, and the observable it
@@ -131,6 +220,34 @@ This is why the workflow does not inspect the repository's existing tests. Wheth
 test exists, and whether it mocks something, is a question about the test suite. This
 workflow answers one question only: does the change work when driven the way a user drives
 it.
+
+**Ask what the laziest implementation that passes would look like.** For every criterion,
+before it goes in the table: could a stub, a constant, or a function that always does the
+same thing pass this? If yes, the criterion is an observation, not a check.
+
+Real example. A criterion read *"a stale selection is cleared from state, URL, and local
+storage."* It passed. Code that clears the selection **unconditionally, always** passes it
+just as cleanly, and that was the bug: a valid selection was being thrown away on every
+page load. The criterion tested the rule in one direction only, and the broken build
+satisfied it.
+
+**So every rule with an on and an off gets both criteria.** If a criterion says something
+is cleared, hidden, rejected, disabled, filtered, or logged out, write its opposite: a
+valid one is kept, shown, accepted, enabled, passed through, stayed logged in.
+
+The negative side is nearly always where the bug lives, because over-eager code satisfies
+the positive side by accident:
+
+| the plan says | the obvious criterion | the one that catches bugs |
+|---|---|---|
+| clear a stale selection | a stale one is cleared | a **valid** one survives |
+| reject an invalid key | an invalid key gets 401 | a **valid** key still works |
+| hide the panel when empty | empty hides it | **non-empty still shows it** |
+| retry on failure | a failure retries | a **success does not** retry |
+
+A plan describes what a change adds. Criteria copied from a plan inherit that blind spot,
+and nothing in the plan describes what must not break. Writing the opposite criterion is
+how you get it back.
 
 ### 5. Compute criterion coverage
 
@@ -249,6 +366,20 @@ installed.
 A UI criterion that cannot be judged without reading the page source is the wrong
 criterion. Rewrite it as something a person could confirm by looking.
 
+**Arrive at state, do not plant it.** It is tempting to set local storage, cookies, or
+query parameters and then load the page you care about. That is faster, and it hides every
+bug that lives in the transition: what the page does on its first pass, before something
+has resolved, is exactly where these sit.
+
+At least one criterion per run should walk a real path end to end in a single session —
+land on the first page, click through, and observe on the last one — rather than loading
+each page cold with values planted by hand.
+
+Real example. Every check for one change opened a single page with local storage set
+directly. The bug was in what the sessions page did on its first pass, before the project
+id resolved, on the way in from the issues page. Nobody ever made that journey, so nobody
+saw it.
+
 Mutation in a disposable local system is allowed. Before writing to a shared or staging system, describe the exact mutation and obtain a specific yes. Before provisioning anything that costs money, obtain a specific yes. If permission is not given, record the criterion as `could-not-run`; do not count it as a behavior failure.
 
 ### When driving a criterion is expensive
@@ -261,12 +392,16 @@ a fixture built, or a service stood up that nothing else in the run needs.
 them choose:
 
 ```
-AC5 needs a production job to fail with a key in its error text before the admin
-    endpoint will show anything. Roughly 15 minutes: force a job failure on the local
-    stack, then read it back through the admin surface.
+AC5 needs a job that fails with a key in its error text before the admin endpoint
+    shows anything. Roughly 15 minutes on the local stack: seed a job, force it to
+    fail with a key in the message, then read it back through the admin surface.
 
     Drive it, or record it as not checked?
 ```
+
+Note what that does not say. It does not say "needs production". The cost is the
+fifteen minutes of setup, and naming the setup is what lets the user judge it. Naming an
+environment instead hides the real reason and sounds like a wall.
 
 Ask before half two finishes, while the stack is still up and the answer is still cheap
 to act on. If the user declines, the `Not checked` reason is what it would have taken,
@@ -307,11 +442,14 @@ If you also believe something else covers it, that claim has to be checkable by 
 who was not present. Name it, and state plainly that this run did not re-run it:
 
 ```
-GOOD  not driven: needs a production job to fail with a key in its error text.
+GOOD  not driven: the user declined the 15 minutes of fixture setup it needed.
       A test exists: TestRedactAdminErrorSwallowsEndpointBearingProjectKey
       (Go handler suite). This run did not execute it.
 
 BAD   covered by unit canaries
+
+BAD   needs a production job to fail with a key in its error text
+      (an environment standing in for setup work; see the section above)
 ```
 
 Never write that something is covered by tests you did not run without naming them. An

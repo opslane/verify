@@ -26,6 +26,17 @@ if (command === "criteria") {
   }
 
   const input = JSON.parse(readFileSync(values.criteria, "utf8"));
+
+  // TypeScript does nothing for JSON read at runtime. Without this, a criterion missing
+  // its declarations renders as an empty cell and the grid silently undercounts.
+  const { validateCriteria } = await import("./lib/criteria.js");
+  const problems = validateCriteria(input.criteria);
+  if (problems.length > 0) {
+    console.error("criteria.json is not valid:");
+    for (const problem of problems) console.error(`  ${problem}`);
+    process.exit(1);
+  }
+
   console.log(renderCriteria(input.criteria, input.uncoveredFiles ?? []));
 
 } else if (command === "report") {

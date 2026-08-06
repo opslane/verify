@@ -8,22 +8,33 @@ It works on whatever surface the change touches: an HTTP API, a database, a CLI,
 
 Two halves, with a stop in between.
 
-**Half one writes the criteria and stops.** It finds the plan for your change, turns it into concrete checks, and prints them for you to correct. Every criterion says where it came from — a line in the plan, an inference from the diff, or an assumption it made and is telling you about:
+**Half one writes the criteria and stops.** It finds the plan for your change, turns it into concrete checks, and prints them for you to correct. Every criterion says where it came from, what it is for, and what the code before your change would do with it. A criterion meant to prove the change works, that the old code would also have passed, is called out as a free pass:
 
 ```
-AC1  an SDK ingest key can no longer read incidents
-     Do        curl -H 'X-API-KEY: <key>' /api/v1/projects/<id>/incidents
-     Expect    HTTP 401
-     From      Stage 1 QA gate, item 1
+| AC  | From | Intent    | Base | Shows   | Behaviour                                |
+|-----|------|-----------|------|---------|------------------------------------------|
+| AC1 | R1   | changes   | fail | success | an OAuth token reaches a tool and returns rows |
+| AC2 | R2   | changes   | pass | refusal | a request with no credential is refused  |
+| AC3 | R4   | preserves | pass | success | an existing API key still works          |
 
-AC4  opslane errors list still works for a logged-in human
-     From      INVENTED. Plan item 4 says "per whichever option Task 1.2 chose"
-               and does not say which. I assumed session login.
+FREE PASS. These are declared as testing the change, and the base commit passes them too:
+- AC2: a request with no credential is refused
+Rewrite them or mark them as preserves. Do not approve as they stand.
+
+What these criteria prove
+
+            preserves  changes
+  success           1        1
+  refusal           0        1
 ```
+
+That grid is there because a set where every row is a refusal is satisfied by an
+implementation that refuses everything. An empty `changes`/`success` box means nothing in
+the set shows the new behaviour working.
 
 Nothing runs until you say go.
 
-**Half two runs them and reports.** It drives the real system with real tools, records the run, and reports on four separate axes:
+**Half two runs them and reports.** It drives the real system with real tools, records the run, and reports on three separate axes:
 
 ```
 AC1  ✔  HTTP 401 at the HTTP layer, no tool dispatched
@@ -47,7 +58,7 @@ Those axes are separate on purpose. "Your code is wrong", "the database containe
 
 It never fixes the code it is judging. A tool that repairs its own failures grades its own work.
 
-It never invents acceptance criteria from the diff alone. Criteria come from a plan, because a check derived from the diff confirms the implementation against itself. If it cannot find a plan, it asks for one.
+It never takes an expectation from the diff. Criteria come from the plan, or from how the code behaved before your change, because a check derived from the diff confirms the implementation against itself and cannot fail. The diff is read once for what the plan does not explain, and each gap becomes a question for you rather than an answer it invents. If it cannot find a plan, it asks for one.
 
 It never claims a pass it did not observe.
 
@@ -78,7 +89,7 @@ Artifacts land in `.verify/runs/<timestamp>/`:
 
 ```
 criteria.md      what you approved
-report.md        results per criterion, four axes, what was not checked
+report.md        results per criterion, three axes, what was not checked
 run.cast         asciinema recording of the real commands
 run.gif
 run.sh           re-runnable by hand
