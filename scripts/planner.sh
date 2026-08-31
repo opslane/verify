@@ -12,7 +12,15 @@ fi
 SPEC_PATH="${1:-$(cat .verify/.spec_path 2>/dev/null)}"
 [ -n "$SPEC_PATH" ] && [ -f "$SPEC_PATH" ] || { echo "✗ Spec doc not found: $SPEC_PATH"; exit 1; }
 
-VERIFY_BASE_URL="${VERIFY_BASE_URL:-$(jq -r '.baseUrl // "http://localhost:3000"' .verify/config.json 2>/dev/null)}"
+VERIFY_BASE_URL="${VERIFY_BASE_URL:-}"
+if [ -z "$VERIFY_BASE_URL" ] && [ -f .verify/config.json ]; then
+  VERIFY_BASE_URL=$(jq -r '.baseUrl // empty' .verify/config.json 2>/dev/null || echo "")
+fi
+if [ -f .verify/setup.json ]; then
+  SETUP_BASE=$(jq -r '.base_url // empty' .verify/setup.json 2>/dev/null || echo "")
+  [ -n "$SETUP_BASE" ] && VERIFY_BASE_URL="$SETUP_BASE"
+fi
+VERIFY_BASE_URL="${VERIFY_BASE_URL:-http://localhost:3000}"
 
 echo "→ Running Planner (Opus)..."
 echo "  Spec: $SPEC_PATH"
@@ -79,6 +87,35 @@ if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then
   echo "✗ Planner returned invalid JSON:"
   echo "$PLAN_JSON" | head -20
   exit 1
+fi
+
+validate_plan() {
+  echo "$1" | jq -e '
+    (.criteria | type == "array") and
+    (.seed_plan | type == "array") and
+    ((.criteria | map(.id) | length) == (.criteria | map(.id) | unique | length)) and
+    ([.criteria[] |
+       (.id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_-]*$")) and
+       (.depends_on | type == "array" and length > 0 and all(.[]; IN("api","db","worker","browser","sink","storage"))) and
+       (.proof.kind | IN("marker-in-data","marked-request-rejected","live-read")) and
+       (.proof.detail | type == "string" and length > 0) and
+       (.guards | IN("new-behavior","existing-behavior"))
+     ] | all) and
+    ([.seed_plan[] |
+       (.description | type == "string" and length > 0) and
+       (.via | type == "string" and length > 0)
+     ] | all)' > /dev/null 2>&1
+}
+
+if ! validate_plan "$PLAN_JSON"; then
+  echo "⚠ Planner output failed schema validation — retrying once..."
+  RAW=$("$CLAUDE" -p --model opus --dangerously-skip-permissions < "$PROMPT_FILE")
+  PLAN_JSON=$(echo "$RAW" | sed '/^```/d' | tr -d '\r')
+  if ! validate_plan "$PLAN_JSON"; then
+    echo "✗ Planner output invalid after retry. Offending output:"
+    echo "$PLAN_JSON" | head -30
+    exit 1
+  fi
 fi
 
 echo "$PLAN_JSON" | jq '.' > .verify/plan.json

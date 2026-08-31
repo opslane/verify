@@ -3,10 +3,12 @@ set -e
 
 SKIP_AUTH=false
 SKIP_SPEC=false
+SKIP_SERVER=false
 for arg in "$@"; do
   case $arg in
     --skip-auth) SKIP_AUTH=true ;;
     --skip-spec) SKIP_SPEC=true ;;
+    --skip-server) SKIP_SERVER=true ;;
   esac
 done
 
@@ -23,30 +25,42 @@ export TIMEOUT_CMD
 
 # Load config inline
 CONFIG_FILE=".verify/config.json"
-VERIFY_BASE_URL="${VERIFY_BASE_URL:-$(jq -r '.baseUrl // "http://localhost:3000"' "$CONFIG_FILE" 2>/dev/null || echo "http://localhost:3000")}"
+VERIFY_BASE_URL="${VERIFY_BASE_URL:-}"
+if [ -z "$VERIFY_BASE_URL" ] && [ -f "$CONFIG_FILE" ]; then
+  VERIFY_BASE_URL=$(jq -r '.baseUrl // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
+fi
+if [ -f .verify/setup.json ]; then
+  SETUP_BASE=$(jq -r '.base_url // empty' .verify/setup.json 2>/dev/null || echo "")
+  [ -n "$SETUP_BASE" ] && VERIFY_BASE_URL="$SETUP_BASE"
+fi
+VERIFY_BASE_URL="${VERIFY_BASE_URL:-http://localhost:3000}"
 VERIFY_AUTH_CHECK_URL="${VERIFY_AUTH_CHECK_URL:-$(jq -r '.authCheckUrl // "/api/me"' "$CONFIG_FILE" 2>/dev/null || echo "/api/me")}"
 VERIFY_SPEC_PATH="${VERIFY_SPEC_PATH:-$(jq -r '.specPath // empty' "$CONFIG_FILE" 2>/dev/null || echo "")}"
 export VERIFY_BASE_URL VERIFY_AUTH_CHECK_URL VERIFY_SPEC_PATH
 
 # 1. Dev server health check
-PORT=$(echo "$VERIFY_BASE_URL" | grep -oE ':[0-9]+' | tr -d ':')
-echo "→ Checking dev server at $VERIFY_BASE_URL..."
-if ! curl -sf --max-time 5 "$VERIFY_BASE_URL" > /dev/null 2>&1; then
-  # Surface which process is occupying the port if any
-  if [ -n "$PORT" ]; then
-    OCCUPANT=$(lsof -ti :"$PORT" -sTCP:LISTEN 2>/dev/null | xargs -I{} ps -p {} -o pid=,command= 2>/dev/null | head -1 || true)
-    if [ -n "$OCCUPANT" ]; then
-      echo "✗ Port $PORT is occupied by a different process: $OCCUPANT"
-      echo "  Check your baseUrl in .verify/config.json and start the right dev server."
+if [ "$SKIP_SERVER" = false ]; then
+  PORT=$(echo "$VERIFY_BASE_URL" | grep -oE ':[0-9]+' | tr -d ':')
+  echo "→ Checking dev server at $VERIFY_BASE_URL..."
+  if ! curl -sf --max-time 5 "$VERIFY_BASE_URL" > /dev/null 2>&1; then
+    # Surface which process is occupying the port if any
+    if [ -n "$PORT" ]; then
+      OCCUPANT=$(lsof -ti :"$PORT" -sTCP:LISTEN 2>/dev/null | xargs -I{} ps -p {} -o pid=,command= 2>/dev/null | head -1 || true)
+      if [ -n "$OCCUPANT" ]; then
+        echo "✗ Port $PORT is occupied by a different process: $OCCUPANT"
+        echo "  Check your baseUrl in .verify/config.json and start the right dev server."
+      else
+        echo "✗ Dev server not reachable at $VERIFY_BASE_URL. Start it and retry."
+      fi
     else
       echo "✗ Dev server not reachable at $VERIFY_BASE_URL. Start it and retry."
     fi
-  else
-    echo "✗ Dev server not reachable at $VERIFY_BASE_URL. Start it and retry."
+    exit 1
   fi
-  exit 1
+  echo "✓ Dev server reachable"
+else
+  echo "→ Dev server check deferred until the managed environment boots"
 fi
-echo "✓ Dev server reachable"
 
 # 2. Auth validity check
 if [ "$SKIP_AUTH" = false ]; then

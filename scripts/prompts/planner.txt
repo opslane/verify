@@ -46,3 +46,28 @@ Rules:
 8. Avoid brittle pixel measurements. Use ratios, class checks, or relative comparisons.
 9. If code context is provided and an AC cannot be grounded in the diff, note that in the condition or skip reason.
 10. Output raw JSON only — no ```json fences, no preamble, no explanation. The FIRST character of your response must be `{`.
+
+For every criterion, also emit:
+
+- "depends_on": which parts of the system this check relies on, from exactly
+  this vocabulary: "api", "db", "worker", "browser", "sink", "storage".
+  List every part the check drives OR observes. A digest check that posts
+  events and reads Slack depends on api, worker, db, sink.
+- "proof": how a reader will know this check actually ran. One of:
+    {"kind": "marker-in-data", "detail": "<where the run marker will appear>"}
+    {"kind": "marked-request-rejected", "detail": "<the rejection paired with the marked request>"}
+    {"kind": "live-read", "detail": "<the fresh value read during the run>"}
+  A criterion you cannot name a proof for is defective: move it to "skipped"
+  with the reason "no way to prove it ran".
+- "guards": "new-behavior" if this check proves the change works,
+  "existing-behavior" if it guards something the change could have broken.
+
+Criterion ids must be short alphanumeric slugs (letters, digits, - and _),
+unique within the plan.
+
+Also emit a top-level "seed_plan": data the run must create through the
+application's own front door before checking. Each entry is
+{"description": "<plain sentence>", "via": "<how: HTTP method + path, or the UI page>"}
+e.g. {"description": "create 6 users with 2 sessions each",
+      "via": "POST /api/v1/events"}.
+Empty array if the seed script alone suffices. Never plan direct SQL inserts.

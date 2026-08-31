@@ -14,7 +14,7 @@ MOCK
 chmod +x "$MOCK_AGENT"
 
 unset CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
-AGENT_BIN="$MOCK_AGENT" "$SCRIPT_DIR/orchestrate.sh" 2>/dev/null
+VERIFY_ALLOW_DANGEROUS=1 AGENT_BIN="$MOCK_AGENT" "$SCRIPT_DIR/orchestrate.sh" 2>/dev/null
 
 [ -f ".verify/evidence/ac1/agent.log" ] || { echo "FAIL: ac1 agent.log missing"; exit 1; }
 [ -f ".verify/evidence/ac2/agent.log" ] || { echo "FAIL: ac2 agent.log missing"; exit 1; }

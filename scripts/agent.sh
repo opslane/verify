@@ -13,6 +13,7 @@ AC_ID="$1"
 TIMEOUT_SECS="${2:-240}"
 
 [ -n "$AC_ID" ] || { echo "Usage: $0 <ac_id> [timeout_secs]"; exit 1; }
+[[ "$AC_ID" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || { echo "✗ Invalid AC id: $AC_ID"; exit 1; }
 [ -f ".verify/plan.json" ] || { echo "✗ .verify/plan.json not found"; exit 1; }
 
 # Detect timeout command (macOS: gtimeout from coreutils; Linux: timeout)
@@ -25,7 +26,27 @@ else
   exit 1
 fi
 
-VERIFY_BASE_URL="${VERIFY_BASE_URL:-$(jq -r '.baseUrl // "http://localhost:3000"' .verify/config.json 2>/dev/null)}"
+VERIFY_BASE_URL="${VERIFY_BASE_URL:-}"
+if [ -z "$VERIFY_BASE_URL" ] && [ -f .verify/config.json ]; then
+  VERIFY_BASE_URL=$(jq -r '.baseUrl // empty' .verify/config.json 2>/dev/null || echo "")
+fi
+if [ -f .verify/setup.json ]; then
+  SETUP_BASE=$(jq -r '.base_url // empty' .verify/setup.json 2>/dev/null || echo "")
+  [ -n "$SETUP_BASE" ] && VERIFY_BASE_URL="$SETUP_BASE"
+fi
+VERIFY_BASE_URL="${VERIFY_BASE_URL:-http://localhost:3000}"
+
+MARKER=""
+[ -f .verify/run-env.json ] && MARKER=$(jq -r '.marker // empty' .verify/run-env.json 2>/dev/null || echo "")
+export VERIFY_MARKER="$MARKER"
+TAINT=""
+[ -f .verify/precheck.json ] && TAINT=$(jq -r --arg id "$AC_ID" '.tainted[$id] // empty' .verify/precheck.json 2>/dev/null || echo "")
+if [ -n "$TAINT" ]; then
+  mkdir -p ".verify/evidence/$AC_ID"
+  printf "COULD_NOT_VERIFY: dependent part '%s' failed its pipeline check (see .verify/evidence/prechecks/%s.log)\n" "$TAINT" "$TAINT" \
+    > ".verify/evidence/$AC_ID/agent.log"
+  exit 0
+fi
 
 # Extract AC data
 AC_JSON=$(jq -r --arg id "$AC_ID" '.criteria[] | select(.id == $id)' .verify/plan.json)
@@ -39,6 +60,7 @@ SCREENSHOTS=$(echo "$AC_JSON" | jq -r '.screenshot_at | join(", ")')
 # Build agent prompt — all substitutions via env vars to avoid sed injection
 # (values come from LLM-generated plan.json and may contain sed delimiter chars)
 mkdir -p ".verify/evidence/$AC_ID" ".verify/prompts"
+AGENT_PROMPT_FILE=".verify/prompts/${AC_ID}-agent.txt"
 REPLACE_AC_DESCRIPTION="$AC_DESC" \
 REPLACE_AC_ID="$AC_ID" \
 REPLACE_BASE_URL="${VERIFY_BASE_URL}${AC_URL}" \
@@ -53,7 +75,10 @@ content = content.replace('REPLACE_BASE_URL',       os.environ['REPLACE_BASE_URL
 content = content.replace('REPLACE_SCREENSHOT_AT',  os.environ['REPLACE_SCREENSHOT_AT'])
 content = content.replace('REPLACE_STEPS',          os.environ['REPLACE_STEPS_VAL'])
 print(content, end='')
-" "$SCRIPT_DIR/prompts/agent.txt" > ".verify/prompts/${AC_ID}-agent.txt"
+" "$SCRIPT_DIR/prompts/agent.txt" > "$AGENT_PROMPT_FILE"
+
+AC_PROOF=$(jq -c --arg id "$AC_ID" '.criteria[] | select(.id==$id) | .proof // {}' .verify/plan.json)
+printf "\nVERIFY_MARKER: %s\nDECLARED PROOF (your log must capture this): %s\n" "$MARKER" "$AC_PROOF" >> "$AGENT_PROMPT_FILE"
 
 # Playwright MCP config — each agent gets its own --output-dir so videos land
 # directly in the AC's evidence folder (works correctly in parallel runs)
@@ -86,7 +111,7 @@ $TIMEOUT_CMD "$TIMEOUT_SECS" "$CLAUDE" -p \
   --model sonnet \
   --dangerously-skip-permissions \
   --mcp-config "$MCP_CONFIG_FILE" \
-  < ".verify/prompts/${AC_ID}-agent.txt" > ".verify/evidence/$AC_ID/claude.log" 2>&1
+  < "$AGENT_PROMPT_FILE" > ".verify/evidence/$AC_ID/claude.log" 2>&1
 EXIT_CODE=$?
 set -e
 

@@ -25,3 +25,9 @@ STEPS_COMPLETED: <n>/<total>
 
 5. Be objective — report what you see, not what you expect
 6. If the page shows a login screen, write: VERDICT: error / REASONING: Auth redirect — session may be stale
+
+RUN MARKER: VERIFY_MARKER (also shown below) is this run's unique marker.
+Weave it into every piece of data you create: form text fields, event
+payloads, entity names. Your criterion's DECLARED PROOF says what artifact
+must carry it. Capture that artifact in your log, quoted verbatim: the
+marker-bearing row/response/read.

@@ -6,12 +6,15 @@ Return ONLY a valid JSON object. No markdown fences, no explanation. Raw JSON on
 
 Schema:
 {
-  "verdict": "pass|fail|partial",
-  "summary": "<N>/<total> ACs passed",
+  "verdict": "pass|partial|fail (recomputed downstream; best effort here)",
+  "summary": "<N>/<total> proven (recomputed downstream; best effort here)",
   "criteria": [
     {
       "ac_id": "<id>",
-      "status": "pass|fail|error|timeout",
+      "status": "pass|fail|not_proven|could_not_verify",
+      "proof_seen": true,
+      "did": "<one sentence: what the agent did>",
+      "observed": "<one sentence: what the evidence shows>",
       "reasoning": "<one sentence: what you observed>",
       "evidence": "<screenshot path>"
     }
@@ -21,9 +24,22 @@ Schema:
 
 Rules:
 1. Use the screenshot as primary evidence. Agent log is context.
-2. pass = criterion clearly met in the screenshot
+2. pass = criterion clearly met and its declared proof is present
 3. fail = criterion clearly not met
-4. error = agent crashed or hit login redirect — cannot judge
-5. timeout = agent timed out — cannot judge
-6. Be strict: if you cannot clearly confirm the criterion, mark as fail.
-7. If a screenshot shows a login page, mark as error: "Auth redirect".
+4. not_proven = the check lacks its declared proof or did not produce enough evidence
+5. could_not_verify = the agent log begins with COULD_NOT_VERIFY
+6. Be strict: if you cannot confirm the criterion or its proof, mark not_proven.
+7. If a screenshot shows a login page, mark not_proven: "Auth redirect".
+
+STATUSES: pass | fail | not_proven | could_not_verify
+
+- An agent log starting with COULD_NOT_VERIFY: status "could_not_verify",
+  reasoning copied from the log. Never convert it to fail.
+- A pass REQUIRES the criterion's declared proof visible in the evidence:
+  the run marker in created data, the rejection paired with the marked
+  request, or the fresh live read. Evidence lacking it: status "not_proven",
+  reasoning "the check may not have actually run: <what is missing>".
+  Status codes alone and absence-of-error are never sufficient evidence.
+- Set "proof_seen": true only when you can quote the proof from the evidence.
+- For each criterion also emit "did": one sentence of what the agent actually
+  did, and "observed": one sentence of what the evidence shows.

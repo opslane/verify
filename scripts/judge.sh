@@ -30,6 +30,10 @@ PROMPT_FILE=".verify/judge-prompt.txt"
 for AC_ID in "${AC_IDS[@]}"; do
   AC_DESC=$(jq -r --arg id "$AC_ID" '.criteria[] | select(.id==$id) | .description' .verify/plan.json)
   printf "\n--- AC: %s ---\nCRITERION: %s\n" "$AC_ID" "$AC_DESC" >> "$PROMPT_FILE"
+  AC_PROOF=$(jq -c --arg id "$AC_ID" '.criteria[] | select(.id==$id) | .proof // {}' .verify/plan.json)
+  MARKER=""
+  [ -f .verify/run-env.json ] && MARKER=$(jq -r '.marker // empty' .verify/run-env.json 2>/dev/null || echo "")
+  printf "DECLARED PROOF: %s\nRUN MARKER: %s\n" "$AC_PROOF" "$MARKER" >> "$PROMPT_FILE"
 
   LOG_FILE=".verify/evidence/$AC_ID/agent.log"
   if [ -f "$LOG_FILE" ]; then
@@ -72,6 +76,25 @@ if ! echo "$REPORT_JSON" | jq . > /dev/null 2>&1; then
   echo "$REPORT_JSON" | head -20
   exit 1
 fi
+
+RECONCILED=$(jq --slurpfile plan .verify/plan.json '
+  . as $rep |
+  ($plan[0].criteria | map(.id)) as $ids |
+  .criteria = [ $ids[] as $id |
+    ([$rep.criteria[]? | select(.ac_id == $id
+       and (.status | IN("pass","fail","not_proven","could_not_verify")))][0]) //
+    {ac_id: $id, status: "not_proven", proof_seen: false,
+     did: "", observed: "",
+     reasoning: "the judge returned no result for this criterion",
+     evidence: ""} ] |
+  # Verdict and summary are ALWAYS recomputed; the judge cannot shrink or
+  # inflate the run.
+  ([.criteria[] | select(.status=="pass" and .proof_seen==true)] | length) as $proven |
+  (.criteria | length) as $total |
+  .verdict = (if $proven == $total and $total > 0 then "pass"
+              elif $proven > 0 then "partial" else "fail" end) |
+  .summary = "\($proven)/\($total) proven"' <<< "$REPORT_JSON")
+REPORT_JSON="$RECONCILED"
 
 echo "$REPORT_JSON" | jq '.' > .verify/report.json
 
