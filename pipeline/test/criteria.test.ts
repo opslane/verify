@@ -10,6 +10,8 @@ const base: Criterion = {
   intent: 'changes',
   baseline: 'fail',
   witness: 'success',
+  dependsOn: ['api'],
+  proof: { kind: 'marker-in-data', detail: 'the marker in the created row' },
 };
 
 describe('renderCriteria', () => {

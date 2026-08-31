@@ -28,6 +28,8 @@ function criterion(overrides: Record<string, unknown> = {}) {
     intent: 'changes',
     baseline: 'fail',
     witness: 'success',
+    dependsOn: ['api'],
+    proof: { kind: 'marker-in-data', detail: 'the marker in the created row' },
     ...overrides,
   };
 }
@@ -74,22 +76,42 @@ describe('criteria', () => {
 });
 
 describe('report', () => {
-  it('renders report.md from a json file', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'verify-cli-'));
-    const input = join(dir, 'in.json');
+  function writeReportInputs(dir: string) {
+    const results = join(dir, 'in.json');
     writeFileSync(
-      input,
+      results,
       JSON.stringify({
-        results: [{ id: 'AC1', outcome: 'pass', observed: '50 rows' }],
+        results: [{ id: 'AC1', outcome: 'pass', proofSeen: true, observed: '50 rows' }],
         coverage: { filesWithoutCriterion: 1 },
         notChecked: [{ what: '/healthz', why: 'pod-internal' }],
       }),
     );
+    const criteriaPath = join(dir, 'criteria.json');
+    writeFileSync(
+      criteriaPath,
+      JSON.stringify({ criteria: [criterion(), criterion({ id: 'AC2', title: 'second' })] }),
+    );
+    return { results, criteriaPath };
+  }
 
-    const output = runCli(['report', '--results', input]);
+  it('renders report.md, reconciled against the criteria', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'verify-cli-'));
+    const { results, criteriaPath } = writeReportInputs(dir);
+    const precheck = join(dir, 'precheck.json');
+    writeFileSync(precheck, JSON.stringify({ parts: { api: 'ok' }, tainted: {}, unchecked: [] }));
+
+    const output = runCli(['report', '--results', results, '--criteria', criteriaPath, '--precheck', precheck]);
     expect(output).toContain('AC1  ✔  50 rows');
-    expect(output).toContain('Behaviour  1 passed, 0 failed');
+    // AC2 had no result: it can never disappear from the count.
+    expect(output).toContain('AC2  ~  could not run, no result was recorded for this criterion');
+    expect(output).toContain('1 of 2 proven');
     expect(output).toContain('/healthz');
+  });
+
+  it('fails closed when criteria have dependencies but no precheck exists', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'verify-cli-'));
+    const { results, criteriaPath } = writeReportInputs(dir);
+    expect(() => runCli(['report', '--results', results, '--criteria', criteriaPath])).toThrow();
   });
 });
 
