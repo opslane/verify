@@ -1,188 +1,257 @@
 ---
 name: verify
-description: Verify frontend changes against spec acceptance criteria locally. Uses claude -p with OAuth. No extra API charges.
+description: Turn a spec into reviewed criteria with proof, run them in a throwaway environment, and deliver an evidence-backed visual report.
 ---
 
 # /verify
 
-Verify your frontend changes before pushing.
+Verify a change without trusting a check that may not have run. This flow is
+turn-based. Stop at every stated approval or clarification boundary.
 
-## Prerequisites
-- Dev server running (e.g. `npm run dev`)
-- Auth set up (`/verify-setup`) if app requires login
+Verify never holds or asks for sensitive credentials. It may source a local env
+file already present in the repo only when `.verify/setup.json` names it.
 
-## Conversation Flow
+## Turn 1: Spec intake
 
-This skill is turn-based. Each turn has a trigger and a bounded set of actions. **Never skip ahead.**
+Ask: "What spec are you verifying? Paste the spec content or give a file path."
+End the turn. Do not inspect the repo yet, even when the invocation included a path.
 
----
+## Turn 2: Read spec, setup, pre-flight, and snapshot
 
-## Turn 1: Spec Intake
+Read a supplied file. When the user pasted content, create `.verify/spec.md` with
+the Write tool and use that as the spec.
 
-**Trigger:** User invokes `/verify`.
+If `.verify/setup.json` is missing, ask once:
 
-**Your only action:** Send this message and end your response:
+> No setup contract found. Run `/verify-setup` (recommended), or continue in
+> plain-command mode without a managed stack?
 
-> "What spec are you verifying? Paste the spec content or give a file path."
+Stop for the answer. If they choose plain-command mode, write this complete
+contract to `.verify/setup.json`; never proceed silently:
 
-Do not call any tools. Do not run any bash commands. Do not read any files. End your response and wait for the user to reply.
+```json
+{"mode":"none","compose_file":null,"boot":"","teardown":"","seed":[],"seed_data_files":[],"health_url":"","base_url":"","env_file":"","observe":{},"probes":{"worker":"","sink":"","storage":""}}
+```
 
-**Even if the user passed a path as an argument to `/verify`**, still send this prompt to confirm — do not skip ahead to Turn 2.
+Run preflight. For a managed compose/process stack that is not running yet,
+use `--skip-server`; for external mode, retain the server check:
 
----
+```bash
+MODE=$(jq -r '.mode' .verify/setup.json)
+if [ "$MODE" = "external" ]; then
+  bash ~/.claude/tools/verify/preflight.sh
+else
+  bash ~/.claude/tools/verify/preflight.sh --skip-server --skip-auth
+fi
+```
 
-## Turn 2: Read Spec + Pre-flight
-
-**Trigger:** User has provided a spec (pasted content or file path).
-
-1. If they gave a **file path** — read the file now with the Read tool.
-2. If they **pasted content** — first create the directory, then write the file:
+Stop on failure. Immediately after preflight, snapshot both tracked changes and
+the contents of existing untracked files. This catches edits to a file that was
+already dirty before Verify began:
 
 ```bash
 mkdir -p .verify
+git diff > .verify/pre-run.diff
+git ls-files -o --exclude-standard -z | xargs -0 -I{} shasum {} 2>/dev/null | awk '$2 !~ /^\.verify\//' > .verify/pre-run-untracked.txt || true
 ```
 
-Then write the content to `.verify/spec.md` with the Write tool.
+## Turn 3: Interpret the spec
 
-Then run preflight:
+Read each acceptance criterion and flag only material ambiguity:
 
-```bash
-bash ~/.claude/tools/verify/preflight.sh
-```
+1. Reveal action: "shown" or "visible" without saying how.
+2. Preconditions: data, role, flag, or state required but not named.
+3. Target: the user-visible object cannot be identified.
+4. Success: no objective pass/fail observation exists.
 
-Stop if preflight fails. Fix the reported issue and ask the user to re-run.
+If none exist, continue. Otherwise ask the first question and end the turn.
 
-Proceed to Turn 3.
+## Turn 4: Clarification loop
 
----
+Record each answer as an annotation. Ask one remaining question per turn. When
+the list is exhausted, continue.
 
-## Turn 3: Spec Interpreter
+## Turn 5: Annotated spec and draft plan
 
-**Trigger:** Preflight passed.
-
-Review the spec inline — no subprocess needed. For each AC, check:
-
-1. **Reveal action** — does it say "shown/displayed/visible" without saying how (inline, hover, click, modal)? → flag
-2. **Preconditions** — requires specific data to exist (sent doc, user role, feature flag)? → flag
-3. **Target** — UI element identifiable by label or button text? If too vague → flag
-4. **Success** — clear pass/fail? If not → flag
-
-If **no ambiguities found**: skip Turn 4, go directly to Turn 5.
-
-If **ambiguities found**: ask the user the first flagged question now. End your response and wait for their answer.
-
----
-
-## Turn 4: Clarification Loop
-
-**Trigger:** User has answered a clarifying question.
-
-Keep a running list of AC annotations as you collect answers, e.g.:
-- AC3: expiry date revealed via hover on Pending badge
-- AC1: expiration field is inline in the send dialog
-
-Note the new answer and add it to the list. If more flagged ambiguities remain — ask the next one. End your response and wait.
-
-When all ambiguities are answered — proceed to Turn 5.
-
----
-
-## Turn 5: Write Annotated Spec → Planner
-
-**Trigger:** All ambiguities resolved (or there were none).
-
-Write `.verify/spec.md` incorporating all clarifications as inline HTML comments, e.g.:
-`<!-- clarified: expiry date revealed via hover on Pending badge -->`
-
-Then run the planner:
+Write `.verify/spec.md` with clarifications as inline HTML comments, then run:
 
 ```bash
 VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/planner.sh .verify/spec.md
 ```
 
-Show extracted ACs grouped by testability:
+Show direct, conditional, and skipped criteria. For each conditional criterion,
+ask whether its condition is set up. On no, remove only that criterion:
 
-```bash
-echo "Direct ACs (will run automatically):"
-jq -r '.criteria[] | select(.testability == "direct") | "  ✓ \(.id): \(.description)"' .verify/plan.json
-
-CONDITIONAL=$(jq -r '.criteria[] | select(.testability == "conditional") | "  ? \(.id): \(.description)\n    Requires: \(.condition)"' .verify/plan.json)
-if [ -n "$CONDITIONAL" ]; then
-  echo ""
-  echo "Conditional ACs (need setup to run):"
-  echo "$CONDITIONAL"
-fi
-
-jq -r '.skipped[]? | "  ⊘ Skipped: \(.)"' .verify/plan.json
-```
-
-**For each conditional AC**, ask the user:
-> "AC [id] requires: [condition]. Is this set up? (y = include / n = skip)"
-
-If n, remove it (substitute the actual AC id for `<ac-id>`):
 ```bash
 AC_ID="<ac-id>"
 jq --arg id "$AC_ID" 'del(.criteria[] | select(.id == $id and .testability == "conditional"))' \
   .verify/plan.json > .verify/plan.tmp && mv .verify/plan.tmp .verify/plan.json
 ```
 
-Then confirm: "Does this look right? (y/n)"
-- If n: stop, ask them to refine the spec and re-run.
+Stop if no criteria remain.
 
-Stop if no criteria remain:
+## Turn 5b: Second opinion, dependencies, seed script, and approval
+
+Run the independent review:
+
 ```bash
-COUNT=$(jq '.criteria | length' .verify/plan.json)
-[ "$COUNT" -gt 0 ] || { echo "✗ No testable criteria."; exit 1; }
+VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/review.sh
 ```
 
----
+Generate `.verify/seed.sh` now, not during execution. Use the Write tool. It is a
+literal Bash script containing one curl or Playwright block per `seed_plan`
+entry; derive each block from the approved `description` and `via`. Do not use
+an LLM or direct SQL at seed time. The file begins with this exact contract:
 
-## Stage 2: Browser Agents
+```bash
+#!/usr/bin/env bash
+# Generated by /verify from the approved seed plan. Reviewed at approval.
+# $1 = this run's marker. Every entity created must carry it.
+set -euo pipefail
+MARKER="${1:?usage: seed.sh <marker>}"
+BASE_URL="${VERIFY_BASE_URL:?}"
+```
 
-Clear previous evidence:
+Every created entity must carry `$MARKER`. An empty `seed_plan` still gets the
+header and a comment that no front-door seed data is needed. If an entry truly
+requires browser reasoning and cannot be literal Playwright, label it "needs an
+agent — approve separately?" and do not include an agent unless the user says yes
+for that entry.
+
+Before approval, show all of the following in one message:
+
+- Every criterion, its `guards` label, declared proof, and dependency line such
+  as `AC2 relies on: api, worker, db, sink`.
+- The reviewer's keep/why table and missing-check list. If reviewer is
+  `unavailable`, reproduce its warning verbatim.
+- The seed plan and the full generated `.verify/seed.sh`, verbatim.
+- Any relied-on parts that will not be probed:
+
+```bash
+jq -r --slurpfile s .verify/setup.json '
+  [.criteria[].depends_on[]?] | unique
+  | map(select(IN("worker","sink","storage") and (($s[0].probes[.] // "") == "")))
+  | if length > 0 then "Unprobed parts this run relies on: " + join(", ") else empty end' .verify/plan.json
+```
+
+Ask: "Approve this verification plan and seed script? (y/n)" The answer covers
+the whole displayed plan. On no, add or prune criteria per the user's direction,
+regenerate the seed script, rerun the review when criteria changed, and ask again.
+
+## Execute the approved run
+
+Clear the old evidence link before boot so it cannot erase prechecks or seed
+evidence from the new run:
+
 ```bash
 rm -rf .verify/evidence .verify/prompts
-rm -f /tmp/verify-mcp-*.json
-mkdir -p .verify/evidence
+rm -f /tmp/verify-mcp-* "${TMPDIR:-/tmp}"/verify-mcp-* 2>/dev/null || true
+bash ~/.claude/tools/verify/env.sh up
+RUN_ID=$(jq -r '.run_id' .verify/run-env.json)
+RUN_DIR=".verify/runs/$RUN_ID"
 ```
 
-Run:
-```bash
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/orchestrate.sh
-```
-
----
-
-## Stage 3: Judge
+Run every remaining stage in one strict subshell. Arm teardown immediately after
+boot, before any seed can fail:
 
 ```bash
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/judge.sh
+(
+  set -euo pipefail
+  trap 'bash ~/.claude/tools/verify/env.sh down' EXIT
+
+  bash ~/.claude/tools/verify/env.sh seed
+  cp .verify/seed.sh "$RUN_DIR/seed.sh"
+  BASE_URL=$(jq -r '.base_url // empty' .verify/setup.json)
+  VERIFY_BASE_URL="${BASE_URL:-http://localhost}" \
+    bash .verify/seed.sh "$(jq -r '.marker' .verify/run-env.json)" 2>&1 | tee "$RUN_DIR/seed.log"
+
+  bash ~/.claude/tools/verify/precheck.sh
+  VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/orchestrate.sh
+  VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/judge.sh
+
+  git diff > .verify/post-run.diff
+  git ls-files -o --exclude-standard -z | xargs -0 -I{} shasum {} 2>/dev/null | awk '$2 !~ /^\.verify\//' > .verify/post-run-untracked.txt || true
+  VERIFY_RUN_TAINTED=0
+  if ! diff -q .verify/pre-run.diff .verify/post-run.diff > /dev/null \
+     || ! diff -q .verify/pre-run-untracked.txt .verify/post-run-untracked.txt > /dev/null; then
+    echo "✗ verify modified your repo during the run — this is a verify bug."
+    echo "  Compare .verify/pre-run.diff with .verify/post-run.diff."
+    touch "$RUN_DIR/clean-repo-violation"
+    VERIFY_RUN_TAINTED=1
+  fi
+
+  bash ~/.claude/tools/verify/report.sh
+  [ "$VERIFY_RUN_TAINTED" = "0" ]
+)
 ```
 
----
+A generated seed script failure aborts before prechecks or judging, and the trap
+still removes the stack. If the subshell returns non-zero only because it found a
+clean-repo violation, continue to serve the tainted report; its red banner is the
+primary warning.
 
-## Report
+## Serve the visual report
+
+Kill the previous report server if present. Choose the first free port from
+8123, 8124, and 8125, start the server from the run folder, record its PID, and
+print the URL. The server deliberately outlives this session; the next run
+replaces it.
 
 ```bash
-VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/report.sh
+[ -f .verify/server.pid ] && kill "$(cat .verify/server.pid)" 2>/dev/null || true
+PORT=""
+for candidate in 8123 8124 8125; do
+  if ! lsof -iTCP:"$candidate" -sTCP:LISTEN >/dev/null 2>&1; then PORT="$candidate"; break; fi
+done
+[ -n "$PORT" ] || { echo "✗ report ports 8123-8125 are busy"; exit 1; }
+python3 -m http.server "$PORT" --directory "$RUN_DIR" > /dev/null 2>&1 &
+echo $! > .verify/server.pid
+echo "Report: http://localhost:$PORT/report.html"
 ```
 
----
+On a remote box, tell the user to use that host's address or port forwarding.
 
-## Error Handling
+## Closing turn: Codify
+
+Only after the report exists, inspect the repo's e2e suite for every criterion
+where `.verify/review.json` has `codify: true`. Find the test directory and grep
+for the feature's route or component. List overlapping tests by file name, then
+ask separately for each suggestion: "Keep this as a permanent test? (y/n)".
+
+On yes, write one uncommitted test using the repo's existing framework,
+conventions, and isolation. Run it once when possible. Report exactly which
+files were created. Never commit. Replace, rather than append, the report content
+between these surviving markers:
+
+```html
+<!-- codify-block-begin -->
+<!-- codify-block-end -->
+```
+
+On no or silence, leave the repo untouched and keep the suggestion in the run
+artifacts.
+
+## Compare against base
+
+When a criterion fails and the user questions whether the change caused it,
+offer the manual button; never run it automatically:
+
+```bash
+VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/compare.sh <merge-base> <ac-id>...
+```
+
+It uses a separate worktree, throwaway environment, seed, and marker.
+
+## Error handling
 
 | Failure | Action |
-|---------|--------|
-| Pre-flight fails | Print error, stop |
-| 0 criteria after human review | Print message, stop |
-| All agents timeout/error | Print "Check dev server and auth", suggest `/verify-setup` |
-| Judge returns invalid JSON | Print raw output, tell user to check `.verify/evidence/` manually |
-
-## Quick Reference
-
-```bash
-/verify-setup                                          # one-time auth
-/verify                                                # run pipeline
-npx playwright show-report .verify/evidence/<id>/trace # debug failure
-open .verify/evidence/<id>/session.webm                # watch video
-```
+|---|---|
+| Setup contract missing | Offer `/verify-setup` or explicit plain-command mode |
+| Pre-flight fails | Print the error and stop |
+| No criteria remain | Stop; there is nothing to verify |
+| Reviewer unavailable | Carry the exact warning into approval and the report |
+| Stack boot fails | Abort and point to `.verify/boot.log` |
+| Repo seed or approved seed script fails | Abort before judging; teardown via trap |
+| Pipeline check finds a part down | Dependent criteria say "could not verify"; judge the rest |
+| Judge returns invalid JSON | Stop and retain `.verify/evidence/` |
+| Verify changes the worktree | Stamp the red report banner and exit non-zero |

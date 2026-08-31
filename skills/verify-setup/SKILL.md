@@ -1,77 +1,113 @@
 ---
 name: verify-setup
-description: One-time auth setup for /verify. Captures Playwright session state to .verify/auth.json.
+description: One-time setup for /verify. Sniffs the repo, confirms boot/seed/health with you, writes .verify/setup.json. Also captures auth if the app needs login.
 ---
 
 # /verify-setup
 
-Run once before using /verify on any app that requires authentication.
+Run once per repo. Later `/verify` runs read `.verify/setup.json` and ask nothing.
 
-## Steps
+**Hard rule: never ask for or store sensitive credentials.** No production
+connection strings, no cloud keys. The most this file may reference is one of the
+repo's own local `.env` files, chosen by the user. If a user pastes a secret,
+refuse to write it and tell them to keep it in their environment.
 
-### 1. Add .verify/ to .gitignore
+## 1. Ignore rules
 
 ```bash
-for pattern in ".verify/auth.json" ".verify/evidence/" ".verify/prompts/" ".verify/report.json" ".verify/plan.json" ".verify/.spec_path" ".verify/chrome-profile/"; do
-  grep -qF "$pattern" .gitignore 2>/dev/null || echo "$pattern" >> .gitignore
-done
-echo "✓ .gitignore updated"
+grep -qxF ".verify/" .gitignore 2>/dev/null || echo ".verify/" >> .gitignore
 ```
 
-### 2. Create .verify/config.json if missing
+`.verify/setup.json` is the one file meant to be shared. After writing it, offer:
+"Commit `.verify/setup.json` so your team skips this interview? (y/n)" — on yes,
+`git add -f .verify/setup.json` and commit it.
+
+## 2. Sniff the repo
 
 ```bash
-mkdir -p .verify
-if [ ! -f .verify/config.json ]; then
-  cat > .verify/config.json << 'CONFIG'
+bash ~/.claude/tools/verify/sniff.sh > /tmp/verify-sniff.json
+cat /tmp/verify-sniff.json
+```
+
+## 3. Confirm, one question per unknown
+
+Use AskUserQuestion. Every option must come from the sniff output; the user
+corrects rather than authors. A single unambiguous candidate is taken silently
+and shown in the final summary.
+
+- Boot: options = each `.boot[]` candidate (label with its `cmd`), plus
+  "it's already running (breaks isolation — not recommended)" which selects
+  `"mode": "external"`. **The chosen candidate's `mode` and `compose_file`
+  are copied into the contract — never mix a process boot with a compose
+  teardown.** For `"process"` mode, `health_url` is required — do not write
+  the contract until the user supplies the URL to poll. For `"compose"`
+  mode, write `teardown: "docker compose -f <file> down -v"` — a throwaway
+  stack that keeps its volumes is not throwaway.
+- Seed: options = `.seed[]`, plus "no seeding" and "I have a data file to load"
+  (if chosen, ask for the path and put it in `seed_data_files`; it is a plain
+  file the user produced themselves — how they made it is outside verify).
+- Env file: options = `.env_files[]`, plus "none". The chosen file is sourced
+  by the environment manager before boot, seeds, and probes.
+- Base URL: default `http://localhost:3000`, or the value in the env file if
+  it names one.
+- Probes: for each of `worker`, `sink`, `storage`, ask "is there a one-line
+  command that proves your <part> is alive? (leave blank to skip)". Explain:
+  a part with no probe still runs its criteria, but a failure on it will be
+  reported as possibly environmental rather than blamed on the change.
+  (`api`, `browser`, and `db` have built-in probes; don't ask about them.)
+
+If `.has_stack` is false: plain-command mode. Write the contract with
+`"mode": "none"` and empty boot/teardown/health, and say: "No runnable stack
+found; /verify will run criteria as plain commands."
+
+## 4. Write the contract
+
+Write `.verify/setup.json`. The shape (this example is load-bearing — a test
+parses it):
+
+```json setup-contract
 {
-  "baseUrl": "http://localhost:3000",
-  "authCheckUrl": "/api/me",
-  "specPath": null
+  "mode": "compose",
+  "compose_file": "compose.yaml",
+  "boot": "docker compose -f compose.yaml up -d --wait",
+  "teardown": "docker compose -f compose.yaml down -v",
+  "seed": ["scripts/seed-e2e.sql"],
+  "seed_data_files": [],
+  "health_url": "",
+  "base_url": "http://localhost:3000",
+  "env_file": ".env.example",
+  "observe": {"db_url_env": "DATABASE_URL"},
+  "probes": {"worker": "", "sink": "", "storage": ""}
 }
-CONFIG
-fi
 ```
 
-Ask the user:
-- "What is your dev server URL? (default: http://localhost:3000)"
-- "What URL returns 200 when authenticated? (default: /api/me)"
+Valid modes: `"compose"`, `"process"` (health_url required), `"external"`, `"none"`.
 
-Update .verify/config.json with their answers using:
-```bash
-jq --arg url "THEIR_URL" --arg check "THEIR_CHECK" \
-  '.baseUrl = $url | .authCheckUrl = $check' \
-  .verify/config.json > .verify/config.tmp && mv .verify/config.tmp .verify/config.json
-```
+Show the written file and the summary of silently-taken single candidates.
 
-### 3. Check dev server is running
+## 5. Capture authentication, if needed
+
+Keep authentication as Playwright storage state. It contains no password entry
+flow or credential capture by Verify; the user logs in directly in the browser.
+
+Check whether the selected base URL is running:
 
 ```bash
-BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
+BASE_URL=$(jq -r '.base_url' .verify/setup.json)
 curl -sf "$BASE_URL" > /dev/null 2>&1 || echo "⚠ Dev server not running at $BASE_URL. Start it before logging in."
 ```
 
-### 4. Capture auth via Playwright codegen
-
-`playwright codegen` opens a headed browser, lets the user log in, and saves auth state on exit.
+If the app requires login, open Playwright codegen and let the user authenticate:
 
 ```bash
-BASE_URL=$(jq -r '.baseUrl' .verify/config.json)
+BASE_URL=$(jq -r '.base_url' .verify/setup.json)
 mkdir -p .verify
 echo "A browser will open. Log in, then close the browser window."
 npx playwright codegen --save-storage=.verify/auth.json "$BASE_URL"
-```
-
-This is the correct approach — the same browser session that captures login also saves the storage state. No session transfer needed.
-
-### 5. Set permissions
-
-```bash
 chmod 600 .verify/auth.json
-echo "✓ Auth saved to .verify/auth.json (chmod 600)"
 ```
 
-### 6. Verify auth was captured
+Verify the capture:
 
 ```bash
 if [ -f .verify/auth.json ] && [ -s .verify/auth.json ]; then
@@ -83,9 +119,4 @@ else
 fi
 ```
 
-### 7. Done
-
-Tell the user:
-```
-✓ Setup complete. Run /verify before your next PR.
-```
+Finish with: `✓ Setup complete. Run /verify before your next PR.`

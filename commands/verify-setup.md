@@ -1,5 +1,5 @@
 ---
-description: "One-time auth setup for /verify. Captures Playwright session state."
+description: "One-time setup for /verify. Sniffs boot, seed, health, and optional auth into .verify/setup.json."
 disable-model-invocation: true
 ---
 

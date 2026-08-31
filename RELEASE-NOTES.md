@@ -1,5 +1,18 @@
 # Release Notes
 
+## Verdict accuracy release (2026-08-31)
+
+- **Setup contract:** `/verify-setup` sniffs each repo and records confirmed boot, seed, health, env-file, observation, and probe choices in `.verify/setup.json`.
+- **Throwaway stacks:** every run gets a unique Compose project or process group, fresh run artifacts, bounded history, and volume-removing teardown.
+- **Pipeline checks with taint:** built-in API, browser, and Postgres probes plus optional worker, sink, and storage probes mark only dependent criteria as `could_not_verify`.
+- **Proof of execution:** every criterion declares proof, every run carries a unique marker, and evidence without proof becomes `not_proven`.
+- **Reviewed seed script:** Verify shows a literal front-door seed script at approval and runs it with the marker before judging.
+- **Compare button:** users can rerun selected criteria on a separately seeded base worktree to distinguish regressions from existing failures.
+- **Second-opinion review:** Codex or a fresh Claude context challenges the plan's coverage, dependencies, and permanent-test candidates.
+- **HTML report:** one canonical result set drives the headline and escaped criterion cards, with relative screenshot and video assets under `.verify/runs/<run_id>/`.
+- **Codify:** after the report renders, users may approve permanent tests one at a time; Verify writes no commits.
+- **Design deviation:** the setup contract uses `.verify/setup.json`, not the design's `.verify/setup.yaml`, because the Bash pipeline already validates configuration with `jq`.
+
 ## v1.0.0 (2026-03-09)
 
 Initial release.

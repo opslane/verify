@@ -1,5 +1,5 @@
 ---
-description: "Verify frontend changes against acceptance criteria using browser agents"
+description: "Spec → criteria with dependencies and proof → second opinion → throwaway stack and pipeline checks → evidence-backed visual report → optional codify"
 disable-model-invocation: true
 ---
 

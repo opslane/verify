@@ -10,3 +10,17 @@
 .verify/*.log
 .playwright-mcp/
 docs/evals/
+.verify/runs/
+.verify/setup.json
+.verify/run-env.json
+.verify/precheck.json
+.verify/review.json
+.verify/compare.json
+.verify/canonical.json
+.verify/server.pid
+.verify/seed.sh
+.verify/pre-run.diff
+.verify/post-run.diff
+.verify/pre-run-untracked.txt
+.verify/post-run-untracked.txt
+.verify/boot.log
