@@ -5,6 +5,11 @@
 # Fallback chain: codex -> fresh claude -> unavailable (loud, never fatal).
 set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ "${VERIFY_ALLOW_DANGEROUS:-0}" != "1" ]; then
+  echo "✗ This script runs claude with --dangerously-skip-permissions."
+  echo "  Set VERIFY_ALLOW_DANGEROUS=1 to proceed."
+  exit 1
+fi
 CODEX="${CODEX_BIN:-codex}"
 CLAUDE="${CLAUDE_BIN:-claude}"
 if command -v gtimeout >/dev/null 2>&1; then TIMEOUT_CMD="gtimeout"

@@ -32,7 +32,8 @@ if [ -z "$VERIFY_BASE_URL" ] && [ -f .verify/config.json ]; then
 fi
 if [ -f .verify/setup.json ]; then
   SETUP_BASE=$(jq -r '.base_url // empty' .verify/setup.json 2>/dev/null || echo "")
-  [ -n "$SETUP_BASE" ] && VERIFY_BASE_URL="$SETUP_BASE"
+  # An explicitly exported VERIFY_BASE_URL always wins over the contract.
+  [ -n "$SETUP_BASE" ] && [ -z "$VERIFY_BASE_URL" ] && VERIFY_BASE_URL="$SETUP_BASE"
 fi
 VERIFY_BASE_URL="${VERIFY_BASE_URL:-http://localhost:3000}"
 

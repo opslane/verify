@@ -47,6 +47,7 @@ grep -q "1 of 3 proven" "$HTML" || { echo "FAIL: duplicate/ghost entries must no
 touch .verify/runs/r1/clean-repo-violation
 "$SCRIPT_DIR/report.sh" > /dev/null
 grep -qi "modified your working tree" "$HTML" || { echo "FAIL: violation banner missing"; exit 1; }
+grep -q "CANNOT TRUST THIS RUN" "$HTML" || { echo "FAIL: violation must poison the headline"; exit 1; }
 
 # All-proven run with a video: relative src, PASS headline allowed
 rm .verify/runs/r1/clean-repo-violation
@@ -59,6 +60,17 @@ cat > .verify/report.json << 'JSON'
 JSON
 echo '{"parts":{"api":"ok","sink":"ok","worker":"ok"},"tainted":{},"unchecked":[]}' > .verify/precheck.json
 "$SCRIPT_DIR/report.sh" > /dev/null
-grep -q "3 of 3 proven" "$HTML" || { echo "FAIL: all-proven headline"; exit 1; }
+grep -q "PASS — 3 of 3 proven" "$HTML" || { echo "FAIL: all-proven headline must say PASS"; exit 1; }
 grep -q '<video controls src="evidence/ac1/session.webm"' "$HTML" || { echo "FAIL: video must be relative"; exit 1; }
+# Proofless pass: judge says pass but proof_seen=false -> normalized to not_proven
+cat > .verify/report.json << 'JSON'
+{"verdict":"pass","summary":"","criteria":[
+ {"ac_id":"ac1","status":"pass","proof_seen":false,"did":"d","observed":"o","reasoning":"no marker quoted","evidence":""},
+ {"ac_id":"ac2","status":"pass","proof_seen":true,"did":"d","observed":"o","reasoning":"ok","evidence":""},
+ {"ac_id":"ac3","status":"pass","proof_seen":true,"did":"d","observed":"o","reasoning":"ok","evidence":""}]}
+JSON
+"$SCRIPT_DIR/report.sh" > /dev/null
+grep -q "2 of 3 proven" "$HTML" || { echo "FAIL: proofless pass must not count as proven"; exit 1; }
+[ "$(jq -r '.[] | select(.ac_id=="ac1") | .status' .verify/runs/r1/canonical.json)" = "not_proven" ] \
+  || { echo "FAIL: proofless pass must normalize to not_proven in canonical"; exit 1; }
 echo "PASS: report tests"

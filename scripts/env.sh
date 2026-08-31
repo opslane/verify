@@ -26,6 +26,7 @@ CMD="${1:-up}"
 
 case "$CMD" in
   up)
+    rm -f .verify/compare.json   # a new run invalidates any old comparison
     RUN_ID="$(date +%Y%m%d-%H%M%S)-$$"
     MARKER="verify-$RUN_ID"
     PROJECT="verify-$RUN_ID"
@@ -41,7 +42,13 @@ case "$CMD" in
       compose)
         CF=$(jq -r '.compose_file' "$SETUP")
         echo "→ Booting throwaway stack (project $PROJECT)..."
-        docker compose -p "$PROJECT" -f "$CF" up -d --wait
+        if ! docker compose -p "$PROJECT" -f "$CF" up -d --wait; then
+          # A failed --wait can still have created containers; never leave a
+          # uniquely-named orphan stack nothing can find later.
+          docker compose -p "$PROJECT" -f "$CF" down -v 2>/dev/null || true
+          echo "✗ Boot failed; partial stack removed."
+          exit 1
+        fi
         echo "✓ Stack up"
         ;;
       process)
@@ -101,7 +108,10 @@ case "$CMD" in
           else
             echo "✗ SQL seed needs observe.db_url_env resolvable from the env file"; exit 1
           fi ;;
-        *) "$TIMEOUT_CMD" 300 bash -c "$s" ;;
+        *.sh) "$TIMEOUT_CMD" 300 bash "$s" ;;
+        *)
+          if [ -x "$s" ]; then "$TIMEOUT_CMD" 300 "$s"
+          else echo "✗ Don't know how to load seed input '$s' — wrap it in a .sh or .sql loader"; exit 1; fi ;;
       esac
     done < <(jq -r '.seed[]?, .seed_data_files[]?' "$SETUP")
     echo "✓ Seeded"
@@ -111,7 +121,12 @@ case "$CMD" in
       compose)
         CF=$(jq -r '.compose_file' "$SETUP")
         PROJECT=$(jq -r '.project // empty' .verify/run-env.json 2>/dev/null || echo "")
-        [ -n "$PROJECT" ] && docker compose -p "$PROJECT" -f "$CF" down -v || true
+        if [ -n "$PROJECT" ]; then
+          if ! docker compose -p "$PROJECT" -f "$CF" down -v; then
+            echo "✗ Teardown failed — keeping .verify/run-env.json so it can be retried: docker compose -p $PROJECT -f $CF down -v"
+            exit 1
+          fi
+        fi
         echo "✓ Stack removed (volumes included)"
         ;;
       process)

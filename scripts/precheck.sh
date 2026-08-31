@@ -36,7 +36,11 @@ probe() { # part -> ok|down|unknown ; evidence to prechecks/<part>.log
       if "$TIMEOUT_CMD" 10 bash -c "$custom" >> "$log" 2>&1; then echo ok; else echo down; fi ;;
     api)
       [ -n "$BASE_URL" ] || { echo "no base_url" >> "$log"; echo unknown; return; }
-      if "$TIMEOUT_CMD" 10 curl -sf "$BASE_URL" -o /dev/null >> "$log" 2>&1; then echo ok; else echo down; fi ;;
+      # Any HTTP response proves the API is up; a 404 at the root is common
+      # and healthy. Only a dead socket (code 000) is down.
+      CODE=$("$TIMEOUT_CMD" 10 curl -s -o /dev/null -w '%{http_code}' "$BASE_URL" 2>> "$log" || echo 000)
+      echo "http_code: $CODE" >> "$log"
+      if [ "$CODE" != "000" ]; then echo ok; else echo down; fi ;;
     browser)
       [ -n "$BASE_URL" ] || { echo "no base_url" >> "$log"; echo unknown; return; }
       BODY=$("$TIMEOUT_CMD" 10 curl -sf "$BASE_URL" 2>> "$log" || true)
@@ -46,9 +50,10 @@ probe() { # part -> ok|down|unknown ; evidence to prechecks/<part>.log
       DB_ENV=$(jq -r '.observe.db_url_env // empty' "$SETUP")
       if [ -n "$DB_ENV" ] && [ -n "${!DB_ENV:-}" ] && [ -n "$MARKER" ]; then
         # Temporary table: session-scoped, auto-dropped; no permanent mutation.
-        # Marker travels as a psql variable, never interpolated into SQL.
-        if "$TIMEOUT_CMD" 10 psql "${!DB_ENV}" -v m="$MARKER" -tAc \
-          "create temporary table _verify_precheck(m text); insert into _verify_precheck values (:'m'); select m from _verify_precheck where m = :'m' limit 1;" \
+        # Marker travels as a psql variable. The SQL goes via stdin (-f -):
+        # psql does NOT interpolate :'m' inside a -c string.
+        if printf '%s' "create temporary table _verify_precheck(m text); insert into _verify_precheck values (:'m'); select m from _verify_precheck where m = :'m' limit 1;" \
+          | "$TIMEOUT_CMD" 10 psql "${!DB_ENV}" -v m="$MARKER" -tA -f - \
           >> "$log" 2>&1 && grep -q "$MARKER" "$log"; then echo ok; else echo down; fi
       else echo "no db_url_env resolvable" >> "$log"; echo unknown; fi ;;
     *) echo "no probe for unknown part" >> "$log"; echo unknown ;;

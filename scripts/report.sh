@@ -18,14 +18,26 @@ mkdir -p "$RUN_DIR"
 
 # One entry per plan criterion, first matching report entry wins. Missing,
 # duplicate, ghost, and invalid judge entries can never alter the result set.
-jq --slurpfile rep "$REPORT" '
+# A pass without its proof is normalized to not_proven so no card can render
+# green while the headline refuses to count it; tainted ids are forced to
+# could_not_verify regardless of what the judge said.
+TAINT_MAP="{}"
+[ -f "$PRECHECK" ] && TAINT_MAP=$(jq -c '.tainted // {}' "$PRECHECK" 2>/dev/null || echo "{}")
+jq --slurpfile rep "$REPORT" --argjson taint "$TAINT_MAP" '
   [ .criteria[] as $c |
-    ([$rep[0].criteria[]? | select(.ac_id == $c.id
+    (([$rep[0].criteria[]? | select(.ac_id == $c.id
         and (.status | IN("pass","fail","not_proven","could_not_verify")))][0]
      // {ac_id: $c.id, status: "not_proven", proof_seen: false, did: "",
          observed: "", reasoning: "no result recorded for this criterion", evidence: ""})
     + {description: $c.description, guards: ($c.guards // ""),
-       depends_on: ($c.depends_on // [])} ]' "$PLAN" > "$CANON"
+       depends_on: ($c.depends_on // [])}) as $entry |
+    (if $taint[$c.id] then
+       $entry + {status: "could_not_verify", proof_seen: false,
+                 reasoning: ("dependent part " + $taint[$c.id] + " failed its pipeline check")}
+     elif ($entry.status == "pass" and ($entry.proof_seen != true)) then
+       $entry + {status: "not_proven",
+                 reasoning: ($entry.reasoning + " — judged pass but the declared proof was not seen, so it does not count")}
+     else $entry end) ]' "$PLAN" > "$CANON"
 
 TOTAL=$(jq 'length' "$CANON")
 PROVEN=$(jq '[.[] | select(.status=="pass" and .proof_seen==true)] | length' "$CANON")
@@ -39,7 +51,11 @@ HEADLINE="$PROVEN of $TOTAL proven."
 [ "$CNV" -gt 0 ] && HEADLINE="$HEADLINE $CNV couldn't run (${DOWN_PARTS:-parts down})."
 [ -n "$FAILED_IDS" ] && HEADLINE="$HEADLINE Failed: $FAILED_IDS."
 [ "$NOTPROVEN" -gt 0 ] && HEADLINE="$HEADLINE $NOTPROVEN not proven."
-[ "$PROVEN" = "$TOTAL" ] && [ "$TOTAL" -gt 0 ] && HEADLINE="PASS — $HEADLINE"
+if [ -f "$RUN_DIR/clean-repo-violation" ]; then
+  HEADLINE="CANNOT TRUST THIS RUN — verify modified the working tree. $HEADLINE"
+elif [ "$PROVEN" = "$TOTAL" ] && [ "$TOTAL" -gt 0 ]; then
+  HEADLINE="PASS — $HEADLINE"
+fi
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

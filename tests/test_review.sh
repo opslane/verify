@@ -18,12 +18,14 @@ chmod +x "$GOOD"
 BAD=$(mktemp)
 printf '#!/usr/bin/env bash\ncat > /dev/null\necho not-json\n' > "$BAD" && chmod +x "$BAD"
 
-CODEX_BIN="$GOOD" CLAUDE_BIN=/bin/false "$SCRIPTS_DIR/review.sh" || { echo "FAIL: review with codex"; exit 1; }
+VERIFY_ALLOW_DANGEROUS=1 CODEX_BIN="$GOOD" CLAUDE_BIN=/bin/false "$SCRIPTS_DIR/review.sh" || { echo "FAIL: review with codex"; exit 1; }
 [ "$(jq -r '.reviewer' .verify/review.json)" = "codex" ] || { echo "FAIL: reviewer should be codex"; exit 1; }
 
-CODEX_BIN="$BAD" CLAUDE_BIN="$GOOD" "$SCRIPTS_DIR/review.sh" || { echo "FAIL: fallback"; exit 1; }
+VERIFY_ALLOW_DANGEROUS=1 CODEX_BIN="$BAD" CLAUDE_BIN="$GOOD" "$SCRIPTS_DIR/review.sh" || { echo "FAIL: fallback"; exit 1; }
 [ "$(jq -r '.reviewer' .verify/review.json)" = "fresh-claude" ] || { echo "FAIL: should fall back to fresh-claude"; exit 1; }
 
-CODEX_BIN="$BAD" CLAUDE_BIN="$BAD" "$SCRIPTS_DIR/review.sh" || { echo "FAIL: unavailable path must not crash"; exit 1; }
+VERIFY_ALLOW_DANGEROUS=1 CODEX_BIN="$BAD" CLAUDE_BIN="$BAD" "$SCRIPTS_DIR/review.sh" || { echo "FAIL: unavailable path must not crash"; exit 1; }
 [ "$(jq -r '.reviewer' .verify/review.json)" = "unavailable" ] || { echo "FAIL: reviewer should be unavailable"; exit 1; }
+# Gate: refuses without VERIFY_ALLOW_DANGEROUS=1
+CODEX_BIN="$GOOD" CLAUDE_BIN="$GOOD" "$SCRIPTS_DIR/review.sh" 2>/dev/null && { echo "FAIL: must gate on VERIFY_ALLOW_DANGEROUS"; exit 1; }
 echo "PASS: review tests"

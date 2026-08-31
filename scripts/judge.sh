@@ -63,7 +63,10 @@ done
 
 printf "\nSKIPPED FROM PLAN: %s\n" "$SKIPPED" >> "$PROMPT_FILE"
 
-REPORT_JSON=$("$CLAUDE" -p \
+if command -v gtimeout >/dev/null 2>&1; then TIMEOUT_CMD="gtimeout"
+elif command -v timeout >/dev/null 2>&1; then TIMEOUT_CMD="timeout"
+else echo "✗ timeout command not found. Install: brew install coreutils"; exit 1; fi
+REPORT_JSON=$("$TIMEOUT_CMD" 900 "$CLAUDE" -p \
   --model opus \
   --dangerously-skip-permissions \
   < "$PROMPT_FILE" 2>/dev/null)
@@ -77,16 +80,23 @@ if ! echo "$REPORT_JSON" | jq . > /dev/null 2>&1; then
   exit 1
 fi
 
-RECONCILED=$(jq --slurpfile plan .verify/plan.json '
+# Taint is enforced mechanically, never left to the judge's judgment.
+TAINT_MAP="{}"
+[ -f .verify/precheck.json ] && TAINT_MAP=$(jq -c '.tainted // {}' .verify/precheck.json 2>/dev/null || echo "{}")
+RECONCILED=$(jq --slurpfile plan .verify/plan.json --argjson taint "$TAINT_MAP" '
   . as $rep |
   ($plan[0].criteria | map(.id)) as $ids |
   .criteria = [ $ids[] as $id |
-    ([$rep.criteria[]? | select(.ac_id == $id
+    (([$rep.criteria[]? | select(.ac_id == $id
        and (.status | IN("pass","fail","not_proven","could_not_verify")))][0]) //
     {ac_id: $id, status: "not_proven", proof_seen: false,
      did: "", observed: "",
      reasoning: "the judge returned no result for this criterion",
-     evidence: ""} ] |
+     evidence: ""}) as $entry |
+    (if $taint[$id] then
+       $entry + {status: "could_not_verify", proof_seen: false,
+                 reasoning: ("dependent part " + $taint[$id] + " failed its pipeline check")}
+     else $entry end) ] |
   # Verdict and summary are ALWAYS recomputed; the judge cannot shrink or
   # inflate the run.
   ([.criteria[] | select(.status=="pass" and .proof_seen==true)] | length) as $proven |

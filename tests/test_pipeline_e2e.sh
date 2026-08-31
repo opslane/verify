@@ -104,6 +104,6 @@ if [ "$SEED_RUN_CODE" -eq 0 ]; then
   echo "FAIL: failing seed script should abort"
   exit 1
 fi
-[ "$(wc -l < judge-calls.log)" = "1" ] || { echo "FAIL: judge ran after seed failure"; exit 1; }
+[ "$(wc -l < judge-calls.log | tr -d ' ')" = "1" ] || { echo "FAIL: judge ran after seed failure"; exit 1; }
 
 echo "PASS: pipeline e2e tests"

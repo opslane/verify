@@ -17,13 +17,18 @@ fi
 BASE_REF="${1:?usage: compare.sh <base-ref> <ac-id>...}"; shift
 [ "$#" -gt 0 ] || { echo "✗ name at least one AC id"; exit 1; }
 [ -f .verify/report.json ] || { echo "✗ run /verify first; compare needs candidate results"; exit 1; }
+if [ "$(jq -r '.mode' .verify/setup.json 2>/dev/null)" = "external" ]; then
+  echo "✗ external mode reuses the already-running stack, which runs the CANDIDATE code —"
+  echo "  a base comparison against it would compare the candidate with itself. Refusing."
+  exit 1
+fi
 for id in "$@"; do
   [[ "$id" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || { echo "✗ invalid AC id: $id"; exit 1; }
   jq -e --arg id "$id" '.criteria[] | select(.id==$id)' .verify/plan.json > /dev/null \
     || { echo "✗ unknown AC id: $id"; exit 1; }
 done
 
-BASE_REPORT=$(mktemp /tmp/verify-base-report-XXXXXX.json)
+BASE_REPORT=$(mktemp "${TMPDIR:-/tmp}/verify-base-report-XXXXXX")
 WT=$(mktemp -d /tmp/verify-base-wt-XXXXXX)
 rmdir "$WT"   # git worktree add wants to create it
 WT_CREATED=0
@@ -53,10 +58,17 @@ run_base() { # $1 = output report path; remaining args = AC ids
     mkdir -p .verify
     cp "$CAND_ROOT/.verify/setup.json" .verify/setup.json
     cp "$CAND_ROOT/.verify/plan.json"  .verify/plan.json
+    [ -f "$CAND_ROOT/.verify/auth.json" ] && cp "$CAND_ROOT/.verify/auth.json" .verify/auth.json
+    [ -f "$CAND_ROOT/.verify/seed.sh" ]   && cp "$CAND_ROOT/.verify/seed.sh" .verify/seed.sh
     export VERIFY_ENV_FILE="$CAND_ENV"
     bash "$SCRIPT_DIR/env.sh" up
     trap 'bash "$SCRIPT_DIR/env.sh" down || true' EXIT
     bash "$SCRIPT_DIR/env.sh" seed
+    if [ -f .verify/seed.sh ]; then
+      BASE_MARKER=$(jq -r '.marker' .verify/run-env.json)
+      bash .verify/seed.sh "$BASE_MARKER"
+    fi
+    bash "$SCRIPT_DIR/precheck.sh"
     for id in "$@"; do bash "$SCRIPT_DIR/agent.sh" "$id" "${AGENT_TIMEOUT:-240}"; done
     bash "$SCRIPT_DIR/judge.sh"
     cp .verify/report.json "$out"

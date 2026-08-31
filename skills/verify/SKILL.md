@@ -51,8 +51,8 @@ already dirty before Verify began:
 
 ```bash
 mkdir -p .verify
-git diff > .verify/pre-run.diff
-git ls-files -o --exclude-standard -z | xargs -0 -I{} shasum {} 2>/dev/null | awk '$2 !~ /^\.verify\//' > .verify/pre-run-untracked.txt || true
+git diff HEAD > .verify/pre-run.diff   # HEAD: catches staged AND unstaged changes
+git ls-files -o --exclude-standard | grep -v '^\.verify/' | while IFS= read -r f; do printf '%s %s\n' "$(git hash-object "$f" 2>/dev/null || echo missing)" "$f"; done > .verify/pre-run-untracked.txt
 ```
 
 ## Turn 3: Interpret the spec
@@ -169,8 +169,8 @@ boot, before any seed can fail:
   VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/orchestrate.sh
   VERIFY_ALLOW_DANGEROUS=1 bash ~/.claude/tools/verify/judge.sh
 
-  git diff > .verify/post-run.diff
-  git ls-files -o --exclude-standard -z | xargs -0 -I{} shasum {} 2>/dev/null | awk '$2 !~ /^\.verify\//' > .verify/post-run-untracked.txt || true
+  git diff HEAD > .verify/post-run.diff
+  git ls-files -o --exclude-standard | grep -v '^\.verify/' | while IFS= read -r f; do printf '%s %s\n' "$(git hash-object "$f" 2>/dev/null || echo missing)" "$f"; done > .verify/post-run-untracked.txt
   VERIFY_RUN_TAINTED=0
   if ! diff -q .verify/pre-run.diff .verify/post-run.diff > /dev/null \
      || ! diff -q .verify/pre-run-untracked.txt .verify/post-run-untracked.txt > /dev/null; then
@@ -204,7 +204,7 @@ for candidate in 8123 8124 8125; do
   if ! lsof -iTCP:"$candidate" -sTCP:LISTEN >/dev/null 2>&1; then PORT="$candidate"; break; fi
 done
 [ -n "$PORT" ] || { echo "✗ report ports 8123-8125 are busy"; exit 1; }
-python3 -m http.server "$PORT" --directory "$RUN_DIR" > /dev/null 2>&1 &
+python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$RUN_DIR" > /dev/null 2>&1 &
 echo $! > .verify/server.pid
 echo "Report: http://localhost:$PORT/report.html"
 ```

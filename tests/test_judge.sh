@@ -41,4 +41,10 @@ VERIFY_ALLOW_DANGEROUS=1 CLAUDE_BIN="$MOCK_CLAUDE" "$SCRIPT_DIR/judge.sh" 2>/dev
 [ "$(jq -r '.summary' .verify/report.json)" = "1/4 proven" ] || { echo "FAIL: summary must be recomputed"; exit 1; }
 grep -q 'RUN MARKER: verify-r1' .verify/judge-prompt.txt || { echo "FAIL: judge prompt lacks marker"; exit 1; }
 
+# Mechanical taint override: judge says pass for a tainted AC; reconciliation must refuse
+echo '{"parts":{"sink":"down"},"tainted":{"ac1":"sink"},"unchecked":[]}' > .verify/precheck.json
+VERIFY_ALLOW_DANGEROUS=1 CLAUDE_BIN="$MOCK_CLAUDE" "$SCRIPT_DIR/judge.sh" 2>/dev/null
+[ "$(jq -r '.criteria[] | select(.ac_id=="ac1") | .status' .verify/report.json)" = "could_not_verify" ] \
+  || { echo "FAIL: tainted AC must be could_not_verify even when the judge says pass"; exit 1; }
+rm -f .verify/precheck.json
 echo "PASS: judge tests"

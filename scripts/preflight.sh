@@ -31,7 +31,8 @@ if [ -z "$VERIFY_BASE_URL" ] && [ -f "$CONFIG_FILE" ]; then
 fi
 if [ -f .verify/setup.json ]; then
   SETUP_BASE=$(jq -r '.base_url // empty' .verify/setup.json 2>/dev/null || echo "")
-  [ -n "$SETUP_BASE" ] && VERIFY_BASE_URL="$SETUP_BASE"
+  # An explicitly exported VERIFY_BASE_URL always wins over the contract.
+  [ -n "$SETUP_BASE" ] && [ -z "$VERIFY_BASE_URL" ] && VERIFY_BASE_URL="$SETUP_BASE"
 fi
 VERIFY_BASE_URL="${VERIFY_BASE_URL:-http://localhost:3000}"
 VERIFY_AUTH_CHECK_URL="${VERIFY_AUTH_CHECK_URL:-$(jq -r '.authCheckUrl // "/api/me"' "$CONFIG_FILE" 2>/dev/null || echo "/api/me")}"
@@ -40,7 +41,7 @@ export VERIFY_BASE_URL VERIFY_AUTH_CHECK_URL VERIFY_SPEC_PATH
 
 # 1. Dev server health check
 if [ "$SKIP_SERVER" = false ]; then
-  PORT=$(echo "$VERIFY_BASE_URL" | grep -oE ':[0-9]+' | tr -d ':')
+  PORT=$(echo "$VERIFY_BASE_URL" | grep -oE ':[0-9]+' | tr -d ':' || true)
   echo "→ Checking dev server at $VERIFY_BASE_URL..."
   if ! curl -sf --max-time 5 "$VERIFY_BASE_URL" > /dev/null 2>&1; then
     # Surface which process is occupying the port if any
