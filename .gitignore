@@ -17,3 +17,16 @@ pipeline/spike-*/
 server/
 pipeline/BASELINE-*.txt
 pipeline/check-baseline.sh
+.verify/setup.json
+.verify/run-env.json
+.verify/current-run
+.verify/compare.json
+.verify/server.pid
+.verify/seed.sh
+.verify/base-worktree-path
+.verify/pre-run.diff
+.verify/post-run.diff
+.verify/pre-run-untracked.txt
+.verify/post-run-untracked.txt
+.verify/boot.log
+.verify/runs/

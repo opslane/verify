@@ -37,6 +37,13 @@ VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
 yourself only when running from a development checkout. Never hardcode a path to someone's
 home directory; if neither variable resolves, stop and say so rather than guessing.
 
+The environment helpers are bash scripts resolved the same way:
+
+```bash
+VERIFY_SCRIPTS="${VERIFY_SCRIPTS:-$CLAUDE_PLUGIN_ROOT/scripts}"
+bash "$VERIFY_SCRIPTS/<name>.sh" [arguments]
+```
+
 **Once per machine, install the engine's dependencies.** The plugin ships TypeScript source
 and no `node_modules`, so the first call fails without this. It is a lockfile-pinned install
 inside the plugin's own directory, it touches nothing in the target repository, and it is
@@ -60,6 +67,24 @@ platform.
 The skill runs in the target repository, not the plugin repository. Resolve every target-repository path with `pwd -P` and pass absolute paths for `--repo`, `--dir`, `--criteria`, `--results`, and `--claims`.
 
 ## Half one: criteria, then stop
+
+### 0. The setup contract
+
+`.verify/setup.json` records how this repo boots, seeds, and reports health
+(written once by `/verify-setup` from sniffed candidates). If it is missing,
+ask once: "No setup contract found. Run `/verify-setup` (recommended), or
+continue in plain-command mode without a managed stack?" On plain-command
+consent, write a minimal contract inline:
+
+```json
+{"mode": "none", "compose_file": null, "boot": "", "teardown": "", "seed": [],
+ "seed_data_files": [], "health_url": "", "base_url": "", "env_file": "",
+ "observe": {}, "probes": {}}
+```
+
+Never silently proceed without one. Verify never asks for or stores sensitive
+credentials; the contract may at most name one of the repo's own local `.env`
+files.
 
 ### 1. Find the plan
 
@@ -131,6 +156,15 @@ printf '%s\n' "$RUN_ID" > "$TARGET_REPO/.verify/current-run"
 
 The empty `tests/` directory is intentional and must exist even when no test is generated.
 
+Snapshot the working tree now — before any model-driven step (including the
+second-opinion reviewer) runs with permissions — so the run can later prove
+nothing outside `.verify/` changed (staged changes included):
+
+```bash
+git diff HEAD > .verify/pre-run.diff
+git ls-files -o --exclude-standard | grep -v '^\.verify/' | while IFS= read -r f; do printf '%s %s\n' "$(git hash-object "$f" 2>/dev/null || echo missing)" "$f"; done > .verify/pre-run-untracked.txt
+```
+
 ### 3. List changed behavior files
 
 Choose the branch's merge base. Prefer the PR base or upstream merge base; do not guess a different branch when repository metadata supplies one.
@@ -162,6 +196,15 @@ Translate the plan into concrete, observable criteria. Each criterion has:
   base commit to do with it.
 - `witness`: `"success"` or `"refusal"`. Does this criterion show something working, or
   show something correctly turned away?
+- `dependsOn`: the parts of the system the criterion drives or observes, from exactly
+  `"api"`, `"db"`, `"worker"`, `"browser"`, `"sink"`, `"storage"`. Half two probes each
+  named part once before judging; a down part marks only its dependents "could not run".
+- `proof`: how a reader will know the check actually ran. One of
+  `{"kind": "marker-in-data", "detail": "..."}` (the run marker woven into created data —
+  the strongest form), `{"kind": "marked-request-rejected", "detail": "..."}` (the
+  rejection paired with the marked request), or `{"kind": "live-read", "detail": "..."}`
+  (a value read fresh during the run, not a stale capture). A criterion you cannot name
+  a proof for is defective: move it to `skipped` with the reason "no way to prove it ran".
 
 **`intent` is what the criterion is for. `baseline` is a separate claim about the base
 commit.** Keeping them apart matters, because the obvious shortcut of defining `changes` as
@@ -292,7 +335,42 @@ VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
   --criteria "$RUN_DIR/criteria.json") > "$RUN_DIR/criteria.md"
 ```
 
-Print `criteria.md`, including invented specifics and uncovered changed files. Ask the user to edit it, identify corrections, or say `go`.
+### 6. Seed script and second opinion, then stop
+
+If any criterion needs volume or precondition data (thresholds, grouping, "with 6
+users..."), write a literal `$RUN_DIR/seed.sh` now: real commands (curl, CLI) that
+create that data through the application's front door, taking the run marker as `$1`
+and weaving it into every entity. No LLM runs at seed time; this script IS the seed,
+and the user reviews it. An entry that genuinely needs browser interaction is flagged
+"needs an agent — approve separately?".
+
+Then get the second opinion — a reviewer that did not write these criteria:
+
+```bash
+VERIFY_SCRIPTS="${VERIFY_SCRIPTS:-$CLAUDE_PLUGIN_ROOT/scripts}"
+VERIFY_ALLOW_DANGEROUS=1 bash "$VERIFY_SCRIPTS/review.sh"
+```
+
+It uses Codex when installed (a different vendor, different blind spots), else a fresh
+`claude -p` that sees only the spec and the criteria, and writes
+`$RUN_DIR/review.json` (`keep`/`why`/`codify` per criterion plus a `missing` list).
+Its output is advice; the user is the tiebreaker. If the reviewer is `unavailable`,
+say so verbatim: the criteria were reviewed only by the model that wrote them.
+
+Also compute which relied-on parts have no probe, so the user sees it before
+approving:
+
+```bash
+jq -r --slurpfile s .verify/setup.json '
+  [.criteria[].dependsOn[]?] | unique
+  | map(select(IN("worker","sink","storage") and (($s[0].probes[.] // "") == "")))
+  | if length > 0 then "Unprobed parts this run relies on: " + join(", ") else empty end' \
+  "$RUN_DIR/criteria.json"
+```
+
+Print `criteria.md`, the seed script (verbatim), the reviewer's table and missing
+list, and the unprobed-parts line, including invented specifics and uncovered
+changed files. Ask the user to edit, correct, or say `go`.
 
 **Stop here. Run no verification command and perform no system mutation until the user approves the criteria.**
 
@@ -308,6 +386,53 @@ test -f "$RUN_DIR/criteria.json" && test -f "$RUN_DIR/criteria.md"
 ```
 
 If the user requested changes to the criteria instead of approving them, update and re-render half one, then stop again.
+
+### 0. Boot, seed, pipeline check
+
+Boot a throwaway environment and arm teardown before anything else can fail:
+
+```bash
+VERIFY_SCRIPTS="${VERIFY_SCRIPTS:-$CLAUDE_PLUGIN_ROOT/scripts}"
+bash "$VERIFY_SCRIPTS/env.sh" up
+```
+
+From this point every exit path must run `bash "$VERIFY_SCRIPTS/env.sh" down` —
+run the rest of half two inside a subshell opening with
+`trap 'bash "$VERIFY_SCRIPTS/env.sh" down' EXIT`, or tear down explicitly on
+every failure branch. Boot and seed are separate verbs precisely so a seed
+failure cannot leak the stack. `up` writes `.verify/run-env.json` with this
+run's `marker` and rotates old runs (newest 5 kept).
+
+Seed, in order:
+
+```bash
+bash "$VERIFY_SCRIPTS/env.sh" seed          # repo seed scripts + user data files
+```
+
+If the approved `$RUN_DIR/seed.sh` exists, run it with the marker — a failure
+aborts before judging, because judging against a half-seeded system is how
+wrong verdicts happen:
+
+```bash
+MARKER=$(jq -r '.marker' .verify/run-env.json)
+VERIFY_BASE_URL="$(jq -r '.base_url // empty' .verify/setup.json)" \
+  bash "$RUN_DIR/seed.sh" "$MARKER" 2>&1 | tee "$RUN_DIR/seed.log"
+```
+
+Then prove the pipes work before judging anything:
+
+```bash
+bash "$VERIFY_SCRIPTS/precheck.sh"
+```
+
+Every part named by any criterion's `dependsOn` gets one probe (a marker
+round-trip for the database; any HTTP response for the API; configured
+commands for worker/sink/storage). A down part taints only its dependent
+criteria: do NOT drive those — record each as `could-not-run` with the
+pre-check's evidence (`$RUN_DIR/prechecks/<part>.log`). A part with no probe
+reports `unknown` and never taints; a FAIL on a criterion relying on an
+unknown part gets "the failure may be environmental: <part> was never
+health-checked" appended to its observation.
 
 ### 1. Prepare recording
 
@@ -338,6 +463,14 @@ If recording or rendering fails, keep running the criteria and add the failure t
 Choose the cheapest way to *actually check* each criterion, using the repository's own
 commands. Cheapest sufficient proof means the least setup that still observes the
 behaviour. It does not mean skipping a criterion because driving it is inconvenient.
+
+**Weave the run marker into everything you create.** `.verify/run-env.json`
+holds this run's `marker`. Every entity a criterion creates carries it (form
+fields, payloads, names). Each criterion's declared `proof` says which
+artifact must show the check ran: capture that artifact verbatim in the
+evidence — the marker-bearing row, the rejection paired with the marked
+request, or the fresh live read. Status codes alone and absence-of-error are
+never evidence.
 
 - API: call the real route, authenticate through the public path, and observe the side effect rather than status alone.
 - Datastore: inspect affected rows before and after; for migrations, test the direction actually claimed.
@@ -463,17 +596,40 @@ Record exactly one result for every approved criterion:
 {
   "id": "AC1",
   "outcome": "pass",
-  "observed": "50 rows (was HTTP 500)"
+  "proofSeen": true,
+  "observed": "50 rows containing marker verify-<run> (was HTTP 500)"
 }
 ```
 
-`outcome` is `pass`, `fail`, or `could-not-run`. `observed` describes only what the command showed.
+`outcome` is `pass`, `fail`, or `could-not-run`. `observed` describes only what
+the command showed. `proofSeen` is true only when the criterion's declared
+proof is quotable from the evidence; a pass without it renders "not proven"
+and never counts toward the headline. Never set it optimistically.
 
 ### 3. Preserve generated tests
 
 If a useful regression test is generated, write it only to `.verify/runs/<id>/tests/`. Never put it in the source tree during verification. Preserve an empty `tests/` directory when no test is generated.
 
 ### 4. Render the report
+
+Before rendering anything, verify the clean-repo promise — the violation flag
+must exist BEFORE the report renders, so no already-served PASS ever survives
+a detected mutation:
+
+```bash
+git diff HEAD > .verify/post-run.diff
+git ls-files -o --exclude-standard | grep -v '^\.verify/' | while IFS= read -r f; do printf '%s %s\n' "$(git hash-object "$f" 2>/dev/null || echo missing)" "$f"; done > .verify/post-run-untracked.txt
+if ! diff -q .verify/pre-run.diff .verify/post-run.diff > /dev/null \
+   || ! diff -q .verify/pre-run-untracked.txt .verify/post-run-untracked.txt > /dev/null; then
+  touch "$RUN_DIR/clean-repo-violation"
+  echo "✗ verify modified your repo during the run — this is a verify bug."
+fi
+```
+
+The flag makes the report headline read "CANNOT TRUST THIS RUN" and the exit
+status non-zero; the report still renders because the diff is exactly what the
+user needs to file the bug.
+
 
 Write `.verify/runs/<id>/results.json`:
 
@@ -495,9 +651,86 @@ RUN_ID="$(cat "$TARGET_REPO/.verify/current-run")"
 RUN_DIR="$TARGET_REPO/.verify/runs/$RUN_ID"
 VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
 (cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts report \
-  --results "$RUN_DIR/results.json") > "$RUN_DIR/report.md"
+  --results "$RUN_DIR/results.json" --criteria "$RUN_DIR/criteria.json" \
+  --precheck "$RUN_DIR/precheck.json") > "$RUN_DIR/report.md"
 ```
+
+The `--precheck` flag enforces taint mechanically: a tainted criterion renders
+`could-not-run` no matter what was recorded for it. The report opens with the
+headline — checks that did not run never disappear from the count, and `PASS`
+appears only when every criterion is proven (pass WITH its declared proof
+observed).
+
+Then render and serve the visual page:
+
+```bash
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts html \
+  --criteria "$RUN_DIR/criteria.json" --results "$RUN_DIR/results.json" \
+  --precheck "$RUN_DIR/precheck.json" --review "$RUN_DIR/review.json" \
+  --run-dir "$RUN_DIR" --run-id "$RUN_ID")
+```
+
+Serve it so the user opens a browser, not a file path — kill the previous
+run's server first, fall back through ports, and confirm the new server
+actually answers before printing the URL:
+
+```bash
+[ -f .verify/server.pid ] && kill "$(cat .verify/server.pid)" 2>/dev/null || true
+for PORT in 8123 8124 8125; do
+  python3 -m http.server "$PORT" --bind 127.0.0.1 --directory "$RUN_DIR" > /dev/null 2>&1 &
+  echo $! > .verify/server.pid
+  sleep 1
+  curl -sf "http://127.0.0.1:$PORT/report.html" -o /dev/null && { echo "Report: http://127.0.0.1:$PORT/report.html"; break; }
+  kill "$(cat .verify/server.pid)" 2>/dev/null || true
+done
+```
+
+(On a remote box, forward the port or bind explicitly if the user asks.)
 
 Print `report.md` and the artifact paths. When recording succeeded, confirm `run.cast` and `run.gif` exist and that the cast contains real commands and output. Confirm `criteria.json`, `criteria.md`, `claims.json`, `coverage.json`, `results.json`, `report.md`, and `tests/` exist. Confirm the target repository has no verification changes outside `.verify/`.
 
 For each generated test, print its artifact path and the source-tree path where it would belong. Ask separately whether the user wants that test checked in. Do not move or commit any test without that explicit choice.
+
+## Compare against base
+
+When a criterion fails and the user questions the verdict, offer the manual
+comparison — it settles "the change broke this" vs "the harness or spec is
+wrong" by running the OLD code through the identical checks:
+
+```bash
+VERIFY_SCRIPTS="${VERIFY_SCRIPTS:-$CLAUDE_PLUGIN_ROOT/scripts}"
+bash "$VERIFY_SCRIPTS/compare.sh" up <merge-base>
+# drive the chosen criteria in the printed worktree exactly as on the candidate
+bash "$VERIFY_SCRIPTS/compare.sh" down
+```
+
+The base stack is separately seeded (setup contract, auth state, and the
+reviewed seed script are carried over) and never reuses the candidate's
+environment. Read the results side by side: fails on base too → not this
+change's fault; fails only on the candidate → likely a regression; passes on
+base too for an `intent: changes` criterion → it would have passed before the
+change and proves nothing; base could not run → say exactly that, never
+reinterpret. Never run this automatically.
+
+## Codify: keep the checks that earned it
+
+After the report renders (never before — "never fix what you judge" survives
+because a regression test for a delivered verdict is not tampering):
+
+1. Read `$RUN_DIR/review.json`. Criteria the reviewer marked `codify: true`
+   are candidates; a criterion that caught a real bug this run is an automatic
+   candidate.
+2. Inspect the repo's existing e2e suite first (find the test directory, grep
+   for the feature's route or component). Name overlaps; never suggest a test
+   the suite already has.
+3. Ask per criterion: "Keep this as a permanent test? (y/n)". On yes, write
+   the test in the repo's own framework and conventions as an uncommitted
+   file, run it once (if it cannot run here, say so plainly), and report
+   exactly which files were created. Never commit. On silence or n, the
+   suggestion stays in the run artifacts only.
+
+## One run at a time
+
+Cross-stage state (`.verify/current-run`, `run-env.json`, the setup contract)
+is repo-global: run one verification per repository at a time. A second
+concurrent run would repoint the shared state mid-run.

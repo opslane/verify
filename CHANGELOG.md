@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-08-31
+
+### Added
+- **Setup contract.** `/verify-setup` sniffs how the repo boots, seeds, and reports
+  health (compose files, npm scripts, seed scripts, env files), confirms the choices
+  with pre-filled questions, and writes `.verify/setup.json`. Verify never asks for or
+  stores credentials; the ceiling is naming one of the repo's own local `.env` files.
+- **Throwaway environment per run.** `scripts/env.sh` boots a fresh stack under a
+  unique compose project (or a process group with a required health URL), seeds as a
+  separate verb so a seed failure cannot leak the stack, and tears down with volumes.
+  Runs rotate: the newest 5 are kept.
+- **Pipeline checks with mechanical taint.** Every criterion declares `dependsOn`
+  (api, db, worker, browser, sink, storage). `scripts/precheck.sh` probes each named
+  part once before judging — a marker round-trip for the database, any HTTP response
+  for the API — and a down part marks only its dependent criteria could-not-run. The
+  override is enforced in the engine (`report --precheck`), not in prose.
+- **Proof-of-run.** Every criterion declares `proof`: the artifact that shows the
+  check actually ran (marker in created data, marked rejection, or a live read).
+  Results carry `proofSeen`; a pass without its proof renders "not proven" and never
+  counts. The report gains a headline where PASS appears only when every criterion is
+  proven, and checks that did not run never disappear from the count.
+- **Reviewed seed script.** Volume preconditions become a literal `seed.sh` shown at
+  approval and executed with the run marker; no model runs at seed time.
+- **Second opinion.** `scripts/review.sh` has a reviewer that did not write the
+  criteria attack them (Codex when installed, else a fresh claude call seeing only the
+  spec and the criteria), with validated output and a loud "unavailable" fallback.
+- **Compare against base.** `scripts/compare.sh up <ref>` boots the base commit in
+  its own separately seeded worktree stack (setup contract, auth state, and seed
+  script carried over; external mode refused) so a disputed fail can be settled by
+  observation instead of argument.
+- **Visual report.** The `html` engine verb renders `report.html` per run — escaped
+  throughout, relative evidence that plays in place, plain-English labels, a
+  Not-checked section that always renders — and the skill serves it on
+  127.0.0.1 with a liveness check before printing the URL.
+- **Clean-repo check.** The run snapshots tracked diffs and untracked hashes before
+  and after; any non-`.verify/` change poisons the headline ("CANNOT TRUST THIS
+  RUN") and the exit status.
+- **Codify.** After the report, criteria the reviewer marked worth keeping are
+  offered as permanent tests in the repo's own conventions — written uncommitted,
+  only on explicit per-test consent, after checking the existing suite for overlap.
+
+### Changed
+- Criteria validation rejects entries missing `dependsOn` or a usable `proof`.
+- The text report opens with the headline and a "Proven" axis.
+
+
 ## [2.5.0] - 2026-08-06
 
 ### Added
