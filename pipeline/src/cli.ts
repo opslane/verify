@@ -13,6 +13,10 @@ const { positionals, values } = parseArgs({
     repo: { type: "string" },
     base: { type: "string" },
     claims: { type: "string" },
+    precheck: { type: "string" },
+    review: { type: "string" },
+    "run-dir": { type: "string" },
+    "run-id": { type: "string" },
   },
 });
 
@@ -40,14 +44,81 @@ if (command === "criteria") {
   console.log(renderCriteria(input.criteria, input.uncoveredFiles ?? []));
 
 } else if (command === "report") {
-  const { renderReport } = await import("./lib/verdict.js");
+  const { renderReport, applyTaint } = await import("./lib/verdict.js");
   if (!values.results) {
     console.error("report requires --results <path to json>");
     process.exit(1);
   }
 
   const input = JSON.parse(readFileSync(values.results, "utf8"));
-  console.log(renderReport(input.results, input.coverage, input.notChecked ?? []));
+  let results = input.results;
+  // Taint is enforced here, mechanically — never left to whoever wrote results.
+  if (values.precheck) {
+    const precheck = JSON.parse(readFileSync(values.precheck, "utf8"));
+    results = applyTaint(results, precheck);
+  }
+  console.log(renderReport(results, input.coverage, input.notChecked ?? []));
+
+} else if (command === "html") {
+  const { renderHtml } = await import("./lib/html.js");
+  const { applyTaint } = await import("./lib/verdict.js");
+  const { validateCriteria } = await import("./lib/criteria.js");
+  const { readdirSync, existsSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+
+  if (!values.criteria || !values.results || !values["run-dir"]) {
+    console.error("html requires --criteria <json> --results <json> --run-dir <dir>");
+    process.exit(1);
+  }
+  const runDir = values["run-dir"];
+  const criteriaInput = JSON.parse(readFileSync(values.criteria, "utf8"));
+  const problems = validateCriteria(criteriaInput.criteria);
+  if (problems.length > 0) {
+    console.error("criteria.json is not valid:");
+    for (const problem of problems) console.error(`  ${problem}`);
+    process.exit(1);
+  }
+  const resultsInput = JSON.parse(readFileSync(values.results, "utf8"));
+  let results = resultsInput.results;
+  let precheck;
+  if (values.precheck && existsSync(values.precheck)) {
+    precheck = JSON.parse(readFileSync(values.precheck, "utf8"));
+    results = applyTaint(results, precheck);
+  }
+  let review;
+  if (values.review && existsSync(values.review)) {
+    review = JSON.parse(readFileSync(values.review, "utf8"));
+  }
+
+  // Relative evidence assets: whatever sits under <runDir>/evidence/<id>/.
+  const assets: Record<string, { images: string[]; videos: string[] }> = {};
+  for (const criterion of criteriaInput.criteria) {
+    const dir = join(runDir, "evidence", criterion.id);
+    const images: string[] = [];
+    const videos: string[] = [];
+    if (existsSync(dir)) {
+      for (const name of readdirSync(dir).sort()) {
+        if (/\.(png|jpe?g)$/i.test(name)) images.push(`evidence/${criterion.id}/${name}`);
+        if (/\.(webm|mp4)$/i.test(name)) videos.push(`evidence/${criterion.id}/${name}`);
+      }
+    }
+    assets[criterion.id] = { images, videos };
+  }
+
+  const html = renderHtml({
+    runId: values["run-id"] ?? runDir,
+    criteria: criteriaInput.criteria,
+    results,
+    filesWithoutCriterion: resultsInput.coverage?.filesWithoutCriterion ?? 0,
+    precheck,
+    review,
+    violation: existsSync(join(runDir, "clean-repo-violation")),
+    assets,
+    notChecked: resultsInput.notChecked ?? [],
+  });
+  const out = join(runDir, "report.html");
+  writeFileSync(out, html);
+  console.log(out);
 
 } else if (command === "changed-files") {
   const { execFileSync } = await import("node:child_process");
@@ -114,7 +185,8 @@ if (command === "criteria") {
 } else {
   console.error("Usage:");
   console.error("  npx tsx src/cli.ts criteria      --criteria <json>");
-  console.error("  npx tsx src/cli.ts report        --results <json>");
+  console.error("  npx tsx src/cli.ts report        --results <json> [--precheck <json>]");
+  console.error("  npx tsx src/cli.ts html          --criteria <json> --results <json> --run-dir <dir> [--precheck <json>] [--review <json>] [--run-id <id>]");
   console.error("  npx tsx src/cli.ts changed-files --repo <dir> --base <rev> [--claims <json>]");
   process.exit(1);
 }

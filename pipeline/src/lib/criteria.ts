@@ -17,9 +17,24 @@ export type Baseline = 'fail' | 'pass' | 'not-applicable' | 'unknown';
 /** Does this criterion show something working, or something correctly turned away? */
 export type Witness = 'success' | 'refusal';
 
+/** The parts of the system a criterion drives or observes. Pre-checks probe each one. */
+export type Part = 'api' | 'db' | 'worker' | 'browser' | 'sink' | 'storage';
+
+/**
+ * How a reader will know the check actually ran. The marker proves the action
+ * happened, not that data was created: refusals carry the marker in the
+ * rejected request, read-only checks prove freshness instead.
+ */
+export type Proof =
+  | { kind: 'marker-in-data'; detail: string }
+  | { kind: 'marked-request-rejected'; detail: string }
+  | { kind: 'live-read'; detail: string };
+
 export const INTENTS: readonly Intent[] = ['changes', 'preserves'];
 export const BASELINES: readonly Baseline[] = ['fail', 'pass', 'not-applicable', 'unknown'];
 export const WITNESSES: readonly Witness[] = ['success', 'refusal'];
+export const PARTS: readonly Part[] = ['api', 'db', 'worker', 'browser', 'sink', 'storage'];
+export const PROOF_KINDS = ['marker-in-data', 'marked-request-rejected', 'live-read'] as const;
 
 export interface Criterion {
   id: string;
@@ -30,6 +45,10 @@ export interface Criterion {
   intent: Intent;
   baseline: Baseline;
   witness: Witness;
+  /** Which parts the pre-check stage must prove alive before this is judged. */
+  dependsOn: Part[];
+  /** What artifact will show this check actually ran. */
+  proof: Proof;
 }
 
 /**
@@ -84,6 +103,29 @@ export function validateCriteria(criteria: unknown): string[] {
           `${label} has ${field}=${JSON.stringify(c[field])}, expected one of ${allowed.join(', ')}`,
         );
       }
+    }
+
+    const deps = c.dependsOn;
+    if (!Array.isArray(deps) || deps.length === 0) {
+      problems.push(`${label} has no dependsOn — every criterion names the parts it relies on`);
+    } else {
+      for (const part of deps) {
+        if (!PARTS.includes(part as never)) {
+          problems.push(`${label} depends on ${JSON.stringify(part)}, expected one of ${PARTS.join(', ')}`);
+        }
+      }
+    }
+
+    const proof = c.proof as Record<string, unknown> | undefined;
+    if (
+      typeof proof !== 'object' || proof === null ||
+      !PROOF_KINDS.includes(proof.kind as never) ||
+      typeof proof.detail !== 'string' || proof.detail === ''
+    ) {
+      problems.push(
+        `${label} has no usable proof — a criterion you cannot prove ran is defective ` +
+        `(kind: ${PROOF_KINDS.join(' | ')}, plus a non-empty detail)`,
+      );
     }
   });
 
@@ -202,6 +244,13 @@ export function renderCriteria(criteria: Criterion[], uncoveredFiles: string[]):
   if (notes.length > 0) {
     sections.push(['Where these came from', ...notes].join('\n'));
   }
+
+  // Parts and proofs are what half two's pre-checks and the judge enforce, so
+  // the reader approves them alongside the behaviours.
+  const reliance = criteria.map(
+    (c) => `- ${c.id} relies on: ${c.dependsOn.join(', ')} — proof it ran: ${c.proof.kind} (${c.proof.detail})`,
+  );
+  sections.push(['Before judging, these parts get one pipeline check each', ...reliance].join('\n'));
 
   if (uncoveredFiles.length > 0) {
     sections.push(`No criterion covers: ${uncoveredFiles.join(', ')}`);

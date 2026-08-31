@@ -28,6 +28,8 @@ function criterion(overrides: Record<string, unknown> = {}) {
     intent: 'changes',
     baseline: 'fail',
     witness: 'success',
+    dependsOn: ['api'],
+    proof: { kind: 'marker-in-data', detail: 'the marker in the created row' },
     ...overrides,
   };
 }
@@ -80,7 +82,7 @@ describe('report', () => {
     writeFileSync(
       input,
       JSON.stringify({
-        results: [{ id: 'AC1', outcome: 'pass', observed: '50 rows' }],
+        results: [{ id: 'AC1', outcome: 'pass', proofSeen: true, observed: '50 rows' }],
         coverage: { filesWithoutCriterion: 1 },
         notChecked: [{ what: '/healthz', why: 'pod-internal' }],
       }),

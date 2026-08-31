@@ -5,6 +5,38 @@ export interface CriterionResult {
   outcome: Outcome;
   /** What was seen. Never a claim, always an observation. */
   observed: string;
+  /**
+   * Whether the criterion's declared proof-of-run was actually observed in the
+   * evidence. A pass without its proof does not count as proven: it renders
+   * "not proven" and blocks the PASS headline. Absent means false — proof is
+   * never assumed.
+   */
+  proofSeen?: boolean;
+}
+
+/** The pipeline-check output (precheck.sh). Taint is enforced here, mechanically. */
+export interface Precheck {
+  parts: Record<string, 'ok' | 'down' | 'unknown'>;
+  tainted: Record<string, string>;
+  unchecked: string[];
+}
+
+/**
+ * A criterion whose dependent part failed its pipeline check is could-not-run
+ * regardless of what the judge or driver reported — a broken pipe must never
+ * become a verdict in either direction.
+ */
+export function applyTaint(results: CriterionResult[], precheck: Precheck): CriterionResult[] {
+  return results.map((result) => {
+    const part = precheck.tainted[result.id];
+    if (!part) return result;
+    return {
+      ...result,
+      outcome: 'could-not-run',
+      proofSeen: false,
+      observed: `dependent part ${part} failed its pipeline check`,
+    };
+  });
 }
 
 export interface NotChecked {
@@ -20,6 +52,10 @@ export interface RunSummary {
   behaviour: { passed: number; failed: number };
   ran: { total: number; couldNotRun: number };
   covered: { criteria: number; filesWithoutCriterion: number };
+  /** pass AND proof seen. The only thing the headline may call proven. */
+  proven: number;
+  /** pass whose declared proof was not observed — it does not count. */
+  notProven: number;
 }
 
 const MARK: Record<Outcome, string> = {
@@ -29,9 +65,11 @@ const MARK: Record<Outcome, string> = {
 };
 
 export function summarise(results: CriterionResult[], coverage: Coverage): RunSummary {
+  const proven = results.filter((r) => r.outcome === 'pass' && r.proofSeen === true).length;
+  const passed = results.filter((r) => r.outcome === 'pass').length;
   return {
     behaviour: {
-      passed: results.filter((result) => result.outcome === 'pass').length,
+      passed,
       failed: results.filter((result) => result.outcome === 'fail').length,
     },
     ran: {
@@ -42,7 +80,29 @@ export function summarise(results: CriterionResult[], coverage: Coverage): RunSu
       criteria: results.length,
       filesWithoutCriterion: coverage.filesWithoutCriterion,
     },
+    proven,
+    notProven: passed - proven,
   };
+}
+
+/**
+ * The one-line verdict. Checks that did not run never disappear from the
+ * count, and PASS appears only when every criterion is proven. A clean-repo
+ * violation poisons the whole line: verdicts about a mutated tree are not
+ * verdicts about your code.
+ */
+export function headline(summary: RunSummary, opts: { violation?: boolean } = {}): string {
+  let line = `${summary.proven} of ${summary.ran.total} proven.`;
+  if (summary.ran.couldNotRun > 0) line += ` ${summary.ran.couldNotRun} couldn't run.`;
+  if (summary.behaviour.failed > 0) line += ` ${summary.behaviour.failed} failed.`;
+  if (summary.notProven > 0) line += ` ${summary.notProven} not proven.`;
+  if (opts.violation) {
+    return `CANNOT TRUST THIS RUN — verify modified the working tree. ${line}`;
+  }
+  if (summary.proven === summary.ran.total && summary.ran.total > 0) {
+    return `PASS — ${line}`;
+  }
+  return line;
 }
 
 export function renderReport(
@@ -53,6 +113,9 @@ export function renderReport(
   const summary = summarise(results, coverage);
 
   const resultLines = results.map((result) => {
+    if (result.outcome === 'pass' && result.proofSeen !== true) {
+      return `${result.id}  ~  not proven — the check may not have actually run; ${result.observed}`;
+    }
     const observed =
       result.outcome === 'could-not-run'
         ? `could not run, ${result.observed}`
@@ -61,6 +124,7 @@ export function renderReport(
   });
 
   const axes = [
+    `Proven     ${summary.proven} of ${summary.ran.total} (pass with its declared proof observed)`,
     `Behaviour  ${summary.behaviour.passed} passed, ${summary.behaviour.failed} failed`,
     `Ran        ${summary.ran.total} criteria, ${summary.ran.couldNotRun} could not run`,
     `Covered    ${summary.covered.criteria} criteria, ${summary.covered.filesWithoutCriterion} changed files have none`,
@@ -72,6 +136,8 @@ export function renderReport(
     : ['  (nothing)'];
 
   return [
+    headline(summary),
+    '',
     resultLines.join('\n'),
     '',
     axes.join('\n'),

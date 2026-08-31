@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { renderReport, summarise, type CriterionResult } from '../src/lib/verdict.js';
 
 const results: CriterionResult[] = [
-  { id: 'AC1', outcome: 'pass', observed: '50 rows (was HTTP 500)' },
-  { id: 'AC2', outcome: 'pass', observed: 'HTTP 401 before dispatch' },
+  { id: 'AC1', outcome: 'pass', proofSeen: true, observed: '50 rows (was HTTP 500)' },
+  { id: 'AC2', outcome: 'pass', proofSeen: true, observed: 'HTTP 401 before dispatch' },
   { id: 'AC3', outcome: 'could-not-run', observed: 'staging rejected the create' },
 ];
 
