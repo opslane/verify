@@ -23,6 +23,8 @@ export interface HtmlInput {
   violation: boolean;
   /** Relative asset paths per criterion id, e.g. evidence/AC1/screenshot-1.png */
   assets: Record<string, { images: string[]; videos: string[] }>;
+  /** Run-scope evidence at the run root: run.gif, run.cast. */
+  runAssets?: string[];
   notChecked: { what: string; why: string }[];
 }
 
@@ -111,6 +113,14 @@ img,video{max-width:100%;border:1px solid #eee;border-radius:6px;margin-top:.5re
       parts.push(`<video controls src="${esc(video)}"></video>`);
     }
     parts.push(`</div>`);
+  }
+
+  for (const asset of input.runAssets ?? []) {
+    if (asset.endsWith('.gif')) {
+      parts.push(`<h2>Terminal recording</h2><img alt="terminal recording" src="${esc(asset)}">`);
+    } else {
+      parts.push(`<p class="why">Terminal cast: <a href="${esc(asset)}">${esc(asset)}</a></p>`);
+    }
   }
 
   parts.push(`<h2>Not checked</h2>`);

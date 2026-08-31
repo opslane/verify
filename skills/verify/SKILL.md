@@ -156,6 +156,15 @@ printf '%s\n' "$RUN_ID" > "$TARGET_REPO/.verify/current-run"
 
 The empty `tests/` directory is intentional and must exist even when no test is generated.
 
+Snapshot the working tree now — before any model-driven step (including the
+second-opinion reviewer) runs with permissions — so the run can later prove
+nothing outside `.verify/` changed (staged changes included):
+
+```bash
+git diff HEAD > .verify/pre-run.diff
+git ls-files -o --exclude-standard | grep -v '^\.verify/' | while IFS= read -r f; do printf '%s %s\n' "$(git hash-object "$f" 2>/dev/null || echo missing)" "$f"; done > .verify/pre-run-untracked.txt
+```
+
 ### 3. List changed behavior files
 
 Choose the branch's merge base. Prefer the PR base or upstream merge base; do not guess a different branch when repository metadata supplies one.
@@ -378,17 +387,9 @@ test -f "$RUN_DIR/criteria.json" && test -f "$RUN_DIR/criteria.md"
 
 If the user requested changes to the criteria instead of approving them, update and re-render half one, then stop again.
 
-### 0. Snapshot, boot, seed, pipeline check
+### 0. Boot, seed, pipeline check
 
-First record what the working tree looks like, so the run can prove it changed
-nothing outside `.verify/` (staged changes included):
-
-```bash
-git diff HEAD > .verify/pre-run.diff
-git ls-files -o --exclude-standard | grep -v '^\.verify/' | while IFS= read -r f; do printf '%s %s\n' "$(git hash-object "$f" 2>/dev/null || echo missing)" "$f"; done > .verify/pre-run-untracked.txt
-```
-
-Then boot a throwaway environment and arm teardown before anything else can fail:
+Boot a throwaway environment and arm teardown before anything else can fail:
 
 ```bash
 VERIFY_SCRIPTS="${VERIFY_SCRIPTS:-$CLAUDE_PLUGIN_ROOT/scripts}"
@@ -611,6 +612,25 @@ If a useful regression test is generated, write it only to `.verify/runs/<id>/te
 
 ### 4. Render the report
 
+Before rendering anything, verify the clean-repo promise — the violation flag
+must exist BEFORE the report renders, so no already-served PASS ever survives
+a detected mutation:
+
+```bash
+git diff HEAD > .verify/post-run.diff
+git ls-files -o --exclude-standard | grep -v '^\.verify/' | while IFS= read -r f; do printf '%s %s\n' "$(git hash-object "$f" 2>/dev/null || echo missing)" "$f"; done > .verify/post-run-untracked.txt
+if ! diff -q .verify/pre-run.diff .verify/post-run.diff > /dev/null \
+   || ! diff -q .verify/pre-run-untracked.txt .verify/post-run-untracked.txt > /dev/null; then
+  touch "$RUN_DIR/clean-repo-violation"
+  echo "✗ verify modified your repo during the run — this is a verify bug."
+fi
+```
+
+The flag makes the report headline read "CANNOT TRUST THIS RUN" and the exit
+status non-zero; the report still renders because the diff is exactly what the
+user needs to file the bug.
+
+
 Write `.verify/runs/<id>/results.json`:
 
 ```json
@@ -631,7 +651,8 @@ RUN_ID="$(cat "$TARGET_REPO/.verify/current-run")"
 RUN_DIR="$TARGET_REPO/.verify/runs/$RUN_ID"
 VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
 (cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts report \
-  --results "$RUN_DIR/results.json" --precheck "$RUN_DIR/precheck.json") > "$RUN_DIR/report.md"
+  --results "$RUN_DIR/results.json" --criteria "$RUN_DIR/criteria.json" \
+  --precheck "$RUN_DIR/precheck.json") > "$RUN_DIR/report.md"
 ```
 
 The `--precheck` flag enforces taint mechanically: a tainted criterion renders
@@ -665,22 +686,6 @@ done
 ```
 
 (On a remote box, forward the port or bind explicitly if the user asks.)
-
-After judging, verify the clean-repo promise:
-
-```bash
-git diff HEAD > .verify/post-run.diff
-git ls-files -o --exclude-standard | grep -v '^\.verify/' | while IFS= read -r f; do printf '%s %s\n' "$(git hash-object "$f" 2>/dev/null || echo missing)" "$f"; done > .verify/post-run-untracked.txt
-if ! diff -q .verify/pre-run.diff .verify/post-run.diff > /dev/null \
-   || ! diff -q .verify/pre-run-untracked.txt .verify/post-run-untracked.txt > /dev/null; then
-  touch "$RUN_DIR/clean-repo-violation"
-  echo "✗ verify modified your repo during the run — this is a verify bug."
-fi
-```
-
-The flag makes the report headline read "CANNOT TRUST THIS RUN" and the exit
-status non-zero; the report still renders because the diff is exactly what the
-user needs to file the bug.
 
 Print `report.md` and the artifact paths. When recording succeeded, confirm `run.cast` and `run.gif` exist and that the cast contains real commands and output. Confirm `criteria.json`, `criteria.md`, `claims.json`, `coverage.json`, `results.json`, `report.md`, and `tests/` exist. Confirm the target repository has no verification changes outside `.verify/`.
 

@@ -11,7 +11,7 @@ done
 echo "$EXAMPLE" | jq -e '.probes | keys == ["sink","storage","worker"]' > /dev/null \
   || { echo "FAIL: probes must cover exactly worker/sink/storage"; exit 1; }
 grep -q "sniff.sh" "$SKILL" || { echo "FAIL: skill does not run the sniffer"; exit 1; }
-grep -qi "never.*credential" "$SKILL" || { echo "FAIL: skill missing the no-credentials rule"; exit 1; }
+grep -qi "never ask for or store passwords" "$SKILL" || { echo "FAIL: skill missing the no-credentials rule"; exit 1; }
 grep -q '"process"' "$SKILL" || { echo "FAIL: skill missing process mode"; exit 1; }
 grep -qi "health_url.*required\|required.*health_url" "$SKILL" || { echo "FAIL: process mode must require health_url"; exit 1; }
 echo "PASS: setup contract tests"

@@ -44,19 +44,31 @@ if (command === "criteria") {
   console.log(renderCriteria(input.criteria, input.uncoveredFiles ?? []));
 
 } else if (command === "report") {
-  const { renderReport, applyTaint } = await import("./lib/verdict.js");
-  if (!values.results) {
-    console.error("report requires --results <path to json>");
+  const { renderReport, applyTaint, reconcile } = await import("./lib/verdict.js");
+  const { existsSync } = await import("node:fs");
+  if (!values.results || !values.criteria) {
+    console.error("report requires --results <json> --criteria <json>");
     process.exit(1);
   }
 
   const input = JSON.parse(readFileSync(values.results, "utf8"));
-  let results = input.results;
-  // Taint is enforced here, mechanically — never left to whoever wrote results.
-  if (values.precheck) {
-    const precheck = JSON.parse(readFileSync(values.precheck, "utf8"));
-    results = applyTaint(results, precheck);
+  const criteriaInput = JSON.parse(readFileSync(values.criteria, "utf8"));
+  const criteria = criteriaInput.criteria ?? [];
+
+  // Fail closed: criteria with dependencies demand a pipeline check. A green
+  // report that skipped its prechecks is exactly the lie this tool exists to
+  // prevent.
+  const hasDeps = criteria.some((c: { dependsOn?: string[] }) => (c.dependsOn ?? []).length > 0);
+  let precheck;
+  if (values.precheck && existsSync(values.precheck)) {
+    precheck = JSON.parse(readFileSync(values.precheck, "utf8"));
+  } else if (hasDeps) {
+    console.error("report: criteria declare dependencies but no --precheck file exists — run the pipeline check first");
+    process.exit(1);
   }
+
+  let results = reconcile(criteria, input.results, precheck);
+  if (precheck) results = applyTaint(results, precheck, criteria);
   console.log(renderReport(results, input.coverage, input.notChecked ?? []));
 
 } else if (command === "html") {
@@ -79,12 +91,19 @@ if (command === "criteria") {
     process.exit(1);
   }
   const resultsInput = JSON.parse(readFileSync(values.results, "utf8"));
-  let results = resultsInput.results;
+  const { reconcile } = await import("./lib/verdict.js");
+  const hasDeps = criteriaInput.criteria.some(
+    (c: { dependsOn?: string[] }) => (c.dependsOn ?? []).length > 0,
+  );
   let precheck;
   if (values.precheck && existsSync(values.precheck)) {
     precheck = JSON.parse(readFileSync(values.precheck, "utf8"));
-    results = applyTaint(results, precheck);
+  } else if (hasDeps) {
+    console.error("html: criteria declare dependencies but no --precheck file exists — run the pipeline check first");
+    process.exit(1);
   }
+  let results = reconcile(criteriaInput.criteria, resultsInput.results, precheck);
+  if (precheck) results = applyTaint(results, precheck, criteriaInput.criteria);
   let review;
   if (values.review && existsSync(values.review)) {
     review = JSON.parse(readFileSync(values.review, "utf8"));
@@ -104,6 +123,11 @@ if (command === "criteria") {
     }
     assets[criterion.id] = { images, videos };
   }
+  // Run-scope evidence: the terminal recording lives at the run root.
+  const runAssets: string[] = [];
+  for (const name of ["run.gif", "run.cast"]) {
+    if (existsSync(join(runDir, name))) runAssets.push(name);
+  }
 
   const html = renderHtml({
     runId: values["run-id"] ?? runDir,
@@ -114,6 +138,7 @@ if (command === "criteria") {
     review,
     violation: existsSync(join(runDir, "clean-repo-violation")),
     assets,
+    runAssets,
     notChecked: resultsInput.notChecked ?? [],
   });
   const out = join(runDir, "report.html");
@@ -185,7 +210,7 @@ if (command === "criteria") {
 } else {
   console.error("Usage:");
   console.error("  npx tsx src/cli.ts criteria      --criteria <json>");
-  console.error("  npx tsx src/cli.ts report        --results <json> [--precheck <json>]");
+  console.error("  npx tsx src/cli.ts report        --results <json> --criteria <json> [--precheck <json>]");
   console.error("  npx tsx src/cli.ts html          --criteria <json> --results <json> --run-dir <dir> [--precheck <json>] [--review <json>] [--run-id <id>]");
   console.error("  npx tsx src/cli.ts changed-files --repo <dir> --base <rev> [--claims <json>]");
   process.exit(1);
