@@ -88,6 +88,16 @@ describe('mechanical taint', () => {
     expect(tainted[1].observed).toContain('sink');
     expect(tainted[0]).toEqual(results[0]);
   });
+
+  it('recomputes taint from parts + dependsOn — a tampered tainted map cannot bypass it', () => {
+    const results: CriterionResult[] = [
+      { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'claims it worked' },
+    ];
+    const scrubbed: Precheck = { parts: { sink: 'down' }, tainted: {}, unchecked: [] };
+    const criteria = [{ id: 'AC1', dependsOn: ['sink'] }];
+    const tainted = applyTaint(results, scrubbed, criteria);
+    expect(tainted[0].outcome).toBe('could-not-run');
+  });
 });
 
 describe('criteria schema', () => {

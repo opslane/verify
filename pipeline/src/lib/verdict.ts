@@ -24,11 +24,26 @@ export interface Precheck {
 /**
  * A criterion whose dependent part failed its pipeline check is could-not-run
  * regardless of what the judge or driver reported — a broken pipe must never
- * become a verdict in either direction.
+ * become a verdict in either direction. Taint is recomputed here from the
+ * parts map and each criterion's own dependsOn: the derived `tainted` map in
+ * precheck.json is a convenience, never the authority.
  */
-export function applyTaint(results: CriterionResult[], precheck: Precheck): CriterionResult[] {
+export function applyTaint(
+  results: CriterionResult[],
+  precheck: Precheck,
+  criteria?: { id: string; dependsOn?: string[] }[],
+): CriterionResult[] {
+  const deps = new Map((criteria ?? []).map((c) => [c.id, c.dependsOn ?? []]));
+  const downFor = (id: string): string | undefined => {
+    const declared = deps.get(id);
+    if (declared) {
+      const down = declared.find((part) => precheck.parts[part] === 'down');
+      if (down) return down;
+    }
+    return precheck.tainted[id];
+  };
   return results.map((result) => {
-    const part = precheck.tainted[result.id];
+    const part = downFor(result.id);
     if (!part) return result;
     return {
       ...result,
@@ -36,6 +51,42 @@ export function applyTaint(results: CriterionResult[], precheck: Precheck): Crit
       proofSeen: false,
       observed: `dependent part ${part} failed its pipeline check`,
     };
+  });
+}
+
+/**
+ * One result per approved criterion, in criteria order. A criterion the
+ * results forgot becomes could-not-run; duplicate or unknown result ids can
+ * never inflate the count. Fails on criteria relying on an unprobed part get
+ * the environmental note appended.
+ */
+export function reconcile(
+  criteria: { id: string; dependsOn?: string[] }[],
+  results: CriterionResult[],
+  precheck?: Precheck,
+): CriterionResult[] {
+  const byId = new Map<string, CriterionResult>();
+  for (const result of results) {
+    if (!byId.has(result.id)) byId.set(result.id, result);
+  }
+  const unchecked = new Set(precheck?.unchecked ?? []);
+  return criteria.map((criterion) => {
+    const found = byId.get(criterion.id) ?? {
+      id: criterion.id,
+      outcome: 'could-not-run' as const,
+      proofSeen: false,
+      observed: 'no result was recorded for this criterion',
+    };
+    if (found.outcome === 'fail') {
+      const suspect = (criterion.dependsOn ?? []).find((part) => unchecked.has(part));
+      if (suspect && !found.observed.includes('may be environmental')) {
+        return {
+          ...found,
+          observed: `${found.observed} — the failure may be environmental: ${suspect} was never health-checked`,
+        };
+      }
+    }
+    return found;
   });
 }
 

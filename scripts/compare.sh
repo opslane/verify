@@ -45,19 +45,27 @@ case "$CMD" in
       mkdir -p .verify
       cp "$CAND_ROOT/.verify/setup.json" .verify/setup.json
       [ -f "$CAND_ROOT/.verify/auth.json" ] && cp "$CAND_ROOT/.verify/auth.json" .verify/auth.json
-      [ -f "$CAND_ROOT/.verify/seed.sh" ]   && cp "$CAND_ROOT/.verify/seed.sh" .verify/seed.sh
+      # The reviewed seed script lives in the candidate's CURRENT run dir.
+      CAND_RUN="$(cat "$CAND_ROOT/.verify/current-run" 2>/dev/null || echo "")"
+      if [ -n "$CAND_RUN" ] && [ -f "$CAND_ROOT/.verify/runs/$CAND_RUN/seed.sh" ]; then
+        cp "$CAND_ROOT/.verify/runs/$CAND_RUN/seed.sh" .verify/seed.sh
+      fi
       # The worktree has no ignored local env file; hand it the candidate's.
       EF=$(jq -r '.env_file // empty' .verify/setup.json)
       if [ -n "$EF" ] && [ -f "$CAND_ROOT/$EF" ]; then
         export VERIFY_ENV_FILE="$CAND_ROOT/$EF"
       fi
       bash "$SCRIPT_DIR/env.sh" up
+      # Tear down only if the rest of the bring-up fails; on success the base
+      # stack stays up for the skill to drive, until `compare.sh down`.
+      trap '[ "${BASE_UP_OK:-0}" = 1 ] || bash "$SCRIPT_DIR/env.sh" down || true' EXIT
       bash "$SCRIPT_DIR/env.sh" seed
       if [ -f .verify/seed.sh ]; then
         BASE_MARKER=$(jq -r '.marker' .verify/run-env.json)
         VERIFY_BASE_URL="$(jq -r '.base_url // empty' .verify/setup.json)" \
           bash .verify/seed.sh "$BASE_MARKER"
       fi
+      BASE_UP_OK=1
     ) || {
       git worktree remove --force "$WT" 2>/dev/null || true
       rm -f "$WT_STATE"

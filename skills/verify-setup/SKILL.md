@@ -7,7 +7,11 @@ description: One-time setup for /verify. Sniffs the repo, confirms boot/seed/hea
 
 Run once per repo. Later `/verify` runs read `.verify/setup.json` and ask nothing.
 
-**Hard rule: never ask for or store sensitive credentials.** No production
+**Hard rule: never ask for or store passwords, API keys, or connection strings.**
+The one exception is captured browser session state (`.verify/auth.json`,
+written by the auth step below): it holds reusable cookies for the app under
+test, is gitignored, and deleting the file revokes it. Treat it like a logged-in
+browser profile, not a secret store. No production
 connection strings, no cloud keys. The most this file may reference is one of the
 repo's own local `.env` files, chosen by the user. If a user pastes a secret,
 refuse to write it and tell them to keep it in their environment.

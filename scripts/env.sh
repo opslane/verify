@@ -14,18 +14,39 @@ elif command -v timeout >/dev/null 2>&1; then TIMEOUT_CMD="timeout"
 else echo "✗ timeout command not found. Install: brew install coreutils"; exit 1; fi
 
 MODE=$(jq -r '.mode' "$SETUP")
-ENV_FILE="${VERIFY_ENV_FILE:-$(jq -r '.env_file // empty' "$SETUP")}"
-if [ -n "$ENV_FILE" ]; then
-  [ -f "$ENV_FILE" ] || { echo "✗ configured env file missing: $ENV_FILE"; exit 1; }
-  set -a
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-  set +a
-fi
 CMD="${1:-up}"
+
+# The env file is repo-controlled data, so it is PARSED (KEY=VALUE lines only),
+# never sourced — sourcing would execute whatever the file contains. `down`
+# skips it entirely: teardown must depend only on run-env.json, so a deleted
+# or broken env file can never strand a running stack.
+if [ "$CMD" != "down" ]; then
+  ENV_FILE="${VERIFY_ENV_FILE:-$(jq -r '.env_file // empty' "$SETUP")}"
+  if [ -n "$ENV_FILE" ]; then
+    [ -f "$ENV_FILE" ] || { echo "✗ configured env file missing: $ENV_FILE"; exit 1; }
+    while IFS= read -r line; do
+      case "$line" in
+        [A-Za-z_]*=*)
+          key="${line%%=*}"
+          val="${line#*=}"
+          val="${val%\"}"; val="${val#\"}"   # strip optional surrounding quotes
+          export "$key=$val" ;;
+      esac
+    done < "$ENV_FILE"
+  fi
+fi
 
 case "$CMD" in
   up)
+    # One run per repo: cross-stage state (current-run, run-env.json) is
+    # repo-global, so a second concurrent run would redirect this one.
+    if ! mkdir .verify/run-lock 2>/dev/null; then
+      echo "✗ Another verify run appears active (.verify/run-lock exists)."
+      echo "  If it crashed, remove the lock: rmdir .verify/run-lock"
+      exit 1
+    fi
+    # A failed boot must not strand the lock; a successful one keeps it until down.
+    trap '[ "${UP_OK:-0}" = 1 ] || rmdir .verify/run-lock 2>/dev/null || true' EXIT
     rm -f .verify/compare.json   # a new run invalidates any old comparison
     # The run identity comes from half one (skill step 2 writes current-run);
     # a standalone boot (tests, compare) generates its own.
@@ -97,6 +118,7 @@ case "$CMD" in
     jq -n --arg r "$RUN_ID" --arg p "$PROJECT" --arg m "$MARKER" --arg g "$PGID" \
       '{run_id: $r, project: $p, marker: $m, pgid: (if $g == "" then null else ($g|tonumber) end)}' \
       > .verify/run-env.json
+    UP_OK=1
     echo "✓ Environment ready (marker: $MARKER)"
     ;;
   seed)
@@ -122,6 +144,7 @@ case "$CMD" in
     echo "✓ Seeded"
     ;;
   down)
+    rmdir .verify/run-lock 2>/dev/null || true
     case "$MODE" in
       compose)
         CF=$(jq -r '.compose_file' "$SETUP")

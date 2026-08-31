@@ -40,10 +40,13 @@ probe() { # part -> ok|down|unknown ; evidence to prechecks/<part>.log
     api)
       [ -n "$BASE_URL" ] || { echo "no base_url" >> "$log"; echo unknown; return; }
       # Any HTTP response proves the API is up; a 404 at the root is common
-      # and healthy. Only a dead socket (code 000) is down.
-      CODE=$("$TIMEOUT_CMD" 10 curl -s -o /dev/null -w '%{http_code}' "$BASE_URL" 2>> "$log" || echo 000)
-      echo "http_code: $CODE" >> "$log"
-      if [ "$CODE" != "000" ]; then echo ok; else echo down; fi ;;
+      # and healthy. Only a dead socket is down. curl prints 000 AND exits
+      # non-zero on connection failure, so capture the code alone and judge
+      # it — a fallback echo would concatenate into "000000" and read as ok.
+      CODE=$("$TIMEOUT_CMD" 10 curl -s -o /dev/null -w '%{http_code}' "$BASE_URL" 2>> "$log")
+      RC=$?
+      echo "http_code: ${CODE:-none} (curl exit $RC)" >> "$log"
+      if [ "$RC" -eq 0 ] || { [ -n "$CODE" ] && [ "$CODE" != "000" ]; }; then echo ok; else echo down; fi ;;
     browser)
       [ -n "$BASE_URL" ] || { echo "no base_url" >> "$log"; echo unknown; return; }
       BODY=$("$TIMEOUT_CMD" 10 curl -sf "$BASE_URL" 2>> "$log" || true)
