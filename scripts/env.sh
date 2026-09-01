@@ -21,24 +21,35 @@ CMD="${1:-up}"
 # skips it entirely: teardown must depend only on run-env.json, so a deleted
 # or broken env file can never strand a running stack.
 if [ "$CMD" != "down" ]; then
-  ENV_FILE="${VERIFY_ENV_FILE:-$(jq -r '.env_file // empty' "$SETUP")}"
-  if [ -n "$ENV_FILE" ] && [ ! -f "$ENV_FILE" ]; then
-    STORE_ENV="$(bash "$(cd "$(dirname "$0")" && pwd)/shared-store.sh" path)/local.env"
-    if [ -f "$STORE_ENV" ]; then
-      echo "→ $ENV_FILE missing here (fresh worktree?) — using shared fallback: $STORE_ENV"
-      ENV_FILE="$STORE_ENV"
+  if [ -n "${VERIFY_ENV_FILE:-}" ]; then
+    # An explicit override is a promise, never silently substituted: a typo'd
+    # path falling back to a stale shared env is a wrong-verdict machine.
+    ENV_FILE="$VERIFY_ENV_FILE"
+    [ -f "$ENV_FILE" ] || { echo "✗ VERIFY_ENV_FILE does not exist: $ENV_FILE"; exit 1; }
+  else
+    ENV_FILE="$(jq -r '.env_file // empty' "$SETUP")"
+    if [ -n "$ENV_FILE" ] && [ ! -f "$ENV_FILE" ]; then
+      STORE_ENV="$(bash "$(cd "$(dirname "$0")" && pwd)/shared-store.sh" path)/local.env"
+      if [ -f "$STORE_ENV" ]; then
+        echo "→ $ENV_FILE missing here (fresh worktree?) — using shared fallback: $STORE_ENV"
+        ENV_FILE="$STORE_ENV"
+      fi
     fi
   fi
   if [ -n "$ENV_FILE" ]; then
     [ -f "$ENV_FILE" ] || { echo "✗ configured env file missing: $ENV_FILE (no shared fallback either — run /verify-setup or shared-store.sh push from a checkout that has it)"; exit 1; }
-    while IFS= read -r line; do
-      case "$line" in
-        [A-Za-z_]*=*)
-          key="${line%%=*}"
-          val="${line#*=}"
-          val="${val%\"}"; val="${val#\"}"   # strip optional surrounding quotes
-          export "$key=$val" ;;
+    while IFS= read -r line || [ -n "$line" ]; do
+      key="${line%%=*}"
+      val="${line#*=}"
+      case "$key" in
+        *[!A-Za-z0-9_]*|""|[0-9]*) continue ;;
+        PATH|IFS|ENV|BASH_ENV|SHELL|CDPATH|LD_*|DYLD_*|PS4|PROMPT_COMMAND|TMPDIR)
+          echo "→ ignoring $key from env file — the verifier's own environment is not configurable from repo data"
+          continue ;;
       esac
+      [ "$line" = "$key" ] && continue            # no '=' present
+      case "$val" in \"*\") val="${val#\"}"; val="${val%\"}" ;; esac   # strip only PAIRED quotes
+      export "$key=$val"
     done < "$ENV_FILE"
   fi
 fi

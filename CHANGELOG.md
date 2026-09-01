@@ -11,8 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   contract but not the gitignored login state or local env file. `/verify-setup`
   now pushes both to `~/.verify/<repo-slug>/`; `/verify` pulls the login state
   on start, and the environment scripts fall back to the store's `local.env`
-  when the contract's env file is missing locally. Deleting the store folder
-  revokes the shared login everywhere.
+  when the contract's env file is missing locally. Deleting the store folder stops
+  new worktrees inheriting the login (already-pulled copies stay until their
+  `.verify/` is deleted).
 
 ## [2.6.0] - 2026-08-31
 
