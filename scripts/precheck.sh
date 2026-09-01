@@ -15,22 +15,37 @@ if command -v gtimeout >/dev/null 2>&1; then TIMEOUT_CMD="gtimeout"
 elif command -v timeout >/dev/null 2>&1; then TIMEOUT_CMD="timeout"
 else echo "✗ timeout command not found. Install: brew install coreutils"; exit 1; fi
 
-ENV_FILE="${VERIFY_ENV_FILE:-$(jq -r '.env_file // empty' "$SETUP")}"
-if [ -n "$ENV_FILE" ] && [ ! -f "$ENV_FILE" ]; then
-  STORE_ENV="$(bash "$(cd "$(dirname "$0")" && pwd)/shared-store.sh" path)/local.env"
-  [ -f "$STORE_ENV" ] && ENV_FILE="$STORE_ENV"
+if [ -n "${VERIFY_ENV_FILE:-}" ]; then
+  ENV_FILE="$VERIFY_ENV_FILE"
+  [ -f "$ENV_FILE" ] || { echo "✗ VERIFY_ENV_FILE does not exist: $ENV_FILE"; exit 1; }
+else
+  ENV_FILE="$(jq -r '.env_file // empty' "$SETUP")"
+  if [ -n "$ENV_FILE" ] && [ ! -f "$ENV_FILE" ]; then
+    STORE_ENV="$(bash "$(cd "$(dirname "$0")" && pwd)/shared-store.sh" path)/local.env"
+    if [ -f "$STORE_ENV" ]; then
+      echo "→ $ENV_FILE missing here — using shared fallback: $STORE_ENV"
+      ENV_FILE="$STORE_ENV"
+    fi
+  fi
 fi
+# Fail closed: probing with process-default env against who-knows-what stack
+# is how a wrong stack gets health-checked.
+[ -z "$ENV_FILE" ] || [ -f "$ENV_FILE" ] || { echo "✗ configured env file missing: $ENV_FILE (no shared fallback either)"; exit 1; }
 if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   # Parsed, never sourced — same rule as env.sh: repo-controlled data must not
   # execute in the verifier.
-  while IFS= read -r line; do
-    case "$line" in
-      [A-Za-z_]*=*)
-        key="${line%%=*}"
-        val="${line#*=}"
-        val="${val%\"}"; val="${val#\"}"
-        export "$key=$val" ;;
-    esac
+  while IFS= read -r line || [ -n "$line" ]; do
+    key="${line%%=*}"
+    val="${line#*=}"
+      case "$key" in
+        *[!A-Za-z0-9_]*|""|[0-9]*) continue ;;
+        PATH|IFS|ENV|BASH_ENV|SHELL|CDPATH|LD_*|DYLD_*|PS4|PROMPT_COMMAND|TMPDIR)
+          echo "→ ignoring $key from env file — the verifier's own environment is not configurable from repo data"
+          continue ;;
+      esac
+    [ "$line" = "$key" ] && continue
+    case "$val" in \"*\") val="${val#\"}"; val="${val%\"}" ;; esac
+    export "$key=$val"
   done < "$ENV_FILE"
 fi
 

@@ -138,5 +138,6 @@ bash "$VERIFY_SCRIPTS/shared-store.sh" push
 
 This copies `.verify/auth.json` and the chosen env file to
 `~/.verify/<repo-slug>/` (permissions 700/600). Tell the user: deleting that
-folder revokes the shared login everywhere. Run `push` again whenever auth is
+folder stops NEW worktrees inheriting the login; copies already pulled into
+worktrees remain until their `.verify/` is deleted. Run `push` again whenever auth is
 recaptured or the env file changes.
