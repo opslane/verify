@@ -206,4 +206,66 @@ describe('validateCriteria', () => {
   it('rejects input that is not an array', () => {
     expect(validateCriteria({ AC1: base })).toEqual(['criteria must be an array']);
   });
+
+  it('accepts a driven marker proof pointing at an eligible step', () => {
+    const driven: Criterion = {
+      ...base,
+      drive: [
+        { verb: 'wait', args: ['--url', '/ready', '--timeout', '5'] },
+        { verb: 'http', args: ['POST', '/events', '--expect-status', '201'] },
+      ],
+      proof: { ...base.proof, step: 2, expect: 'present' },
+    };
+    expect(validateCriteria([driven])).toEqual([]);
+  });
+
+  it('rejects proof steps that cannot supply eligible proof', () => {
+    const withStep = (drive: Criterion['drive']) => ({
+      ...base,
+      drive,
+      proof: { ...base.proof, step: 1 },
+    });
+    expect(validateCriteria([withStep([{ verb: 'wait', args: ['--url', '/ready', '--timeout', '5'] }])]).join('\n'))
+      .toContain('cannot be a proof step');
+    expect(validateCriteria([withStep([{ verb: 'http', args: ['GET', '/', '--expect-status', '401'] }])]).join('\n'))
+      .toContain('cannot be a proof step');
+    expect(validateCriteria([withStep([{ verb: 'http', args: ['GET', '/', '--expect-status', '201'] }])]))
+      .toEqual([]);
+  });
+
+  it('enforces the driven marker proof matrix', () => {
+    expect(validateCriteria([{ ...base, drive: [{ verb: 'db', args: ['select 1'] }] }]).join('\n'))
+      .toContain('proof.step is required');
+    expect(validateCriteria([{ ...base, proof: { ...base.proof, step: 1 } }]).join('\n'))
+      .toContain('only permitted');
+    expect(validateCriteria([{
+      ...base,
+      drive: [{ verb: 'run', args: ['node', '-v'] }],
+      proof: { kind: 'live-read', detail: 'fresh timestamp', expect: 'present' },
+    }]).join('\n')).toContain('only permitted');
+  });
+
+  it('rejects malformed plan elements without throwing', () => {
+    expect(validateCriteria([{ ...base, drive: [null] }]).join('\n')).toContain('drive[0] is not an object');
+    expect(validateCriteria([{
+      ...base,
+      drive: [{ verb: 'run', args: ['node'], timeoutSeconds: Infinity }],
+      proof: { ...base.proof, step: 1 },
+    }]).join('\n')).toContain('timeoutSeconds');
+  });
+
+  it('renders approved drive steps verbatim with the proof rule', () => {
+    const out = renderCriteria([{
+      ...base,
+      drive: [
+        { verb: 'http', args: ['POST', '/events', '--json', '{"marker":"{{marker}}"}'] },
+        { verb: 'db', args: ['select marker from events'], timeoutSeconds: 12 },
+      ],
+      proof: { ...base.proof, step: 2, expect: 'absent' },
+    }], []);
+    expect(out).toContain('Drive plans (what will actually run)');
+    expect(out).toContain('http POST /events --json {"marker":"{{marker}}"}');
+    expect(out).toContain('db select marker from events (timeout: 12s)');
+    expect(out).toContain('proof: step 2 output must NOT contain the marker');
+  });
 });
