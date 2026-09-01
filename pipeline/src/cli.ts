@@ -4,7 +4,7 @@
 // control loop; this only does plumbing it would be silly to do in markdown.
 import { parseArgs } from "node:util";
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { sep, isAbsolute, join, resolve } from "node:path";
 import type { Criterion } from './lib/criteria.js';
 
 const { positionals, values } = parseArgs({
@@ -176,8 +176,11 @@ if (command === "drive") {
   console.log(renderCriteria(input.criteria, input.uncoveredFiles ?? []));
 
 } else if (command === "report") {
-  const { renderReport, applyReceiptedProofs, applyTaint, reconcile } = await import("./lib/verdict.js");
-  const { latestFinalizedProof } = await import('./lib/drive.js');
+  const {
+    renderReport, applyReceiptedProofs, applyTaint, reconcile, classify, taintPartFor, validateResults,
+  } = await import("./lib/verdict.js");
+  const { legacyEvidence } = await import('./lib/evidence.js');
+  const { validateCriteria } = await import('./lib/criteria.js');
   const { existsSync } = await import("node:fs");
   if (!values.results || (!values.criteria && !values['run-dir'])) {
     console.error("report requires --results <json> and either --criteria <json> or --run-dir <dir>");
@@ -186,11 +189,24 @@ if (command === "drive") {
 
   if (!existsSync(values.results)) fail(`report: --results file does not exist: ${values.results}`);
   const input = JSON.parse(readFileSync(values.results, "utf8"));
+  const resultProblems = validateResults(input);
+  if (resultProblems.length > 0) fail(`results.json is not valid:\n  ${resultProblems.join('\n  ')}`);
   const repoRoot = realpathSync(values['repo-root'] ?? process.cwd());
   if (values['run-dir'] && !existsSync(pathFromRepo(repoRoot, values['run-dir']))) {
     fail(`report: --run-dir does not exist: ${values['run-dir']}`);
   }
   const runDir = values['run-dir'] ? realpathSync(pathFromRepo(repoRoot, values['run-dir'])) : undefined;
+  if (runDir) {
+    // Run-dir mode reasons about ONE run: results and precheck must be that
+    // run's own files, or yesterday's results silently pair with today's
+    // receipts.
+    for (const [flag, given] of [['--results', values.results], ['--precheck', values.precheck]] as const) {
+      if (given && !realpathSync(pathFromRepo(repoRoot, given)).startsWith(`${runDir}/`)) {
+        fail(`report: ${flag} must live inside --run-dir (${runDir}) in run-dir mode`);
+      }
+    }
+  }
+  const violation = runDir ? existsSync(join(runDir, 'clean-repo-violation')) : false;
   const approvedCriteriaPath = runDir ? join(runDir, 'criteria.json') : undefined;
   if (runDir && values.criteria && realpathSync(pathFromRepo(repoRoot, values.criteria)) !== realpathSync(approvedCriteriaPath!)) {
     fail(`report: --criteria ${values.criteria} does not match approved snapshot ${approvedCriteriaPath}`);
@@ -199,6 +215,10 @@ if (command === "drive") {
   if (!existsSync(criteriaPath)) fail(`report: criteria file does not exist: ${criteriaPath}`);
   const criteriaInput = JSON.parse(readFileSync(criteriaPath, "utf8"));
   const criteria = criteriaInput.criteria ?? [];
+  if (runDir) {
+    const criteriaProblems = validateCriteria(criteria);
+    if (criteriaProblems.length > 0) fail(`criteria.json is not valid:\n  ${criteriaProblems.join('\n  ')}`);
+  }
 
   // Fail closed: criteria with dependencies demand a pipeline check. A green
   // report that skipped its prechecks is exactly the lie this tool exists to
@@ -215,27 +235,39 @@ if (command === "drive") {
     process.exit(1);
   }
 
-  let results = reconcile(criteria, input.results, precheck);
-  const entries: Record<string, { seen: boolean }> = {};
+  let classified: import('./lib/verdict.js').ClassifiedCriterionResult[];
+  let evidence: Record<string, import('./lib/evidence.js').CriterionEvidence>;
+  let sources: Record<string, import('./lib/verdict.js').ProofSource> = {};
   if (runDir) {
-    for (const criterion of criteria) {
-      if (criterion.drive && criterion.proof?.kind === 'marker-in-data') {
-        entries[criterion.id] = { seen: latestFinalizedProof(runDir, criterion.id)?.seen ?? false };
-      }
+    const { classifyRun } = await import('./lib/classify-run.js');
+    ({ classified, evidence, sources } = classifyRun(runDir, criteria, input.results, precheck));
+  } else {
+    let results = reconcile(criteria, input.results, precheck);
+    results = applyReceiptedProofs(results, {}).results;
+    evidence = Object.fromEntries(results.map((result) => [result.id, legacyEvidence(result)]));
+    const taintedBy: Record<string, string | undefined> = {};
+    if (precheck) {
+      for (const criterion of criteria) taintedBy[criterion.id] = taintPartFor(criterion.id, precheck, criteria);
     }
+    if (precheck) results = applyTaint(results, precheck, criteria);
+    classified = classify(results, Object.fromEntries(results.map((result) => [result.id, {
+      substantiated: evidence[result.id]?.substantiated === true,
+      tainted: taintedBy[result.id] !== undefined,
+    }])));
   }
-  const receipted = applyReceiptedProofs(results, entries);
-  results = receipted.results;
-  if (precheck) results = applyTaint(results, precheck, criteria);
-  // Legacy invocations (no --run-dir) keep their pre-drive output shape.
-  console.log(renderReport(results, input.coverage, input.notChecked ?? [], runDir ? receipted.sources : undefined));
+  // Legacy invocations (no --run-dir) keep their pre-drive line shape: no
+  // plain-claim prefix, no evidence labels — just the banner.
+  console.log(renderReport(classified, input.coverage, input.notChecked ?? [], {
+    ...(runDir ? { criteria, evidence, sources, violation } : { legacyEvidence: true }),
+  }));
 
 } else if (command === "html") {
   const { renderHtml } = await import("./lib/html.js");
-  const { applyReceiptedProofs, applyTaint } = await import("./lib/verdict.js");
-  const { latestFinalizedProof } = await import('./lib/drive.js');
+  const {
+    applyReceiptedProofs, applyTaint, classify, taintPartFor, reconcile, validateResults,
+  } = await import("./lib/verdict.js");
   const { validateCriteria } = await import("./lib/criteria.js");
-  const { readdirSync, existsSync, writeFileSync } = await import("node:fs");
+  const { existsSync, writeFileSync } = await import("node:fs");
   const { join } = await import("node:path");
 
   if (!values.results || !values["run-dir"]) {
@@ -259,7 +291,8 @@ if (command === "drive") {
     process.exit(1);
   }
   const resultsInput = JSON.parse(readFileSync(values.results, "utf8"));
-  const { reconcile } = await import("./lib/verdict.js");
+  const resultShapeProblems = validateResults(resultsInput);
+  if (resultShapeProblems.length > 0) fail(`results.json is not valid:\n  ${resultShapeProblems.join('\n  ')}`);
   const hasDeps = criteriaInput.criteria.some(
     (c: { dependsOn?: string[] }) => (c.dependsOn ?? []).length > 0,
   );
@@ -271,53 +304,50 @@ if (command === "drive") {
     console.error("html: criteria declare dependencies but no --precheck file exists — run the pipeline check first");
     process.exit(1);
   }
-  let results = reconcile(criteriaInput.criteria, resultsInput.results, precheck);
-  const entries: Record<string, { seen: boolean }> = {};
-  for (const criterion of criteriaInput.criteria) {
-    if (criterion.drive && criterion.proof?.kind === 'marker-in-data') {
-      entries[criterion.id] = { seen: latestFinalizedProof(runDir, criterion.id)?.seen ?? false };
-    }
-  }
-  const receipted = applyReceiptedProofs(results, entries);
-  results = receipted.results;
-  if (precheck) results = applyTaint(results, precheck, criteriaInput.criteria);
+  const { classifyRun } = await import('./lib/classify-run.js');
+  const { classified, evidence, sources, attempts } = classifyRun(
+    runDir, criteriaInput.criteria, resultsInput.results, precheck);
   let review;
   if (values.review && existsSync(values.review)) {
     review = JSON.parse(readFileSync(values.review, "utf8"));
   }
 
-  // Relative evidence assets: whatever sits under <runDir>/evidence/<id>/.
-  const assets: Record<string, { images: string[]; videos: string[] }> = {};
-  for (const criterion of criteriaInput.criteria) {
-    const dir = join(runDir, "evidence", criterion.id);
-    const images: string[] = [];
-    const videos: string[] = [];
-    if (existsSync(dir)) {
-      for (const name of readdirSync(dir).sort()) {
-        if (/\.(png|jpe?g)$/i.test(name)) images.push(`evidence/${criterion.id}/${name}`);
-        if (/\.(webm|mp4)$/i.test(name)) videos.push(`evidence/${criterion.id}/${name}`);
-      }
-    }
-    assets[criterion.id] = { images, videos };
-  }
   // Run-scope evidence: the terminal recording lives at the run root.
   const runAssets: string[] = [];
   for (const name of ["run.gif", "run.cast"]) {
     if (existsSync(join(runDir, name))) runAssets.push(name);
   }
 
+  // Empty runTag disables highlighting: a path or run id is not a marker,
+  // and <mark>-ing it in receipt output reads as false proof.
+  let runTag = '';
+  const runEnvPath = join(repoRoot, '.verify', 'run-env.json');
+  if (existsSync(runEnvPath)) {
+    try {
+      const runEnv = JSON.parse(readFileSync(runEnvPath, 'utf8')) as { marker?: unknown };
+      // run-env.json is repo-global; its marker belongs to the CURRENT run.
+      // Highlighting an older run with a newer marker would tag the wrong text.
+      const currentRunPath = join(repoRoot, '.verify', 'current-run');
+      const currentRun = existsSync(currentRunPath) ? readFileSync(currentRunPath, 'utf8').trim() : '';
+      const renderedRun = runDir.split(sep).at(-1) ?? '';
+      if (typeof runEnv.marker === 'string' && runEnv.marker && currentRun === renderedRun) runTag = runEnv.marker;
+    } catch {
+      // A missing display tag never changes the report verdict.
+    }
+  }
   const html = renderHtml({
     runId: values["run-id"] ?? runDir,
+    runTag,
     criteria: criteriaInput.criteria,
-    results,
+    results: classified,
     filesWithoutCriterion: resultsInput.coverage?.filesWithoutCriterion ?? 0,
     precheck,
     review,
     violation: existsSync(join(runDir, "clean-repo-violation")),
-    assets,
+    evidence,
     runAssets,
     notChecked: resultsInput.notChecked ?? [],
-    sources: receipted.sources,
+    sources,
   });
   const out = join(runDir, "report.html");
   writeFileSync(out, html);

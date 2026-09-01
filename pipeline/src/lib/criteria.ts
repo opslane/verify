@@ -47,6 +47,8 @@ export const PROOF_KINDS = ['marker-in-data', 'marked-request-rejected', 'live-r
 export interface Criterion {
   id: string;
   title: string;
+  /** Approved reader-facing claim. Falls back to title for older runs. */
+  plain?: string;
   doIt: string;
   expectIt: string;
   source: Source;
@@ -99,6 +101,9 @@ export function validateCriteria(criteria: unknown): string[] {
       if (typeof c[field] !== 'string' || c[field] === '') {
         problems.push(`${label} has no ${field}`);
       }
+    }
+    if (c.plain !== undefined && (typeof c.plain !== 'string' || c.plain.trim() === '')) {
+      problems.push(`${label} plain must be a non-empty string when present`);
     }
 
     const enums = [
@@ -259,8 +264,8 @@ function renderGrid(criteria: Criterion[]): string {
 
 export function renderCriteria(criteria: Criterion[], uncoveredFiles: string[]): string {
   const header = [
-    '| AC | From | Intent | Base | Shows | Behaviour | How it is driven | Expect |',
-    '|----|------|--------|------|-------|-----------|------------------|--------|',
+    '| AC | From | Intent | Base | Shows | Behaviour | Plain claim | How it is driven | Expect |',
+    '|----|------|--------|------|-------|-----------|-------------|------------------|--------|',
   ];
 
   const rows = criteria.map((criterion) =>
@@ -272,6 +277,7 @@ export function renderCriteria(criteria: Criterion[], uncoveredFiles: string[]):
       cell(criterion.baseline),
       cell(criterion.witness),
       cell(criterion.title),
+      cell(criterion.plain ?? criterion.title),
       cell(criterion.doIt),
       cell(criterion.expectIt),
       '',

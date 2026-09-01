@@ -6,7 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-09-01
+
+### Fixed (pre-release review)
+- results.json is schema-validated: a typo'd outcome fails loudly instead of
+  rendering a wrong card while the headline disagrees.
+- Headline segments partition the total (verdict buckets only); demoted
+  criteria no longer count twice.
+- Proof comes atomically from the newest finalized attempt; a driven PASS
+  substantiates only via an attempt with a completed step (error trails still
+  substantiate fails).
+- The classification pipeline lives once (`classify-run.ts`), consumed by both
+  the text and HTML verbs; a missing result renders a visible card instead of
+  disappearing.
+- Run-dir mode refuses --results/--precheck from outside the run; report.md
+  honors the clean-repo-violation flag.
+- The recorder command sets its environment before `timeout` (it never started
+  as documented); markers and report lines strip C1/bidi control characters;
+  legacy evidence names carry no links.
+
 ### Added
+- **Evidence-backed report cards.** Results name run-relative evidence files; the renderer
+  verifies and displays images, video, and capped text excerpts, while missing, rejected,
+  and multiply-cited files remain visible.
+- **One terminal verdict.** Evidence resolution and taint feed a single `displayVerdict`
+  classifier consumed by headlines, counts, text, and HTML, so outputs cannot disagree.
+- **Receipt transcripts.** Driven cards show approved steps and engine-recorded invocation,
+  output, diagnostics, timing, and terminal state without a PTY recorder.
+- **Reader-approved claims.** Criteria may carry a plain-language `plain` claim approved in
+  half one and used as the report-card headline.
 - **Signed drive plans.** Criteria reachable by generic hands carry verbatim plans in the approval artifact before they can execute.
 - **Four receipted verbs.** `http`, read-only `db`, budgeted `wait`, and shell-free `run` execute approved steps and persist neutral receipts.
 - **Mechanical proof.** Driven marker criteria resolve to present, absent, or inconclusive from one designated eligible receipt before taint makes the final override.
@@ -21,6 +49,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   when the contract's env file is missing locally. Deleting the store folder stops
   new worktrees inheriting the login (already-pulled copies stay until their
   `.verify/` is deleted).
+
+### Changed
+- A hand-driven pass or fail requires at least one valid named evidence file. A driven pass
+  or fail requires a qualifying finalized attempt; named files are optional extras and
+  never substitute for receipts.
+- Live asciinema is optional garnish for hand-driven flows only. Start-check, recording,
+  and GIF rendering each have process-group wall-clock limits and cannot hold a run.
 
 ## [2.6.0] - 2026-08-31
 
@@ -217,5 +252,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - `/verify-setup` cookie import flow, `auth.json` export path, and browse-binary download fallback. (#9)
 
-[Unreleased]: https://github.com/opslane/verify/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/opslane/verify/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/opslane/verify/releases/tag/v2.7.0
+[2.6.0]: https://github.com/opslane/verify/releases/tag/v2.6.0
 [1.1.0]: https://github.com/opslane/verify/releases/tag/v1.1.0

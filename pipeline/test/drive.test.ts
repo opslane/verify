@@ -15,7 +15,7 @@ vi.mock('../src/lib/steps.js', async (orig) => {
   return { ...real, runHttp: record('http'), runDb: record('db'), runWait: record('wait'), runRun: record('run') };
 });
 
-import { driveCriterion, latestFinalizedProof } from '../src/lib/drive.js';
+import { driveCriterion, latestFinalizedAttempt, latestFinalizedProof } from '../src/lib/drive.js';
 
 function okReceipt(output: string, verb: StepReceipt['verb'] = 'run'): StepReceipt {
   return {
@@ -201,11 +201,13 @@ describe('latestFinalizedProof', () => {
     writeAttempt('drive-999-1', '{bad json');
     writeAttempt('drive-998-1', JSON.stringify({ finalized: false }));
     writeAttempt('drive-900-1', JSON.stringify({
-      finalized: true, startedAt: '2026-09-01T00:00:02.000Z',
+      finalized: true, ac: 'AC1', attempt: 'drive-900-1', startedAt: '2026-09-01T00:00:02.000Z',
+      endedAt: '2026-09-01T00:00:03.000Z', steps: [{ index: 1, verb: 'run', state: 'completed' }], completed: 1,
       proof: { result: 'present', expect: 'present', seen: true },
     }));
     writeAttempt('drive-9999-1', JSON.stringify({
-      finalized: true, startedAt: '2026-09-01T00:00:01.000Z',
+      finalized: true, ac: 'AC1', attempt: 'drive-9999-1', startedAt: '2026-09-01T00:00:01.000Z',
+      endedAt: '2026-09-01T00:00:02.000Z', steps: [{ index: 1, verb: 'run', state: 'completed' }], completed: 1,
       proof: { result: 'absent', expect: 'present', seen: false },
     }));
     expect(latestFinalizedProof(f.runDir, 'AC1')).toEqual({ result: 'present', expect: 'present', seen: true });
@@ -216,9 +218,39 @@ describe('latestFinalizedProof', () => {
     const dir = join(f.runDir, 'evidence', 'AC1', 'drive-1000-1');
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'attempt.json'), JSON.stringify({
-      finalized: true, startedAt: '2026-09-01T00:00:03.000Z',
+      finalized: true, ac: 'AC1', attempt: 'drive-1000-1', startedAt: '2026-09-01T00:00:03.000Z',
+      endedAt: '2026-09-01T00:00:04.000Z', steps: [{ index: 1, verb: 'run', state: 'completed' }], completed: 1,
       proof: { result: 'inconclusive', expect: 'present', seen: true },
     }));
     expect(latestFinalizedProof(f.runDir, 'AC1')?.seen).toBe(false);
+  });
+
+  it('computes qualifies=false from a real all-not-attempted manifest', () => {
+    const f = fixture();
+    const dir = join(f.runDir, 'evidence', 'AC9', 'drive-1-1');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'attempt.json'), JSON.stringify({
+      finalized: true, ac: 'AC9', attempt: 'drive-1-1', startedAt: '2026-09-01T00:00:00.000Z',
+      endedAt: '2026-09-01T00:00:01.000Z', steps: [{ index: 1, verb: 'run', state: 'not-attempted' }],
+      completed: 0, proof: null,
+    }));
+    expect(latestFinalizedAttempt(f.runDir, 'AC9')?.qualifies).toBe(false);
+  });
+
+  it('takes proof ONLY from the newest finalized attempt — no cross-attempt fallback', () => {
+    const f = fixture();
+    const write = (folder: string, startedAt: string, proof: unknown) => {
+      const dir = join(f.runDir, 'evidence', 'AC8', folder);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'attempt.json'), JSON.stringify({
+        finalized: true, ac: 'AC8', attempt: folder, startedAt,
+        endedAt: startedAt, steps: [{ index: 1, verb: 'run', state: 'completed' }], completed: 1, proof,
+      }));
+    };
+    write('drive-1-1', '2026-09-01T00:00:01.000Z', { result: 'present', expect: 'present', seen: true });
+    write('drive-2-1', '2026-09-01T00:00:02.000Z', null);
+    // The newest attempt has no usable proof; an older attempt's proof must
+    // not describe a different execution than the one that substantiates.
+    expect(latestFinalizedProof(f.runDir, 'AC8')).toBeUndefined();
   });
 });
