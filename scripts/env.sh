@@ -13,6 +13,8 @@ if command -v gtimeout >/dev/null 2>&1; then TIMEOUT_CMD="gtimeout"
 elif command -v timeout >/dev/null 2>&1; then TIMEOUT_CMD="timeout"
 else echo "✗ timeout command not found. Install: brew install coreutils"; exit 1; fi
 
+EXPAND="$(cd "$(dirname "$0")" && pwd)/expand.sh"
+
 MODE=$(jq -r '.mode' "$SETUP")
 CMD="${1:-up}"
 
@@ -97,7 +99,7 @@ case "$CMD" in
         ;;
       process)
         BOOT=$(jq -r '.boot' "$SETUP")
-        HEALTH_URL=$(jq -r '.health_url // empty' "$SETUP")
+        HEALTH_URL=$(jq -r '.health_url // empty' "$SETUP" | bash "$EXPAND")
         [ -n "$HEALTH_URL" ] || { echo "✗ process mode requires health_url in setup.json"; exit 1; }
         echo "→ Starting: $BOOT"
         # Python is already required by the plugin and gives us a portable
@@ -123,7 +125,7 @@ case "$CMD" in
         echo "✓ Process up (pgid $PGID)"
         ;;
       external)
-        BASE=$(jq -r '.base_url // empty' "$SETUP")
+        BASE=$(jq -r '.base_url // empty' "$SETUP" | bash "$EXPAND")
         echo "⚠ External mode: reusing a running stack breaks isolation."
         [ -n "$BASE" ] && { curl -sf --max-time 5 "$BASE" > /dev/null || { echo "✗ $BASE unreachable"; exit 1; }; }
         ;;

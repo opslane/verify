@@ -62,7 +62,7 @@ case "$CMD" in
       bash "$SCRIPT_DIR/env.sh" seed
       if [ -f .verify/seed.sh ]; then
         BASE_MARKER=$(jq -r '.marker' .verify/run-env.json)
-        VERIFY_BASE_URL="$(jq -r '.base_url // empty' .verify/setup.json)" \
+        VERIFY_BASE_URL="$(jq -r '.base_url // empty' .verify/setup.json | bash "$SCRIPT_DIR/expand.sh" --load-env .verify/setup.json)" \
           bash .verify/seed.sh "$BASE_MARKER"
       fi
       BASE_UP_OK=1

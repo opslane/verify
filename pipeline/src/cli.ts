@@ -46,6 +46,7 @@ if (command === "drive") {
     const { execFileSync } = await import('node:child_process');
     const { validateCriteria } = await import('./lib/criteria.js');
     const { driveCriterion } = await import('./lib/drive.js');
+    const { expandEnv } = await import('./lib/steps.js');
     if (!ac || !values['run-dir']) fail('drive requires <ac> --run-dir <dir>');
     const repoRoot = realpathSync(values['repo-root'] ?? process.cwd());
     const currentRunPath = join(repoRoot, '.verify', 'current-run');
@@ -140,7 +141,7 @@ if (command === "drive") {
       runDir: requestedRun,
       marker: runEnv.marker,
       ctx: {
-        baseUrl: setup.base_url,
+        baseUrl: expandEnv(setup.base_url),
         ...(authHeader ? { authHeader, authValueEnv } : {}),
         ...(typeof dbUrlEnv === 'string' && dbUrlEnv ? { dbUrlEnv } : {}),
         repoRoot,

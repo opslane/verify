@@ -462,7 +462,8 @@ wrong verdicts happen:
 
 ```bash
 MARKER=$(jq -r '.marker' .verify/run-env.json)
-VERIFY_BASE_URL="$(jq -r '.base_url // empty' .verify/setup.json)" \
+VERIFY_SCRIPTS="${VERIFY_SCRIPTS:-$CLAUDE_PLUGIN_ROOT/scripts}"
+VERIFY_BASE_URL="$(jq -r '.base_url // empty' .verify/setup.json | bash "$VERIFY_SCRIPTS/expand.sh" --load-env .verify/setup.json)" \
   bash "$RUN_DIR/seed.sh" "$MARKER" 2>&1 | tee "$RUN_DIR/seed.log"
 ```
 

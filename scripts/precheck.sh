@@ -49,7 +49,12 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   done < "$ENV_FILE"
 fi
 
-BASE_URL=$(jq -r '.base_url // empty' "$SETUP")
+EXPAND="$(cd "$(dirname "$0")" && pwd)/expand.sh"
+
+# Contracts are recipes, not resolved values: base_url may say
+# http://localhost:${INGESTION_PORT:-8082} so one committed file serves every
+# worktree.
+BASE_URL=$(jq -r '.base_url // empty' "$SETUP" | bash "$EXPAND")
 MARKER=$(jq -r '.marker // empty' .verify/run-env.json 2>/dev/null || echo "")
 mkdir -p "$RUN_DIR/prechecks"
 
