@@ -197,7 +197,8 @@ Translate the plan into concrete, observable criteria. Each criterion has:
 
 - `id`: stable `AC1`, `AC2`, and so on.
 - `title`: one behavior.
-- `doIt`: the real action to perform.
+- `doIt`: the intent of the real action, kept short because an approved `drive` plan is
+  the execution authority when one exists.
 - `expectIt`: a measurable observation.
 - `source`: `{ "kind": "plan", "ref": "..." }`, `{ "kind": "inferred", "from": "..." }`, or `{ "kind": "invented", "note": "..." }`.
 - `intent`: `"changes"` or `"preserves"`. What the criterion is for.
@@ -214,6 +215,16 @@ Translate the plan into concrete, observable criteria. Each criterion has:
   rejection paired with the marked request), or `{"kind": "live-read", "detail": "..."}`
   (a value read fresh during the run, not a stale capture). A criterion you cannot name
   a proof for is defective: move it to `skipped` with the reason "no way to prove it ran".
+- `drive`: for criteria reachable through generic command, HTTP, or read-only database
+  surfaces, an ordered plan of exactly these verbs: `http`, `db`, `wait`, `run`. Each
+  step is `{ "verb": "...", "args": ["..."], "timeoutSeconds": 60 }`; omit the
+  timeout for the 60-second default. Plans are execution authority and run verbatim, so
+  never put shell strings, database writes, assertions, or app-specific verbs in them.
+  UI criteria remain plan-less and hand-driven.
+- A driven `marker-in-data` proof also declares `"step": N` and optional
+  `"expect": "present" | "absent"` (default `present`). The designated step is the
+  only output the engine uses for mechanical proof. `expectIt` remains the judge's
+  behavioral rubric.
 
 **`intent` is what the criterion is for. `baseline` is a separate claim about the base
 commit.** Keeping them apart matters, because the obvious shortcut of defining `changes` as
@@ -344,6 +355,9 @@ VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
   --criteria "$RUN_DIR/criteria.json") > "$RUN_DIR/criteria.md"
 ```
 
+The rendered artifact includes a **Drive plans (what will actually run)** section; its
+verbatim steps and designated proof line are part of what the user approves.
+
 ### 6. Seed script and second opinion, then stop
 
 If any criterion needs volume or precondition data (thresholds, grouping, "with 6
@@ -381,7 +395,25 @@ Print `criteria.md`, the seed script (verbatim), the reviewer's table and missin
 list, and the unprobed-parts line, including invented specifics and uncovered
 changed files. Ask the user to edit, correct, or say `go`.
 
-**Stop here. Run no verification command and perform no system mutation until the user approves the criteria.**
+Before approval, a plan may be inspected without counting as evidence. Dry-run the
+fully substituted plan, or exercise one original step into the isolated `drafts/`
+folder:
+
+```bash
+VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts drive AC1 \
+  --repo-root "$TARGET_REPO" --run-dir "$RUN_DIR" \
+  --dry-run --criteria "$RUN_DIR/criteria.json")
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts drive AC1 \
+  --repo-root "$TARGET_REPO" --run-dir "$RUN_DIR" \
+  --draft --criteria "$RUN_DIR/criteria.json" --step 1)
+```
+
+Draft receipts never participate in reconciliation. If an exercise changes the plan,
+re-render the approval artifact so the user signs the exact steps that will run.
+
+**Stop here. Apart from the explicit isolated drafting helpers above, run no verification
+command and perform no system mutation until the user approves the criteria.**
 
 ## Half two: run and report
 
@@ -468,6 +500,25 @@ agg <absolute-run.cast> <absolute-run.gif>
 If recording or rendering fails, keep running the criteria and add the failure to `Not checked`.
 
 ### 2. Drive the real system
+
+For every approved criterion that has a `drive` plan, invoke the engine exactly once:
+
+```bash
+VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts drive AC1 \
+  --repo-root "$TARGET_REPO" --run-dir "$TARGET_REPO/.verify/runs/$RUN_ID")
+```
+
+Replace `AC1` with that criterion's id; do not batch or repeat planned criteria.
+
+The JSON manifest is the neutral execution summary. Carry its `completed`, per-step
+`completed` / `command-error` / `timeout` / `not-attempted` states, and proof result into
+the criterion's evidence and result. The judge maps command errors and timeouts to the
+behavioral rubric using the receipts and prechecks.
+
+**Report, don't rescue.** Never rerun a driven criterion or tweak its approved arguments
+mid-run. A plan that needs changes goes back through criteria approval. Criteria without
+a plan remain hand-driven using the guidance below.
 
 Choose the cheapest way to *actually check* each criterion, using the repository's own
 commands. Cheapest sufficient proof means the least setup that still observes the
@@ -661,7 +712,8 @@ RUN_DIR="$TARGET_REPO/.verify/runs/$RUN_ID"
 VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
 (cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts report \
   --results "$RUN_DIR/results.json" --criteria "$RUN_DIR/criteria.json" \
-  --precheck "$RUN_DIR/precheck.json") > "$RUN_DIR/report.md"
+  --precheck "$RUN_DIR/precheck.json" --repo-root "$TARGET_REPO" \
+  --run-dir "$RUN_DIR") > "$RUN_DIR/report.md"
 ```
 
 The `--precheck` flag enforces taint mechanically: a tainted criterion renders
@@ -676,7 +728,7 @@ Then render and serve the visual page:
 (cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts html \
   --criteria "$RUN_DIR/criteria.json" --results "$RUN_DIR/results.json" \
   --precheck "$RUN_DIR/precheck.json" --review "$RUN_DIR/review.json" \
-  --run-dir "$RUN_DIR" --run-id "$RUN_ID")
+  --repo-root "$TARGET_REPO" --run-dir "$RUN_DIR" --run-id "$RUN_ID")
 ```
 
 Serve it so the user opens a browser, not a file path — kill the previous

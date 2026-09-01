@@ -4,7 +4,7 @@
 // observations, and reviewer prose are model-controlled, and model-controlled
 // text must never become markup.
 import type { Criterion } from './criteria.js';
-import type { CriterionResult, Precheck } from './verdict.js';
+import type { CriterionResult, Precheck, ProofSource } from './verdict.js';
 import { summarise, headline } from './verdict.js';
 
 export interface ReviewOpinion {
@@ -26,6 +26,7 @@ export interface HtmlInput {
   /** Run-scope evidence at the run root: run.gif, run.cast. */
   runAssets?: string[];
   notChecked: { what: string; why: string }[];
+  sources?: Record<string, ProofSource>;
 }
 
 function esc(text: string): string {
@@ -104,6 +105,8 @@ img,video{max-width:100%;border:1px solid #eee;border-radius:6px;margin-top:.5re
     parts.push(`<strong>${esc(criterion.id)}</strong> — ${esc(criterion.title)}<br>`);
     parts.push(`<span class="tag">${esc(STATUS_LABEL[status] ?? status)}</span>`);
     parts.push(`<span class="tag">${esc(GUARD_LABEL[criterion.intent] ?? criterion.intent)}</span>`);
+    const source = input.sources?.[criterion.id];
+    if (source) parts.push(`<span class="tag">proof: ${esc(source)}</span>`);
     parts.push(`<p>Driven: ${esc(criterion.doIt)}<br>Observed: ${esc(result.observed)}</p>`);
     const assets = input.assets[criterion.id];
     for (const image of assets?.images ?? []) {

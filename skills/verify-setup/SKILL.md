@@ -55,6 +55,10 @@ and shown in the final summary.
   by the environment manager before boot, seeds, and probes.
 - Base URL: default `http://localhost:3000`, or the value in the env file if
   it names one.
+- How do API requests authenticate? A) a header whose value lives in an env
+  var — name the header (for example, `X-API-Key`) and the env var name; or B)
+  no auth. The value itself is never written anywhere: the contract stores
+  only the header name and the env var name.
 - Probes: for each of `worker`, `sink`, `storage`, ask "is there a one-line
   command that proves your <part> is alive? (leave blank to skip)". Explain:
   a part with no probe still runs its criteria, but a failure on it will be
@@ -80,6 +84,7 @@ parses it):
   "seed_data_files": [],
   "health_url": "",
   "base_url": "http://localhost:3000",
+  "auth": {"header": "", "value_env": ""},
   "env_file": ".env.example",
   "observe": {"db_url_env": "DATABASE_URL"},
   "probes": {"worker": "", "sink": "", "storage": ""}

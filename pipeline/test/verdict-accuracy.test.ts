@@ -3,6 +3,7 @@
 // story as the text report.
 import { describe, expect, it } from 'vitest';
 import {
+  applyReceiptedProofs,
   applyTaint,
   headline,
   renderReport,
@@ -70,6 +71,36 @@ describe('proof-of-run', () => {
   });
 });
 
+describe('receipted proof', () => {
+  it('overrides the judge in both directions and labels every source', () => {
+    const results: CriterionResult[] = [
+      { id: 'AC1', outcome: 'pass', proofSeen: false, observed: 'judge was stingy' },
+      { id: 'AC2', outcome: 'pass', proofSeen: true, observed: 'judge was generous' },
+      { id: 'AC3', outcome: 'pass', proofSeen: true, observed: 'hand driven' },
+    ];
+    const applied = applyReceiptedProofs(results, { AC1: { seen: true }, AC2: { seen: false } });
+    expect(applied.results.map((result) => result.proofSeen)).toEqual([true, false, true]);
+    expect(applied.sources).toEqual({ AC1: 'receipted', AC2: 'receipted', AC3: 'judged' });
+    expect(renderReport(applied.results, { filesWithoutCriterion: 0 }, [], applied.sources)).toContain('[receipted]');
+  });
+
+  it('lets taint make the final override', () => {
+    const results = [{ id: 'AC1', outcome: 'pass' as const, proofSeen: false, observed: 'judge result' }];
+    const receipted = applyReceiptedProofs(results, { AC1: { seen: true } });
+    const final = applyTaint(
+      receipted.results,
+      { parts: { api: 'down' }, tainted: {}, unchecked: [] },
+      [{ id: 'AC1', dependsOn: ['api'] }],
+    );
+    expect(final[0]).toMatchObject({ outcome: 'could-not-run', proofSeen: false });
+  });
+
+  it('does not alter ids absent from the supplied receipt entries', () => {
+    const results = [{ id: 'AC1', outcome: 'pass' as const, proofSeen: true, observed: 'judged' }];
+    expect(applyReceiptedProofs(results, {}).results).toEqual(results);
+  });
+});
+
 describe('mechanical taint', () => {
   const precheck: Precheck = {
     parts: { api: 'ok', sink: 'down' },
@@ -133,6 +164,7 @@ describe('html report', () => {
     violation: false,
     assets: { AC1: { images: ['evidence/AC1/screenshot-1.png'], videos: ['evidence/AC1/session.webm'] } },
     notChecked: [{ what: 'terminal recording', why: 'asciinema missing' }],
+    sources: { AC1: 'receipted' as const, AC2: 'judged' as const },
   };
 
   it('escapes model-controlled text and keeps evidence relative', () => {
@@ -148,6 +180,8 @@ describe('html report', () => {
     const html = renderHtml(input);
     expect(html).toContain('class="card not-proven"');
     expect(html).toContain('not proven — the check may not have actually run');
+    expect(html).toContain('proof: receipted');
+    expect(html).toContain('proof: judged');
   });
 
   it('headline says PASS only when proven, and violation poisons the page', () => {

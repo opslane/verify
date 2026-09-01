@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Signed drive plans.** Criteria reachable by generic hands carry verbatim plans in the approval artifact before they can execute.
+- **Four receipted verbs.** `http`, read-only `db`, budgeted `wait`, and shell-free `run` execute approved steps and persist neutral receipts.
+- **Mechanical proof.** Driven marker criteria resolve to present, absent, or inconclusive from one designated eligible receipt before taint makes the final override.
+- **Proof provenance.** Text and HTML reports label each criterion's proof as `receipted` or `judged`.
+- **Run manifests.** Normal drive runs record the repository commit and `.verify/setup.json` contract used.
+- **API auth contract.** Setup records only an HTTP header name and the environment variable containing its complete value; secret values are never written.
+- **Report, don't rescue.** The workflow drives each approved plan once and sends any needed plan change back through approval instead of improvising retries.
 - **Worktree shared store.** Fresh git worktrees inherit the committed setup
   contract but not the gitignored login state or local env file. `/verify-setup`
   now pushes both to `~/.verify/<repo-slug>/`; `/verify` pulls the login state
