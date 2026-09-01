@@ -11,15 +11,25 @@ import type { FinalizedAttempt } from './drive.js';
 import type { CriterionResult } from './verdict.js';
 
 export const EVIDENCE_EXCERPT_LIMIT = 64 * 1024;
+export const EVIDENCE_ENTRY_LIMIT = 25;
 
 const SELF_OUTPUTS = new Set([
   'report.html',
   'report.md',
   'results.json',
   'criteria.json',
+  'criteria.md',
   'coverage.json',
   'claims.json',
   'review.json',
+  'precheck.json',
+  // The run's own scripts and recorder artifacts describe the harness, not
+  // the behavior under test — citing them cannot substantiate a verdict.
+  'seed.sh',
+  'hand-drive.sh',
+  'run.cast',
+  'run.gif',
+  'recorder-check.cast',
 ]);
 
 export type EvidenceKind = 'image' | 'video' | 'excerpt';
@@ -69,7 +79,8 @@ function displayName(value: unknown): string {
   const text = typeof value === 'string' ? value : JSON.stringify(value) ?? String(value);
   // Filenames land verbatim in report.md and terminal output; control
   // characters (ANSI, newlines) could forge lines there.
-  return text.replace(/[\u0000-\u001f\u007f]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  return text.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
 /** Read at most the excerpt limit without loading the whole file. */
@@ -78,7 +89,11 @@ function readCapped(path: string): string {
   try {
     const buffer = Buffer.alloc(EVIDENCE_EXCERPT_LIMIT);
     const bytes = readSync(fd, buffer, 0, EVIDENCE_EXCERPT_LIMIT, 0);
-    return buffer.subarray(0, bytes).toString('utf8');
+    // A char cut at the cap decodes as up to three U+FFFD at the tail; drop
+    // only that split tail — genuine binary content keeps its replacement
+    // chars so the excerpt stays nonempty.
+    const text = buffer.subarray(0, bytes).toString('utf8');
+    return bytes === EVIDENCE_EXCERPT_LIMIT ? text.replace(/\uFFFD{1,3}$/, '') : text;
   } finally {
     closeSync(fd);
   }
@@ -141,8 +156,10 @@ function resolveFile(
         alsoCitedBy: [],
       },
     };
-  } catch (error) {
-    return reject(error instanceof Error ? error.message : 'file could not be opened');
+  } catch {
+    // Raw fs error messages embed on-disk absolute paths (and whatever bytes
+    // the filename holds); the marker gets a fixed reason instead.
+    return reject('file could not be opened');
   }
 }
 
@@ -172,7 +189,7 @@ export function resolveEvidence(
     if (result?.evidence !== undefined && !Array.isArray(result.evidence)) {
       markers.push({ name: 'evidence', message: 'missing/rejected: evidence (must be a string array)' });
     }
-    for (const raw of submitted as unknown[]) {
+    for (const raw of (submitted as unknown[]).slice(0, EVIDENCE_ENTRY_LIMIT)) {
       const candidate = resolveFile(root, raw, 'named');
       if (candidate.file && candidate.canonical) {
         files.push(candidate.file);
@@ -183,6 +200,13 @@ export function resolveEvidence(
       } else if (candidate.marker) {
         markers.push(candidate.marker);
       }
+    }
+
+    if ((submitted as unknown[]).length > EVIDENCE_ENTRY_LIMIT) {
+      markers.push({
+        name: 'evidence',
+        message: `evidence list capped at ${EVIDENCE_ENTRY_LIMIT} entries (${(submitted as unknown[]).length} submitted)`,
+      });
     }
 
     const part = taintedBy[criterion.id];
@@ -197,7 +221,14 @@ export function resolveEvidence(
       files,
       markers,
       ...(attempt ? { attempt } : {}),
-      substantiated: criterion.drive !== undefined ? attempt?.qualifies === true : namedValid > 0,
+      // A driven PASS needs at least one completed step behind it (user
+      // decision): an all-errors trail is exactly the evidence a FAIL needs,
+      // but it cannot prove something worked.
+      substantiated: criterion.drive !== undefined
+        ? (result?.outcome === 'pass'
+          ? attempt?.manifest.steps.some((step) => step.state === 'completed') === true
+          : attempt?.qualifies === true)
+        : namedValid > 0,
     };
   }
 
@@ -222,7 +253,8 @@ export function legacyEvidence(result: CriterionResult): CriterionEvidence {
       return {
         name,
         relativePath: name,
-        href: hrefFor(name),
+        // Legacy names are unvalidated — they must never become a link.
+        href: '',
         bytes: 0,
         kind: kindFor(name),
         source: 'named',

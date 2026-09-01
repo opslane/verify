@@ -237,7 +237,7 @@ describe('latestFinalizedProof', () => {
     expect(latestFinalizedAttempt(f.runDir, 'AC9')?.qualifies).toBe(false);
   });
 
-  it('falls back to the newest attempt WITH a valid proof block', () => {
+  it('takes proof ONLY from the newest finalized attempt — no cross-attempt fallback', () => {
     const f = fixture();
     const write = (folder: string, startedAt: string, proof: unknown) => {
       const dir = join(f.runDir, 'evidence', 'AC8', folder);
@@ -249,6 +249,8 @@ describe('latestFinalizedProof', () => {
     };
     write('drive-1-1', '2026-09-01T00:00:01.000Z', { result: 'present', expect: 'present', seen: true });
     write('drive-2-1', '2026-09-01T00:00:02.000Z', null);
-    expect(latestFinalizedProof(f.runDir, 'AC8')?.seen).toBe(true);
+    // The newest attempt has no usable proof; an older attempt's proof must
+    // not describe a different execution than the one that substantiates.
+    expect(latestFinalizedProof(f.runDir, 'AC8')).toBeUndefined();
   });
 });

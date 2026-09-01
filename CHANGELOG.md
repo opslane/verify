@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [2.7.0] - 2026-09-01
 
+### Fixed (pre-release review)
+- results.json is schema-validated: a typo'd outcome fails loudly instead of
+  rendering a wrong card while the headline disagrees.
+- Headline segments partition the total (verdict buckets only); demoted
+  criteria no longer count twice.
+- Proof comes atomically from the newest finalized attempt; a driven PASS
+  substantiates only via an attempt with a completed step (error trails still
+  substantiate fails).
+- The classification pipeline lives once (`classify-run.ts`), consumed by both
+  the text and HTML verbs; a missing result renders a visible card instead of
+  disappearing.
+- Run-dir mode refuses --results/--precheck from outside the run; report.md
+  honors the clean-repo-violation flag.
+- The recorder command sets its environment before `timeout` (it never started
+  as documented); markers and report lines strip C1/bidi control characters;
+  legacy evidence names carry no links.
+
 ### Added
 - **Evidence-backed report cards.** Results name run-relative evidence files; the renderer
   verifies and displays images, video, and capped text excerpts, while missing, rejected,

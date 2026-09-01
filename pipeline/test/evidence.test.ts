@@ -56,6 +56,32 @@ describe('named evidence resolution', () => {
     expect(evidence.AC1.markers.map((item) => item.message).join('\n')).toMatch(/missing\.log[\s\S]*empty[\s\S]*own evidence[\s\S]*engine-reserved/);
   });
 
+  it('substantiates a FAIL from an all-errors trail but never a PASS', () => {
+    const dir = runDir();
+    const errors = attempt('command-error');
+    const failCase = resolveEvidence(dir, [criterion('AC1', true)], [{
+      id: 'AC1', outcome: 'fail', observed: 'step exploded',
+    }], { AC1: errors }, {}).AC1;
+    expect(failCase.substantiated).toBe(true);
+    const passCase = resolveEvidence(dir, [criterion('AC1', true)], [{
+      id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'claims it worked',
+    }], { AC1: errors }, {}).AC1;
+    expect(passCase.substantiated).toBe(false);
+  });
+
+  it('escapes control characters in submitted evidence names', () => {
+    const dir = runDir();
+    const evil = 'x\u001b[31mFAKE\nAC9  ok';
+    const out = resolveEvidence(dir, [criterion('AC1')], [{
+      id: 'AC1', outcome: 'pass', observed: 'seen',
+      evidence: [evil, 42 as unknown as string],
+    }], {}, {}).AC1;
+    const text = out.markers.map((m) => m.message).join('|');
+    expect(text).not.toMatch(/\u001b/);
+    expect(text).not.toContain('\n');
+    expect(text).toContain('\\u001b');
+  });
+
   it('rejects draft receipt folders and uppercase self-outputs', () => {
     const dir = runDir();
     writeFileSync(join(dir, 'evidence', 'AC1', 'drafts', 'step-1.json'), '{"draft":true}');

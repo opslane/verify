@@ -9,7 +9,7 @@ import type {
   Precheck,
   ProofSource,
 } from './verdict.js';
-import { headline, summarise } from './verdict.js';
+import { notProvenReason, sourceLabel, headline, summarise } from './verdict.js';
 
 export interface ReviewOpinion {
   reviewer: string;
@@ -58,7 +58,7 @@ const GUARD_LABEL: Record<string, string> = {
 function seconds(receipt: StepReceipt): string {
   const duration = Date.parse(receipt.endedAt) - Date.parse(receipt.startedAt);
   if (!Number.isFinite(duration) || duration < 0) return '';
-  const value = duration < 1000 ? (duration / 1000).toFixed(1) : (duration / 1000).toFixed(duration < 10_000 ? 1 : 0);
+  const value = (duration / 1000).toFixed(duration < 10_000 ? 1 : 0);
   return ` (${value}s)`;
 }
 
@@ -66,8 +66,8 @@ function planLabel(step: DriveStep): string {
   return `${step.verb} ${step.args.join(' ')}`;
 }
 
-function receiptResult(receipt: StepReceipt | undefined, fallbackState: string): string {
-  if (!receipt) return `${fallbackState} — no receipt for step`;
+function receiptResult(receipt: StepReceipt | undefined, fallbackState: string, index: number): string {
+  if (!receipt) return `${fallbackState} — no receipt for step ${index}`;
   const code = receipt.status !== undefined ? ` — HTTP ${receipt.status}`
     : receipt.exit !== undefined ? ` — exit ${receipt.exit}` : '';
   return `${receipt.state}${code}${seconds(receipt)}`;
@@ -77,7 +77,7 @@ function invocation(receipt: StepReceipt): string {
   if (receipt.request) {
     return [
       `${receipt.request.method} ${receipt.request.url}`,
-      `headers: ${JSON.stringify(receipt.request.headers, null, 2)}`,
+      ...(receipt.request.headers ? [`headers: ${JSON.stringify(receipt.request.headers, null, 2)}`] : []),
       ...(receipt.request.body === undefined ? [] : [`body:\n${receipt.request.body}`]),
     ].join('\n');
   }
@@ -120,7 +120,7 @@ function renderAttempt(criterion: Criterion, evidence: CriterionEvidence, runTag
     const index = offset + 1;
     const receipt = attempt.receipts[index];
     const state = manifestByIndex.get(index)?.state ?? 'not-attempted';
-    const result = receiptResult(receipt, state).replace('no receipt for step', `no receipt for step ${index}`);
+    const result = receiptResult(receipt, state, index);
     lines.push(`<li><details><summary>${esc(planLabel(planStep))} <span class="step-state">→ ${esc(result)}</span></summary>`);
     if (receipt) lines.push(transcript(receipt, runTag));
     lines.push('</details></li>');
@@ -129,7 +129,7 @@ function renderAttempt(criterion: Criterion, evidence: CriterionEvidence, runTag
     .filter((index) => index < 1 || index > (criterion.drive?.length ?? 0)).sort((a, b) => a - b);
   for (const index of extras) {
     const receipt = attempt.receipts[index];
-    lines.push(`<li><details><summary>unlabeled extra step ${index} <span class="step-state">→ ${esc(receiptResult(receipt, receipt.state))}</span></summary>`);
+    lines.push(`<li><details><summary>unlabeled extra step ${index} <span class="step-state">→ ${esc(receiptResult(receipt, receipt.state, index))}</span></summary>`);
     lines.push(transcript(receipt, runTag), '</details></li>');
   }
   lines.push('</ol>');
@@ -154,12 +154,6 @@ function renderFile(file: EvidenceFile): string[] {
   // report's origin.
   lines.push(`<p><a href="${esc(file.href)}" download>full file</a></p>`, '</details>');
   return lines;
-}
-
-function notProvenCopy(result: ClassifiedCriterionResult): string {
-  if (result.outcome === 'could-not-run') return 'reported blocked, no reason';
-  if (!result.substantiated) return `reported ${result.outcome}, no evidence`;
-  return 'proof of run was not observed';
 }
 
 export function renderHtml(input: HtmlInput): string {
@@ -191,18 +185,26 @@ img,video{max-width:100%;border:1px solid #eee;border-radius:6px;margin-top:.5re
 
   for (const criterion of input.criteria) {
     const result = byId.get(criterion.id);
-    if (!result) continue;
+    if (!result) {
+      // Checks never disappear: even a caller that skipped reconcile gets a
+      // visible card for a criterion with no recorded result.
+      parts.push(`<section class="card not-proven">`);
+      parts.push(`<strong>${esc(criterion.id)}</strong>`, `<p class="claim">${esc(criterion.plain ?? criterion.title)}</p>`);
+      parts.push(`<span class="tag">${esc(STATUS_LABEL['not-proven'])}</span>`);
+      parts.push('<p class="warning">no result was recorded for this criterion</p>', '</section>');
+      continue;
+    }
     const evidence = input.evidence[criterion.id] ?? { files: [], markers: [], substantiated: false };
     parts.push(`<section class="card ${esc(result.displayVerdict)}">`);
     parts.push(`<strong>${esc(criterion.id)}</strong>`, `<p class="claim">${esc(criterion.plain ?? criterion.title)}</p>`);
     parts.push(`<span class="tag">${esc(STATUS_LABEL[result.displayVerdict])}</span>`);
     parts.push(`<span class="tag">${esc(GUARD_LABEL[criterion.intent] ?? criterion.intent)}</span>`);
     const source = input.sources?.[criterion.id];
-    if (source) parts.push(`<span class="tag">${source === 'receipted' ? 'machine-checked' : 'agent-reported'}</span>`);
+    if (source) parts.push(`<span class="tag">${sourceLabel(source)}</span>`);
     if (result.displayVerdict === 'failed' && result.proofSeen === true) {
-      parts.push(`<span class="tag">check ran: ${source === 'receipted' ? 'machine-checked' : 'agent-reported'}</span>`);
+      parts.push(`<span class="tag">check ran: ${sourceLabel(source ?? 'judged')}</span>`);
     }
-    if (result.displayVerdict === 'not-proven') parts.push(`<p class="warning">${esc(notProvenCopy(result))}</p>`);
+    if (result.displayVerdict === 'not-proven') parts.push(`<p class="warning">${esc(notProvenReason(result))}</p>`);
     if (result.displayVerdict === 'blocked') parts.push(`<p class="warning">${esc(result.observed)}</p>`);
     else parts.push(`<details><summary>Reported observation</summary><pre>${esc(result.observed)}</pre></details>`);
 

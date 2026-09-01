@@ -505,8 +505,8 @@ under the run directory. Give each operation its own timeout, then set
 recorder process group as well:
 
 ```bash
-timeout --signal=TERM --kill-after=5s "${RECORDING_BUDGET_SECONDS}s" \
-  VERIFY_HAND_DRIVE="$RUN_DIR/hand-drive.sh" \
+VERIFY_HAND_DRIVE="$RUN_DIR/hand-drive.sh" \
+  timeout --signal=TERM --kill-after=5s "${RECORDING_BUDGET_SECONDS}s" \
     asciinema rec --overwrite --command 'exec bash "$VERIFY_HAND_DRIVE"' "$RUN_DIR/run.cast"
 timeout --signal=TERM --kill-after=5s 60s agg "$RUN_DIR/run.cast" "$RUN_DIR/run.gif"
 ```

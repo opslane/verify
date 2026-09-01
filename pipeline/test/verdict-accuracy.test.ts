@@ -182,7 +182,7 @@ describe('html report', () => {
   it('renders the classified verdict and reader-language proof source', () => {
     const html = renderHtml(input);
     expect(html).toContain('class="card not-proven"');
-    expect(html).toContain('proof of run was not observed');
+    expect(html).toContain('the check may not have actually run');
     expect(html).toContain('machine-checked');
     expect(html).toContain('agent-reported');
   });
@@ -213,6 +213,29 @@ describe('html report', () => {
     });
     expect(html).toContain('check ran: agent-reported');
     expect(html).not.toContain('check ran: machine-checked');
+  });
+
+  it('never silently drops a criterion whose result is missing', () => {
+    const html = renderHtml({ ...input, criteria: [...criteria, criterion({ id: 'AC9', title: 'a forgotten check' })] });
+    expect(html).toContain('AC9');
+    expect(html).toContain('no result was recorded for this criterion');
+  });
+
+  it('marks the full-file evidence link download-only', () => {
+    const html = renderHtml({
+      ...input,
+      evidence: {
+        ...input.evidence,
+        AC2: {
+          files: [{
+            name: 'page.html', relativePath: 'page.html', href: 'page.html',
+            bytes: 40, kind: 'excerpt' as const, excerpt: '<html>evil</html>', source: 'named' as const, alsoCitedBy: [],
+          }],
+          markers: [], substantiated: true,
+        },
+      },
+    });
+    expect(html).toMatch(/<a href="page\.html" download>full file<\/a>/);
   });
 
   it('escapes evidence filenames and renders video evidence', () => {

@@ -47,6 +47,30 @@ export function applyReceiptedProofs(
   };
 }
 
+const OUTCOMES = new Set(['pass', 'fail', 'could-not-run']);
+
+/** results.json is author-written; a typo'd outcome must fail loudly, never
+ * fall through classify's else branch into a wrong verdict. */
+export function validateResults(value: unknown): string[] {
+  if (typeof value !== 'object' || value === null || !Array.isArray((value as { results?: unknown }).results)) {
+    return ['results.json must contain a results array'];
+  }
+  const problems: string[] = [];
+  (value as { results: unknown[] }).results.forEach((entry, index) => {
+    if (typeof entry !== 'object' || entry === null) { problems.push(`results[${index}] must be an object`); return; }
+    const result = entry as Partial<CriterionResult>;
+    if (typeof result.id !== 'string' || result.id === '') problems.push(`results[${index}] needs a string id`);
+    if (!OUTCOMES.has(result.outcome as string)) {
+      problems.push(`results[${index}] outcome must be pass|fail|could-not-run, got ${JSON.stringify(result.outcome)}`);
+    }
+    if (typeof result.observed !== 'string') problems.push(`results[${index}] needs a string observed`);
+    if (result.proofSeen !== undefined && typeof result.proofSeen !== 'boolean') {
+      problems.push(`results[${index}] proofSeen must be a boolean`);
+    }
+  });
+  return problems;
+}
+
 export function taintPartFor(
   id: string,
   precheck: Precheck,
@@ -62,7 +86,7 @@ export function taintPartFor(
   }
   // Compatibility for direct/legacy callers that have no approved dependency
   // declarations to recompute from.
-  return precheck.tainted[id];
+  return precheck.tainted?.[id];
 }
 
 /** Mechanical taint is the final mutation before classification. */
@@ -157,6 +181,8 @@ export interface RunSummary {
   covered: { criteria: number; filesWithoutCriterion: number };
   proven: number;
   notProven: number;
+  failedVerdict: number;
+  blocked: number;
 }
 
 const MARK: Record<DisplayVerdict, string> = {
@@ -182,13 +208,17 @@ export function summarise(results: ClassifiedCriterionResult[], coverage: Covera
     covered: { criteria: results.length, filesWithoutCriterion: coverage.filesWithoutCriterion },
     proven: count('proven'),
     notProven: count('not-proven'),
+    failedVerdict: count('failed'),
+    blocked: count('blocked'),
   };
 }
 
 export function headline(summary: RunSummary, opts: { violation?: boolean } = {}): string {
+  // The headline consumes ONLY verdict buckets so its segments partition
+  // ran.total — mixing in the raw axes double-counted demoted criteria.
   let line = `${summary.proven} of ${summary.ran.total} proven.`;
-  if (summary.ran.couldNotRun > 0) line += ` ${summary.ran.couldNotRun} couldn't run.`;
-  if (summary.behaviour.failed > 0) line += ` ${summary.behaviour.failed} failed.`;
+  if (summary.blocked > 0) line += ` ${summary.blocked} couldn't run.`;
+  if (summary.failedVerdict > 0) line += ` ${summary.failedVerdict} failed.`;
   if (summary.notProven > 0) line += ` ${summary.notProven} not proven.`;
   if (opts.violation) return `CANNOT TRUST THIS RUN — verify modified the working tree. ${line}`;
   if (summary.proven === summary.ran.total && summary.ran.total > 0) return `PASS — ${line}`;
@@ -200,12 +230,24 @@ export interface ReportOptions {
   evidence?: Record<string, CriterionEvidence>;
   sources?: Record<string, ProofSource>;
   legacyEvidence?: boolean;
+  violation?: boolean;
 }
 
-function notProvenReason(result: ClassifiedCriterionResult): string {
+export function notProvenReason(result: ClassifiedCriterionResult): string {
   if (result.outcome === 'could-not-run') return 'reported blocked, no reason';
   if (!result.substantiated) return `reported ${result.outcome}, no evidence`;
   return 'the check may not have actually run';
+}
+
+export function sourceLabel(source: ProofSource): string {
+  return source === 'receipted' ? 'machine-checked' : 'agent-reported';
+}
+
+/** Terminal output is a forgery surface too: strip C0/C1 controls, line and
+ * bidi overrides from every author-written string a report line embeds. */
+export function sanitizeLine(text: string): string {
+  return text.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, (ch) =>
+    ch === '\n' ? ' ' : `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
 function evidenceSummary(evidence: CriterionEvidence | undefined): string {
@@ -229,10 +271,11 @@ export function renderReport(
   options: ReportOptions = {},
 ): string {
   const summary = summarise(results, coverage);
+  const line = headline(summary, { violation: options.violation });
   const criteria = new Map((options.criteria ?? []).map((criterion) => [criterion.id, criterion]));
   const resultLines = results.map((result) => {
     const source = options.sources?.[result.id];
-    const sourceLabel = source ? ` [${source === 'receipted' ? 'machine-checked' : 'agent-reported'}]` : '';
+    const sourceTag = source ? ` [${sourceLabel(source)}]` : '';
     const claim = criteria.get(result.id);
     const claimLabel = claim ? ` ${claim.plain ?? claim.title} —` : '';
     let detail: string;
@@ -241,8 +284,8 @@ export function renderReport(
       detail = `${options.legacyEvidence ? 'could not run' : 'blocked'}, ${result.observed}`;
     }
     else detail = result.observed;
-    return `${result.id}  ${MARK[result.displayVerdict]} ${claimLabel} ${detail}${sourceLabel}` +
-      evidenceSummary(options.evidence?.[result.id]);
+    return sanitizeLine(`${result.id}  ${MARK[result.displayVerdict]} ${claimLabel} ${detail}${sourceTag}` +
+      evidenceSummary(options.evidence?.[result.id]));
   });
 
   const axes = [
@@ -257,7 +300,7 @@ export function renderReport(
     : ['  (nothing)'];
 
   return [
-    headline(summary),
+    line,
     ...(options.legacyEvidence ? ['evidence not verified (legacy mode)'] : []),
     '',
     resultLines.join('\n'),

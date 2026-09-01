@@ -39,7 +39,7 @@ Nothing runs until you say go.
 ```
 AC1  ✔  HTTP 401 at the HTTP layer, no tool dispatched
 AC2  ✔  good Bearer + stale X-API-KEY authorized; bad Bearer + good key denied
-AC3  ~  could not run, staging rejected the create
+AC3  ~  blocked, staging rejected the create
 
 Proven     2 of 3
 Behaviour  2 passed, 0 failed

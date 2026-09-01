@@ -197,16 +197,13 @@ export function latestFinalizedProof(
   runDir: string,
   ac: string,
 ): { result: ProofResult; expect: 'present' | 'absent'; seen: boolean } | undefined {
-  // Newest attempt WITH a valid proof block, not just the newest attempt:
-  // an attempt whose proof is unusable must not erase an earlier valid one.
-  for (const attempt of allFinalizedAttempts(runDir, ac).reverse()) {
-    const proof = attempt.manifest.proof;
-    if (proof && ['present', 'absent', 'inconclusive'].includes(proof.result) &&
-        ['present', 'absent'].includes(proof.expect)) {
-      return { result: proof.result, expect: proof.expect, seen: proof.result === proof.expect };
-    }
-  }
-  return undefined;
+  // Proof comes from THE newest finalized attempt — the same attempt that
+  // substantiates. Walking back to an older attempt's proof would let proof
+  // and substantiation describe different executions.
+  const proof = latestFinalizedAttempt(runDir, ac)?.manifest.proof;
+  if (!proof || !['present', 'absent', 'inconclusive'].includes(proof.result) ||
+      !['present', 'absent'].includes(proof.expect)) return undefined;
+  return { result: proof.result, expect: proof.expect, seen: proof.result === proof.expect };
 }
 
 function validState(value: unknown): value is StepState {
@@ -214,6 +211,8 @@ function validState(value: unknown): value is StepState {
 }
 
 /** Newest engine-finalized attempt, including its neutral per-step receipts. */
+export const TERMINAL_STEP_STATES: readonly StepState[] = ['completed', 'command-error', 'timeout'];
+
 export function latestFinalizedAttempt(runDir: string, ac: string): FinalizedAttempt | undefined {
   return allFinalizedAttempts(runDir, ac).at(-1);
 }
@@ -242,7 +241,7 @@ function allFinalizedAttempts(runDir: string, ac: string): FinalizedAttempt[] {
 
       const receipts: Record<number, StepReceipt> = {};
       for (const name of readdirSync(dir)) {
-        const match = /^step-(\d+)\.json$/.exec(name);
+        const match = /^step-(0|[1-9]\d*)\.json$/.exec(name);
         if (!match) continue;
         try {
           const receipt = JSON.parse(readFileSync(join(dir, name), 'utf8')) as Partial<StepReceipt>;
@@ -269,8 +268,7 @@ function allFinalizedAttempts(runDir: string, ac: string): FinalizedAttempt[] {
         folder,
         manifest,
         receipts,
-        qualifies: manifest.steps.some((step) =>
-          step.state === 'completed' || step.state === 'command-error' || step.state === 'timeout'),
+        qualifies: manifest.steps.some((step) => TERMINAL_STEP_STATES.includes(step.state)),
       });
     } catch {
       // A crashed or malformed attempt is deliberately invisible.
