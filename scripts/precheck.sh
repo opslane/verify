@@ -16,11 +16,22 @@ elif command -v timeout >/dev/null 2>&1; then TIMEOUT_CMD="timeout"
 else echo "✗ timeout command not found. Install: brew install coreutils"; exit 1; fi
 
 ENV_FILE="${VERIFY_ENV_FILE:-$(jq -r '.env_file // empty' "$SETUP")}"
+if [ -n "$ENV_FILE" ] && [ ! -f "$ENV_FILE" ]; then
+  STORE_ENV="$(bash "$(cd "$(dirname "$0")" && pwd)/shared-store.sh" path)/local.env"
+  [ -f "$STORE_ENV" ] && ENV_FILE="$STORE_ENV"
+fi
 if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-  set +a
+  # Parsed, never sourced — same rule as env.sh: repo-controlled data must not
+  # execute in the verifier.
+  while IFS= read -r line; do
+    case "$line" in
+      [A-Za-z_]*=*)
+        key="${line%%=*}"
+        val="${line#*=}"
+        val="${val%\"}"; val="${val#\"}"
+        export "$key=$val" ;;
+    esac
+  done < "$ENV_FILE"
 fi
 
 BASE_URL=$(jq -r '.base_url // empty' "$SETUP")

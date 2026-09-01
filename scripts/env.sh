@@ -22,8 +22,15 @@ CMD="${1:-up}"
 # or broken env file can never strand a running stack.
 if [ "$CMD" != "down" ]; then
   ENV_FILE="${VERIFY_ENV_FILE:-$(jq -r '.env_file // empty' "$SETUP")}"
+  if [ -n "$ENV_FILE" ] && [ ! -f "$ENV_FILE" ]; then
+    STORE_ENV="$(bash "$(cd "$(dirname "$0")" && pwd)/shared-store.sh" path)/local.env"
+    if [ -f "$STORE_ENV" ]; then
+      echo "→ $ENV_FILE missing here (fresh worktree?) — using shared fallback: $STORE_ENV"
+      ENV_FILE="$STORE_ENV"
+    fi
+  fi
   if [ -n "$ENV_FILE" ]; then
-    [ -f "$ENV_FILE" ] || { echo "✗ configured env file missing: $ENV_FILE"; exit 1; }
+    [ -f "$ENV_FILE" ] || { echo "✗ configured env file missing: $ENV_FILE (no shared fallback either — run /verify-setup or shared-store.sh push from a checkout that has it)"; exit 1; }
     while IFS= read -r line; do
       case "$line" in
         [A-Za-z_]*=*)
