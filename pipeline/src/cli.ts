@@ -52,6 +52,9 @@ if (command === "drive") {
     if (!existsSync(currentRunPath)) fail(`drive: no active run — ${currentRunPath} is missing`);
     const currentRun = readFileSync(currentRunPath, 'utf8').trim();
     if (!currentRun) fail(`drive: active run file is empty: ${currentRunPath}`);
+    if (!/^[A-Za-z0-9._-]+$/.test(currentRun) || currentRun.includes('..')) {
+      fail(`drive: current-run holds an invalid run id: ${JSON.stringify(currentRun)}`);
+    }
     const requestedPath = pathFromRepo(repoRoot, values['run-dir']);
     const requestedRun = realpathSync(requestedPath);
     const expectedPath = join(repoRoot, '.verify', 'runs', currentRun);
@@ -82,8 +85,16 @@ if (command === "drive") {
 
     if (!draftSourceAllowed) {
       const precheckPath = join(requestedRun, 'precheck.json');
-      const precheck = readJson(precheckPath) as { tainted?: Record<string, string> };
-      const taintedBy = precheck.tainted?.[ac];
+      const precheck = readJson(precheckPath) as {
+        parts?: Record<string, string>;
+        tainted?: Record<string, string>;
+      };
+      // Same derivation as reconciliation-side taint: the tainted map is a
+      // convenience, the parts map is the authority.
+      const downDep = (criterion.dependsOn ?? []).find(
+        (part) => precheck.parts?.[part] === 'down',
+      );
+      const taintedBy = downDep ?? precheck.tainted?.[ac];
       if (taintedBy) {
         fail(`drive: ${ac} is tainted by ${taintedBy}; driving a broken pipe is pointless`);
       }
@@ -173,14 +184,19 @@ if (command === "drive") {
     process.exit(1);
   }
 
+  if (!existsSync(values.results)) fail(`report: --results file does not exist: ${values.results}`);
   const input = JSON.parse(readFileSync(values.results, "utf8"));
   const repoRoot = realpathSync(values['repo-root'] ?? process.cwd());
+  if (values['run-dir'] && !existsSync(pathFromRepo(repoRoot, values['run-dir']))) {
+    fail(`report: --run-dir does not exist: ${values['run-dir']}`);
+  }
   const runDir = values['run-dir'] ? realpathSync(pathFromRepo(repoRoot, values['run-dir'])) : undefined;
   const approvedCriteriaPath = runDir ? join(runDir, 'criteria.json') : undefined;
   if (runDir && values.criteria && realpathSync(pathFromRepo(repoRoot, values.criteria)) !== realpathSync(approvedCriteriaPath!)) {
     fail(`report: --criteria ${values.criteria} does not match approved snapshot ${approvedCriteriaPath}`);
   }
   const criteriaPath = approvedCriteriaPath ?? pathFromRepo(repoRoot, values.criteria!);
+  if (!existsSync(criteriaPath)) fail(`report: criteria file does not exist: ${criteriaPath}`);
   const criteriaInput = JSON.parse(readFileSync(criteriaPath, "utf8"));
   const criteria = criteriaInput.criteria ?? [];
 
@@ -211,7 +227,8 @@ if (command === "drive") {
   const receipted = applyReceiptedProofs(results, entries);
   results = receipted.results;
   if (precheck) results = applyTaint(results, precheck, criteria);
-  console.log(renderReport(results, input.coverage, input.notChecked ?? [], receipted.sources));
+  // Legacy invocations (no --run-dir) keep their pre-drive output shape.
+  console.log(renderReport(results, input.coverage, input.notChecked ?? [], runDir ? receipted.sources : undefined));
 
 } else if (command === "html") {
   const { renderHtml } = await import("./lib/html.js");
@@ -226,6 +243,9 @@ if (command === "drive") {
     process.exit(1);
   }
   const repoRoot = realpathSync(values['repo-root'] ?? process.cwd());
+  if (!existsSync(pathFromRepo(repoRoot, values['run-dir']))) {
+    fail(`html: --run-dir does not exist: ${values['run-dir']}`);
+  }
   const runDir = realpathSync(pathFromRepo(repoRoot, values["run-dir"]));
   const approvedCriteriaPath = join(runDir, 'criteria.json');
   if (values.criteria && realpathSync(pathFromRepo(repoRoot, values.criteria)) !== realpathSync(approvedCriteriaPath)) {

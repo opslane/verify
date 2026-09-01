@@ -181,7 +181,29 @@ export async function runHttp(args: string[], ctx: StepContext): Promise<StepRec
   const display = `http ${request.method} ${request.path}` +
     (request.json === undefined ? '' : ` --json <${Buffer.byteLength(request.json)} bytes>`) +
     (request.expectStatus === undefined ? '' : ` --expect-status ${request.expectStatus}`);
+  // The path must be a same-origin path: an absolute or scheme-relative URL in
+  // an approved plan would send the auth header to an arbitrary host, and a
+  // redirect would let proof come from a different endpoint than the receipt
+  // records.
+  if (!request.path.startsWith('/') || request.path.startsWith('//')) {
+    const diagnostics = receiptText(`http path must start with "/" and stay on the configured origin, got ${JSON.stringify(request.path)}`);
+    return {
+      ...baseReceipt('http', display, ctx.timeoutSeconds, startedAt),
+      state: 'command-error', proofEligible: false, endedAt: new Date().toISOString(),
+      output: '', outputTruncated: false,
+      diagnostics: diagnostics.text, diagnosticsTruncated: diagnostics.truncated,
+    };
+  }
   const url = new URL(request.path, ctx.baseUrl.endsWith('/') ? ctx.baseUrl : `${ctx.baseUrl}/`).toString();
+  if (new URL(url).origin !== new URL(ctx.baseUrl).origin) {
+    const diagnostics = receiptText(`http url ${url} escapes the configured origin ${new URL(ctx.baseUrl).origin}`);
+    return {
+      ...baseReceipt('http', display, ctx.timeoutSeconds, startedAt),
+      state: 'command-error', proofEligible: false, endedAt: new Date().toISOString(),
+      output: '', outputTruncated: false,
+      diagnostics: diagnostics.text, diagnosticsTruncated: diagnostics.truncated,
+    };
+  }
   const headers: Record<string, string> = {};
   const serializedHeaders: Record<string, string> = {};
   if (request.json !== undefined) {
@@ -220,6 +242,9 @@ export async function runHttp(args: string[], ctx: StepContext): Promise<StepRec
       method: request.method,
       headers,
       ...(request.json === undefined ? {} : { body: request.json }),
+      // A redirect is receipted as what it is, never silently followed: the
+      // origin lock above would be meaningless if the response could hop hosts.
+      redirect: 'manual',
       signal: controller.signal,
     });
     const body = await response.text();
@@ -332,8 +357,20 @@ export async function runRun(args: string[], ctx: StepContext): Promise<StepRece
     cwd: ctx.repoRoot,
     timeoutMs: Math.ceil(ctx.timeoutSeconds * 1000),
   });
-  const output = receiptText(capture.stdout);
-  const diagnostics = receiptText(capture.stderr || capture.startFailed || '');
+  // The child inherits the environment (approved argv, no adversaries — user
+  // decision), but the KNOWN secret values must never land in a receipt:
+  // an approved `run` that prints its environment would otherwise receipt
+  // the auth value and the DSN verbatim.
+  const scrub = (text: string): string => {
+    let out = text;
+    for (const envName of [ctx.authValueEnv, ctx.dbUrlEnv]) {
+      const secret = envName ? process.env[envName] : undefined;
+      if (envName && secret) out = replaceSecret(out, secret, envName);
+    }
+    return out;
+  };
+  const output = receiptText(scrub(capture.stdout));
+  const diagnostics = receiptText(scrub(capture.stderr || capture.startFailed || ''));
   const completed = !capture.timedOut && !capture.startFailed && capture.exit === expectExit;
   return {
     ...baseReceipt('run', display, ctx.timeoutSeconds, startedAt), command,
@@ -363,7 +400,18 @@ async function urlProbe(parsed: ParsedWait, ctx: StepContext, remainingMs: numbe
   const timer = setTimeout(() => controller.abort(), Math.max(1, Math.ceil(remainingMs)));
   try {
     const url = new URL(parsed.url!, ctx.baseUrl.endsWith('/') ? ctx.baseUrl : `${ctx.baseUrl}/`).toString();
-    const response = await fetch(url, { method: 'GET', signal: controller.signal });
+    // Same origin lock and redirect posture as runHttp: a probe that wandered
+    // off to another host reporting 2xx would be a false "ready".
+    if (new URL(url).origin !== new URL(ctx.baseUrl).origin) {
+      return {
+        matched: false,
+        output: '',
+        diagnostics: `wait --url resolves off the contract origin: ${url}`,
+        outputTruncated: false,
+        diagnosticsTruncated: false,
+      };
+    }
+    const response = await fetch(url, { method: 'GET', redirect: 'manual', signal: controller.signal });
     const body = await response.text();
     const output = receiptText(body);
     const matched = response.ok && (parsed.contains === undefined || body.includes(parsed.contains));

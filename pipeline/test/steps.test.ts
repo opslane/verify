@@ -92,6 +92,40 @@ describe('http receipts', () => {
     expect(receipt.state).toBe('command-error');
   });
 
+  it('fails before sending when the auth environment variable is unset', async () => {
+    delete process.env.VERIFY_TEST_TOKEN;
+    let served = false;
+    const baseUrl = await listen((_req, res) => { served = true; res.end('never'); });
+    const receipt = await runHttp(
+      ['GET', '/'],
+      context(baseUrl, { authHeader: 'Authorization', authValueEnv: 'VERIFY_TEST_TOKEN' }),
+    );
+    expect(receipt.state).toBe('command-error');
+    expect(receipt.diagnostics).toContain('$VERIFY_TEST_TOKEN');
+    expect(served).toBe(false);
+  });
+
+  it('refuses a path that escapes the contract origin without sending anything', async () => {
+    let served = false;
+    const baseUrl = await listen((_req, res) => { served = true; res.end('should never run'); });
+    for (const path of ['//evil.example/x', 'http://evil.example/x', 'relative/x']) {
+      const receipt = await runHttp(['GET', path], context(baseUrl));
+      expect(receipt.state).toBe('command-error');
+    }
+    expect(served).toBe(false);
+  });
+
+  it('does not follow a redirect to satisfy an expected status', async () => {
+    const baseUrl = await listen((_req, res) => {
+      res.statusCode = 302;
+      res.setHeader('location', 'http://evil.example/');
+      res.end();
+    });
+    const receipt = await runHttp(['GET', '/'], context(baseUrl));
+    expect(receipt.state).toBe('command-error');
+    expect(receipt.status).toBe(302);
+  });
+
   it('times out a hanging request', async () => {
     const baseUrl = await listen(() => undefined);
     const receipt = await runHttp(['GET', '/'], context(baseUrl, { timeoutSeconds: 1 }));
@@ -171,6 +205,20 @@ describe('run receipts', () => {
     expect(receipt.output).toContain('proof');
     expect(receipt.output).not.toContain('diagnostic');
     expect(receipt.diagnostics).toContain('diagnostic');
+  });
+
+  it('scrubs the auth value and DSN out of run outputs', async () => {
+    process.env.VERIFY_TEST_TOKEN = 'Bearer run-secret';
+    process.env.VERIFY_TEST_DSN = 'postgres://user:pw@localhost/db';
+    const receipt = await runRun(
+      ['node', '-e', "console.log(process.env.VERIFY_TEST_TOKEN); console.error(process.env.VERIFY_TEST_DSN)"],
+      { ...context('http://127.0.0.1:1'), authValueEnv: 'VERIFY_TEST_TOKEN', dbUrlEnv: 'VERIFY_TEST_DSN' },
+    );
+    expect(receipt.state).toBe('completed');
+    expect(receipt.output).toContain('$VERIFY_TEST_TOKEN');
+    expect(receipt.diagnostics).toContain('$VERIFY_TEST_DSN');
+    expect(JSON.stringify(receipt)).not.toContain('run-secret');
+    expect(JSON.stringify(receipt)).not.toContain('user:pw');
   });
 
   it('reports a missing binary as a command error', async () => {

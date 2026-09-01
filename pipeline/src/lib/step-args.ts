@@ -29,6 +29,9 @@ function integer(value: string | undefined, label: string): number | string {
 
 function parseHttp(args: string[]): StepArgsResult {
   if (!args[0] || !args[1]) return { ok: false, problem: 'http needs METHOD and path' };
+  if (!/^[A-Z]+$/.test(args[0])) {
+    return { ok: false, problem: `http METHOD must be uppercase letters, got ${JSON.stringify(args[0])}` };
+  }
   const parsed: ParsedHttp = { method: args[0], path: args[1] };
   const seen = new Set<string>();
   for (let i = 2; i < args.length; i += 2) {
