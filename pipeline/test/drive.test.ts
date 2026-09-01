@@ -210,4 +210,15 @@ describe('latestFinalizedProof', () => {
     }));
     expect(latestFinalizedProof(f.runDir, 'AC1')).toEqual({ result: 'present', expect: 'present', seen: true });
   });
+
+  it('recomputes seen from result vs expect instead of trusting the manifest', () => {
+    const f = fixture();
+    const dir = join(f.runDir, 'evidence', 'AC1', 'drive-1000-1');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'attempt.json'), JSON.stringify({
+      finalized: true, startedAt: '2026-09-01T00:00:03.000Z',
+      proof: { result: 'inconclusive', expect: 'present', seen: true },
+    }));
+    expect(latestFinalizedProof(f.runDir, 'AC1')?.seen).toBe(false);
+  });
 });

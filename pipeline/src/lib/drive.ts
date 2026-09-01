@@ -200,8 +200,11 @@ export function latestFinalizedProof(
       if (typeof value.startedAt !== 'string') continue;
       const proof = value.proof as NonNullable<AttemptManifest['proof']>;
       if (!['present', 'absent', 'inconclusive'].includes(proof.result)) continue;
-      if (!['present', 'absent'].includes(proof.expect) || typeof proof.seen !== 'boolean') continue;
-      candidates.push({ folder, startedAt: value.startedAt, proof });
+      if (!['present', 'absent'].includes(proof.expect)) continue;
+      // seen is recomputed, never trusted: a hand-edited or buggy manifest
+      // claiming {result: inconclusive, seen: true} must not count.
+      candidates.push({ folder, startedAt: value.startedAt,
+        proof: { ...proof, seen: proof.result === proof.expect } });
     } catch {
       // A crashed or malformed attempt is deliberately invisible.
     }
