@@ -1,3 +1,5 @@
+import { parseStepArgs, type DriveVerb, type ParsedHttp } from './step-args.js';
+
 /** Where a criterion came from. Printed so the reader knows what was invented. */
 export type Source =
   | { kind: 'plan'; ref: string }
@@ -26,9 +28,15 @@ export type Part = 'api' | 'db' | 'worker' | 'browser' | 'sink' | 'storage';
  * rejected request, read-only checks prove freshness instead.
  */
 export type Proof =
-  | { kind: 'marker-in-data'; detail: string }
-  | { kind: 'marked-request-rejected'; detail: string }
-  | { kind: 'live-read'; detail: string };
+  | { kind: 'marker-in-data'; detail: string; step?: number; expect?: 'present' | 'absent' }
+  | { kind: 'marked-request-rejected'; detail: string; step?: never; expect?: never }
+  | { kind: 'live-read'; detail: string; step?: never; expect?: never };
+
+export interface DriveStep {
+  verb: DriveVerb;
+  args: string[];
+  timeoutSeconds?: number;
+}
 
 export const INTENTS: readonly Intent[] = ['changes', 'preserves'];
 export const BASELINES: readonly Baseline[] = ['fail', 'pass', 'not-applicable', 'unknown'];
@@ -49,6 +57,8 @@ export interface Criterion {
   dependsOn: Part[];
   /** What artifact will show this check actually ran. */
   proof: Proof;
+  /** Ordered, user-approved steps the drive command executes verbatim. */
+  drive?: DriveStep[];
 }
 
 /**
@@ -126,6 +136,72 @@ export function validateCriteria(criteria: unknown): string[] {
         `${label} has no usable proof — a criterion you cannot prove ran is defective ` +
         `(kind: ${PROOF_KINDS.join(' | ')}, plus a non-empty detail)`,
       );
+    }
+
+    const drive = c.drive;
+    const parsedSteps: ({ verb: DriveVerb; parsed: ReturnType<typeof parseStepArgs> } | undefined)[] = [];
+    if (drive !== undefined) {
+      if (!Array.isArray(drive)) {
+        problems.push(`${label} drive must be an array`);
+      } else {
+        drive.forEach((rawStep, stepIndex) => {
+          const stepAt = `${label} drive[${stepIndex}]`;
+          if (typeof rawStep !== 'object' || rawStep === null) {
+            problems.push(`${stepAt} is not an object`);
+            parsedSteps.push(undefined);
+            return;
+          }
+          const step = rawStep as Record<string, unknown>;
+          if (!['http', 'db', 'wait', 'run'].includes(step.verb as string)) {
+            problems.push(`${stepAt} has unknown verb ${JSON.stringify(step.verb)}`);
+            parsedSteps.push(undefined);
+            return;
+          }
+          if (!Array.isArray(step.args) || !step.args.every((arg) => typeof arg === 'string')) {
+            problems.push(`${stepAt} args must be an array of strings`);
+            parsedSteps.push(undefined);
+            return;
+          }
+          const verb = step.verb as DriveVerb;
+          const parsed = parseStepArgs(verb, step.args);
+          parsedSteps.push({ verb, parsed });
+          if (!parsed.ok) problems.push(`${stepAt}: ${parsed.problem}`);
+          if (
+            step.timeoutSeconds !== undefined &&
+            (typeof step.timeoutSeconds !== 'number' || !Number.isFinite(step.timeoutSeconds) ||
+              step.timeoutSeconds <= 0 || step.timeoutSeconds > 3600)
+          ) {
+            problems.push(`${stepAt} timeoutSeconds must be finite, positive, and no more than 3600`);
+          }
+        });
+      }
+    }
+
+    if (proof && typeof proof === 'object') {
+      const hasStep = Object.hasOwn(proof, 'step');
+      const hasExpect = Object.hasOwn(proof, 'expect');
+      const drivenMarker = Array.isArray(drive) && proof.kind === 'marker-in-data';
+      if ((hasStep || hasExpect) && !drivenMarker) {
+        problems.push(`${label} proof.step and proof.expect are only permitted on a driven marker-in-data proof`);
+      }
+      if (drivenMarker) {
+        if (!hasStep) {
+          problems.push(`${label} proof.step is required on a driven marker-in-data proof`);
+        } else if (!Number.isInteger(proof.step) || (proof.step as number) < 1 || (proof.step as number) > drive.length) {
+          problems.push(`${label} proof.step must be an integer within the drive plan`);
+        } else {
+          const selected = parsedSteps[(proof.step as number) - 1];
+          let proofCapable = selected?.verb === 'db' || selected?.verb === 'run';
+          if (selected?.verb === 'http' && selected.parsed.ok) {
+            const status = (selected.parsed.parsed as ParsedHttp).expectStatus;
+            proofCapable = status === undefined || (status >= 200 && status < 300);
+          }
+          if (!proofCapable) problems.push(`${label} proof.step ${proof.step} cannot be a proof step`);
+        }
+        if (hasExpect && proof.expect !== 'present' && proof.expect !== 'absent') {
+          problems.push(`${label} proof.expect must be present or absent`);
+        }
+      }
     }
   });
 
@@ -251,6 +327,25 @@ export function renderCriteria(criteria: Criterion[], uncoveredFiles: string[]):
     (c) => `- ${c.id} relies on: ${c.dependsOn.join(', ')} — proof it ran: ${c.proof.kind} (${c.proof.detail})`,
   );
   sections.push(['Before judging, these parts get one pipeline check each', ...reliance].join('\n'));
+
+  const driven = criteria.filter((criterion) => criterion.drive !== undefined);
+  if (driven.length > 0) {
+    const plans = driven.flatMap((criterion) => {
+      const lines = [`${criterion.id}:`];
+      for (const [index, step] of (criterion.drive ?? []).entries()) {
+        const timeout = step.timeoutSeconds === undefined ? '' : ` (timeout: ${step.timeoutSeconds}s)`;
+        lines.push(`  ${index + 1}. ${step.verb} ${step.args.join(' ')}${timeout}`);
+      }
+      if (criterion.proof.kind === 'marker-in-data' && criterion.proof.step !== undefined) {
+        const direction = (criterion.proof.expect ?? 'present') === 'absent' ? 'must NOT contain' : 'must contain';
+        lines.push(`  proof: step ${criterion.proof.step} output ${direction} the marker`);
+      } else {
+        lines.push('  proof: judged');
+      }
+      return lines;
+    });
+    sections.push(['Drive plans (what will actually run)', ...plans].join('\n'));
+  }
 
   if (uncoveredFiles.length > 0) {
     sections.push(`No criterion covers: ${uncoveredFiles.join(', ')}`);
