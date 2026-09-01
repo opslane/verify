@@ -26,6 +26,33 @@ grep -qxF ".verify/" .gitignore 2>/dev/null || echo ".verify/" >> .gitignore
 "Commit `.verify/setup.json` so your team skips this interview? (y/n)" — on yes,
 `git add -f .verify/setup.json` and commit it.
 
+## Write the recipe, not the resolved values
+
+The contract must work in every checkout and worktree of the repo, or the
+interview repeats forever. Two rules:
+
+- **Ports and hosts go through environment variables.** When the repo
+  documents per-worktree port variables (an AGENTS.md export block, a
+  `.env.example`), write `http://localhost:${INGESTION_PORT:-8082}` — the
+  repo's own variable name with the repo's default — never the number the
+  current worktree happens to use. URL fields (`base_url`, `health_url`)
+  support exactly `${VAR}` and `${VAR:-default}` — no nesting, no command
+  substitution — expanded identically by the scripts and the engine at run
+  time. Probes and boot are shell programs and expand everything the shell
+  does, for free.
+- **Nothing run-scoped.** A probe that names a specific run's container
+  (`verify-20260901-042757-worker-1`) is dead the moment that run ends. Key
+  probes to the compose service via the current run's project instead:
+
+  ```
+  docker ps --filter "label=com.docker.compose.project=$(jq -r .project .verify/run-env.json)" \
+    --filter "label=com.docker.compose.service=worker" --format '{{.State}}' | grep -q running
+  ```
+
+Before offering the commit, re-read the drafted contract and reject your own
+draft if any field contains a resolved port number that has a documented
+variable, or any name containing a run id.
+
 ## 2. Sniff the repo
 
 ```bash
@@ -83,7 +110,7 @@ parses it):
   "seed": ["scripts/seed-e2e.sql"],
   "seed_data_files": [],
   "health_url": "",
-  "base_url": "http://localhost:3000",
+  "base_url": "http://localhost:${APP_PORT:-3000}",
   "auth": {"header": "", "value_env": ""},
   "env_file": ".env.example",
   "observe": {"db_url_env": "DATABASE_URL"},
@@ -103,14 +130,16 @@ flow or credential capture by Verify; the user logs in directly in the browser.
 Check whether the selected base URL is running:
 
 ```bash
-BASE_URL=$(jq -r '.base_url' .verify/setup.json)
+VERIFY_SCRIPTS="${VERIFY_SCRIPTS:-$CLAUDE_PLUGIN_ROOT/scripts}"
+BASE_URL=$(jq -r '.base_url' .verify/setup.json | bash "$VERIFY_SCRIPTS/expand.sh" --load-env .verify/setup.json)
 curl -sf "$BASE_URL" > /dev/null 2>&1 || echo "⚠ Dev server not running at $BASE_URL. Start it before logging in."
 ```
 
 If the app requires login, open Playwright codegen and let the user authenticate:
 
 ```bash
-BASE_URL=$(jq -r '.base_url' .verify/setup.json)
+VERIFY_SCRIPTS="${VERIFY_SCRIPTS:-$CLAUDE_PLUGIN_ROOT/scripts}"
+BASE_URL=$(jq -r '.base_url' .verify/setup.json | bash "$VERIFY_SCRIPTS/expand.sh" --load-env .verify/setup.json)
 mkdir -p .verify
 echo "A browser will open. Log in, then close the browser window."
 npx playwright codegen --save-storage=.verify/auth.json "$BASE_URL"

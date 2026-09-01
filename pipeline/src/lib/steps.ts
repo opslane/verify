@@ -30,6 +30,18 @@ export interface StepReceipt {
   diagnosticsTruncated: boolean;
 }
 
+/**
+ * Contracts are recipes: base_url may read http://localhost:${PORT:-8082} so
+ * one committed setup.json serves every worktree. RESTRICTED grammar,
+ * mirrored exactly by _expand_placeholders in the bash scripts: ${VAR} and
+ * ${VAR:-default} only — no nesting, no command substitution. Unset or
+ * empty variables use the default, else expand empty.
+ */
+export function expandEnv(text: string): string {
+  return text.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g,
+    (_all, name: string, fallback: string | undefined) => process.env[name] || fallback || '');
+}
+
 export interface StepContext {
   baseUrl: string;
   authHeader?: string;

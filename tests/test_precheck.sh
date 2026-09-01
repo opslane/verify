@@ -7,6 +7,7 @@ mkdir -p bin .verify/runs/r1
 echo r1 > .verify/current-run
 cat > bin/curl << 'MOCK'
 #!/usr/bin/env bash
+printf '%s\n' "$@" >> "${CURL_LOG:-/dev/null}"
 echo "<html>ok</html>"
 exit 0
 MOCK
@@ -19,10 +20,12 @@ MOCK
 chmod +x bin/psql
 export PATH="$TMP/bin:$PATH"
 export TESTDB_URL="postgres://mock"
+export VERIFY_TEST_PORT=9944
+export CURL_LOG="$TMP/curl.log"
 
 cat > .verify/setup.json << 'JSON'
 {"mode":"none","compose_file":null,"boot":"","teardown":"","seed":[],
- "seed_data_files":[],"health_url":"","base_url":"http://localhost:9","env_file":"",
+ "seed_data_files":[],"health_url":"","base_url":"http://localhost:${VERIFY_TEST_PORT:-9}","env_file":"",
  "observe":{"db_url_env":"TESTDB_URL"},"probes":{"sink":"false","worker":""}}
 JSON
 echo '{"run_id":"t","project":"verify-t","marker":"verify-t","pgid":null}' > .verify/run-env.json
@@ -46,4 +49,5 @@ jq -e '.tainted | has("ac1") | not' .verify/runs/r1/precheck.json > /dev/null ||
 jq -e '.tainted | has("ac3") | not' .verify/runs/r1/precheck.json > /dev/null || { echo "FAIL: unknown must not taint"; exit 1; }
 jq -e '.unchecked | index("worker") != null' .verify/runs/r1/precheck.json > /dev/null || { echo "FAIL: worker must be listed unchecked"; exit 1; }
 [ -f .verify/runs/r1/prechecks/sink.log ] || { echo "FAIL: down part must leave an evidence log"; exit 1; }
+grep -q "http://localhost:9944" "$CURL_LOG" || { echo "FAIL: recipe-form base_url must expand \${VERIFY_TEST_PORT:-9} to 9944"; exit 1; }
 echo "PASS: precheck tests"

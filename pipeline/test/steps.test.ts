@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { describe, expect, it, afterEach } from 'vitest';
 import {
   execCapture,
+  expandEnv,
   OUTPUT_LIMIT,
   runDb,
   runHttp,
@@ -47,6 +48,17 @@ function installPsql(body: string): string {
   process.env.PATH = `${dir}:${savedEnv.PATH ?? ''}`;
   return dir;
 }
+
+describe('expandEnv', () => {
+  it('expands set variables, defaults, and unset-empty like the shell', () => {
+    process.env.VERIFY_TEST_PORT = '8291';
+    expect(expandEnv('http://localhost:${VERIFY_TEST_PORT:-8082}')).toBe('http://localhost:8291');
+    delete process.env.VERIFY_TEST_PORT;
+    expect(expandEnv('http://localhost:${VERIFY_TEST_PORT:-8082}')).toBe('http://localhost:8082');
+    expect(expandEnv('http://localhost:${VERIFY_TEST_PORT}')).toBe('http://localhost:');
+    expect(expandEnv('no variables here')).toBe('no variables here');
+  });
+});
 
 describe('http receipts', () => {
   it('captures a successful proof body while redacting authentication', async () => {

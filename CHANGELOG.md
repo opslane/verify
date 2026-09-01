@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-09-01
+
+### Added
+- **Recipe-form contracts.** `base_url` and `health_url` may carry a restricted
+  placeholder grammar — `${VAR}` and `${VAR:-default}` only — expanded
+  identically by one shared bash helper (`scripts/expand.sh`, env-file aware)
+  and the TS engine, so a single committed `setup.json` serves every checkout
+  and worktree. `/verify-setup` now writes this form by rule: the repo's own
+  documented port variables, probes keyed to compose services instead of
+  run-stamped container names, and a self-check that rejects resolved ports.
+
+### Fixed
+- Every consumer of `base_url` expands it: precheck, boot, the drive engine,
+  the seed invocations (candidate and compare-base), and the auth-capture
+  snippets — previously a placeholder URL would have reached curl literally.
+
 ## [2.7.0] - 2026-09-01
 
 ### Fixed (pre-release review)
