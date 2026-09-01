@@ -70,6 +70,15 @@ The skill runs in the target repository, not the plugin repository. Resolve ever
 
 ### 0. The setup contract
 
+First pull anything a fresh worktree is missing from the per-repo shared store
+(captured login state; a fallback env file stays in the store and is picked up
+automatically by the environment scripts):
+
+```bash
+VERIFY_SCRIPTS="${VERIFY_SCRIPTS:-$CLAUDE_PLUGIN_ROOT/scripts}"
+bash "$VERIFY_SCRIPTS/shared-store.sh" pull
+```
+
 `.verify/setup.json` records how this repo boots, seeds, and reports health
 (written once by `/verify-setup` from sniffed candidates). If it is missing,
 ask once: "No setup contract found. Run `/verify-setup` (recommended), or
