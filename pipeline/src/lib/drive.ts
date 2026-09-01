@@ -33,6 +33,14 @@ export interface AttemptManifest {
   finalized: true;
 }
 
+export interface FinalizedAttempt {
+  folder: string;
+  manifest: AttemptManifest;
+  receipts: Record<number, StepReceipt>;
+  /** A finalized attempt with at least one terminal step substantiates a drive. */
+  qualifies: boolean;
+}
+
 export interface DriveOptions {
   runDir: string;
   marker: string;
@@ -189,27 +197,86 @@ export function latestFinalizedProof(
   runDir: string,
   ac: string,
 ): { result: ProofResult; expect: 'present' | 'absent'; seen: boolean } | undefined {
+  // Newest attempt WITH a valid proof block, not just the newest attempt:
+  // an attempt whose proof is unusable must not erase an earlier valid one.
+  for (const attempt of allFinalizedAttempts(runDir, ac).reverse()) {
+    const proof = attempt.manifest.proof;
+    if (proof && ['present', 'absent', 'inconclusive'].includes(proof.result) &&
+        ['present', 'absent'].includes(proof.expect)) {
+      return { result: proof.result, expect: proof.expect, seen: proof.result === proof.expect };
+    }
+  }
+  return undefined;
+}
+
+function validState(value: unknown): value is StepState {
+  return ['completed', 'command-error', 'timeout', 'not-attempted'].includes(value as string);
+}
+
+/** Newest engine-finalized attempt, including its neutral per-step receipts. */
+export function latestFinalizedAttempt(runDir: string, ac: string): FinalizedAttempt | undefined {
+  return allFinalizedAttempts(runDir, ac).at(-1);
+}
+
+/** Every finalized attempt, sorted oldest to newest. */
+function allFinalizedAttempts(runDir: string, ac: string): FinalizedAttempt[] {
   const evidence = join(runDir, 'evidence', ac);
-  if (!existsSync(evidence)) return undefined;
-  const candidates: { folder: string; startedAt: string; proof: NonNullable<AttemptManifest['proof']> }[] = [];
-  for (const folder of readdirSync(evidence)) {
+  if (!existsSync(evidence)) return [];
+  const candidates: FinalizedAttempt[] = [];
+  let folders: string[];
+  try {
+    folders = readdirSync(evidence);
+  } catch {
+    return [];
+  }
+  for (const folder of folders) {
     if (!folder.startsWith('drive-')) continue;
     try {
-      const value = JSON.parse(readFileSync(join(evidence, folder, 'attempt.json'), 'utf8')) as Partial<AttemptManifest>;
-      if (value.finalized !== true || value.proof === null || typeof value.proof !== 'object') continue;
-      if (typeof value.startedAt !== 'string') continue;
-      const proof = value.proof as NonNullable<AttemptManifest['proof']>;
-      if (!['present', 'absent', 'inconclusive'].includes(proof.result)) continue;
-      if (!['present', 'absent'].includes(proof.expect)) continue;
-      // seen is recomputed, never trusted: a hand-edited or buggy manifest
-      // claiming {result: inconclusive, seen: true} must not count.
-      candidates.push({ folder, startedAt: value.startedAt,
-        proof: { ...proof, seen: proof.result === proof.expect } });
+      const dir = join(evidence, folder);
+      const value = JSON.parse(readFileSync(join(dir, 'attempt.json'), 'utf8')) as Partial<AttemptManifest>;
+      if (value.finalized !== true || value.ac !== ac || typeof value.startedAt !== 'string' ||
+          typeof value.endedAt !== 'string' || !Array.isArray(value.steps)) continue;
+      if (!value.steps.every((step) =>
+        typeof step === 'object' && step !== null && Number.isInteger(step.index) &&
+        typeof step.verb === 'string' && validState(step.state))) continue;
+
+      const receipts: Record<number, StepReceipt> = {};
+      for (const name of readdirSync(dir)) {
+        const match = /^step-(\d+)\.json$/.exec(name);
+        if (!match) continue;
+        try {
+          const receipt = JSON.parse(readFileSync(join(dir, name), 'utf8')) as Partial<StepReceipt>;
+          if (typeof receipt.verb !== 'string' || typeof receipt.display !== 'string' ||
+              !validState(receipt.state) || typeof receipt.startedAt !== 'string' ||
+              typeof receipt.endedAt !== 'string' || typeof receipt.output !== 'string') continue;
+          // Optional fields reach the renderer; a malformed one must render as
+          // a missing receipt, never crash the report.
+          if (receipt.diagnostics !== undefined && typeof receipt.diagnostics !== 'string') continue;
+          if (receipt.status !== undefined && typeof receipt.status !== 'number') continue;
+          if (receipt.exit !== undefined && typeof receipt.exit !== 'number') continue;
+          if (receipt.command !== undefined && (typeof receipt.command !== 'object' || receipt.command === null ||
+              !Array.isArray(receipt.command.argv) || !receipt.command.argv.every((a) => typeof a === 'string') ||
+              typeof receipt.command.cwd !== 'string')) continue;
+          if (receipt.request !== undefined && (typeof receipt.request !== 'object' || receipt.request === null ||
+              typeof receipt.request.url !== 'string' || typeof receipt.request.method !== 'string')) continue;
+          receipts[Number(match[1])] = receipt as StepReceipt;
+        } catch {
+          // A malformed individual receipt remains visibly absent from the trail.
+        }
+      }
+      const manifest = value as AttemptManifest;
+      candidates.push({
+        folder,
+        manifest,
+        receipts,
+        qualifies: manifest.steps.some((step) =>
+          step.state === 'completed' || step.state === 'command-error' || step.state === 'timeout'),
+      });
     } catch {
       // A crashed or malformed attempt is deliberately invisible.
     }
   }
-  candidates.sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.folder.localeCompare(b.folder));
-  const latest = candidates.at(-1)?.proof;
-  return latest ? { result: latest.result, expect: latest.expect, seen: latest.seen } : undefined;
+  candidates.sort((a, b) =>
+    a.manifest.startedAt.localeCompare(b.manifest.startedAt) || a.folder.localeCompare(b.folder));
+  return candidates;
 }

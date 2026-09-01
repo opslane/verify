@@ -17,7 +17,7 @@ const base: Criterion = {
 describe('renderCriteria', () => {
   it('renders a table so criteria can be scanned, not read', () => {
     const out = renderCriteria([base], []);
-    expect(out).toContain('| AC | From | Intent | Base | Shows | Behaviour | How it is driven | Expect |');
+    expect(out).toContain('| AC | From | Intent | Base | Shows | Behaviour | Plain claim | How it is driven | Expect |');
     expect(out).toMatch(/^\| AC1 \| R1 \| changes \| fail \| success \|/m);
   });
 
@@ -85,8 +85,8 @@ describe('renderCriteria', () => {
     const out = renderCriteria([{ ...base, doIt: 'run `a | b` and read stdout' }], []);
     expect(out).toContain('a \\| b');
     const row = out.split('\n').find((line) => /^\| AC1 /.test(line))!;
-    // 8 columns means 9 delimiters, one either side of each cell.
-    expect(columnCount(row)).toBe(9);
+    // 9 columns means 10 delimiters, one either side of each cell.
+    expect(columnCount(row)).toBe(10);
   });
 
   // The id and the source label are cells like any other. Both used to go through
@@ -98,7 +98,7 @@ describe('renderCriteria', () => {
     );
     const row = out.split('\n').find((line) => line.includes('AC\\|1'))!;
     expect(row).toContain('R\\|1');
-    expect(columnCount(row)).toBe(9);
+    expect(columnCount(row)).toBe(10);
   });
 
   it('lists changed files that no criterion covers', () => {
@@ -180,6 +180,14 @@ describe('the intent x witness grid', () => {
 describe('validateCriteria', () => {
   it('accepts a fully declared criterion', () => {
     expect(validateCriteria([base])).toEqual([]);
+  });
+
+  it('renders and validates an approved plain-language claim', () => {
+    const claim = 'A queued batch clears without waiting for another poll.';
+    expect(renderCriteria([{ ...base, plain: claim }], [])).toContain(`| ${claim} |`);
+    expect(validateCriteria([{ ...base, plain: '   ' }])).toEqual([
+      'AC1 plain must be a non-empty string when present',
+    ]);
   });
 
   it('rejects a missing declaration rather than rendering a blank cell', () => {

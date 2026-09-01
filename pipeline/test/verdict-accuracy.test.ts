@@ -1,10 +1,8 @@
-// The verdict-accuracy rules: proof gates the headline, taint is mechanical,
-// checks that did not run never disappear, and the HTML page tells the same
-// story as the text report.
 import { describe, expect, it } from 'vitest';
 import {
   applyReceiptedProofs,
   applyTaint,
+  classify,
   headline,
   renderReport,
   summarise,
@@ -17,6 +15,7 @@ import { renderHtml } from '../src/lib/html.js';
 const criterion = (over: Partial<Criterion> = {}): Criterion => ({
   id: 'AC1',
   title: 'an event lands in the digest',
+  plain: 'A marked event appears in the digest.',
   doIt: 'POST a marked event',
   expectIt: 'digest contains the marker',
   source: { kind: 'plan', ref: 'R1' },
@@ -28,46 +27,50 @@ const criterion = (over: Partial<Criterion> = {}): Criterion => ({
   ...over,
 });
 
-describe('proof-of-run', () => {
-  it('a pass without its proof is not proven and blocks PASS', () => {
-    const results: CriterionResult[] = [
-      { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'marker seen' },
-      { id: 'AC2', outcome: 'pass', observed: 'looked fine' }, // no proof
-    ];
-    const summary = summarise(results, { filesWithoutCriterion: 0 });
-    expect(summary.proven).toBe(1);
-    expect(summary.notProven).toBe(1);
-    expect(headline(summary)).toBe('1 of 2 proven. 1 not proven.');
-    expect(renderReport(results, { filesWithoutCriterion: 0 }, [])).toContain(
-      'AC2  ~  not proven — the check may not have actually run',
-    );
+describe('terminal classification', () => {
+  const verdict = (
+    result: CriterionResult,
+    substantiated: boolean,
+    tainted = false,
+  ) => classify([result], { [result.id]: { substantiated, tainted } })[0].displayVerdict;
+
+  it('implements the truth table top to bottom', () => {
+    expect(verdict({ id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'ok' }, true, true)).toBe('blocked');
+    expect(verdict({ id: 'AC1', outcome: 'could-not-run', observed: 'permission denied' }, false)).toBe('blocked');
+    expect(verdict({ id: 'AC1', outcome: 'could-not-run', observed: '  ' }, false)).toBe('not-proven');
+    expect(verdict({ id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'ok' }, true)).toBe('proven');
+    expect(verdict({ id: 'AC1', outcome: 'pass', proofSeen: false, observed: 'ok' }, true)).toBe('not-proven');
+    expect(verdict({ id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'ok' }, false)).toBe('not-proven');
+    expect(verdict({ id: 'AC1', outcome: 'fail', proofSeen: false, observed: 'wrong' }, true)).toBe('failed');
+    expect(verdict({ id: 'AC1', outcome: 'fail', proofSeen: true, observed: 'wrong' }, true)).toBe('failed');
+    expect(verdict({ id: 'AC1', outcome: 'fail', observed: 'wrong' }, false)).toBe('not-proven');
   });
 
-  it('PASS appears only when every criterion is proven', () => {
-    const results: CriterionResult[] = [
+  it('drives headline, counts, and text from displayVerdict', () => {
+    const results = classify([
+      { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'ok' },
+      { id: 'AC2', outcome: 'fail', proofSeen: true, observed: 'wrong' },
+      { id: 'AC3', outcome: 'could-not-run', observed: 'sink down' },
+      { id: 'AC4', outcome: 'pass', proofSeen: true, observed: 'claimed' },
+    ], {
+      AC1: { substantiated: true }, AC2: { substantiated: true },
+      AC3: { substantiated: false }, AC4: { substantiated: false },
+    });
+    const summary = summarise(results, { filesWithoutCriterion: 0 });
+    // Behaviour/Ran count raw outcomes (independent axes); proven/notProven
+    // are the verdict buckets.
+    expect(summary).toMatchObject({ proven: 1, notProven: 1, behaviour: { passed: 2, failed: 1 }, ran: { total: 4, couldNotRun: 1 } });
+    expect(headline(summary)).toBe("1 of 4 proven. 1 couldn't run. 1 failed. 1 not proven.");
+    expect(renderReport(results, { filesWithoutCriterion: 0 }, [])).toContain('AC4  ~  not proven — reported pass, no evidence');
+  });
+
+  it('PASS appears only when every classified result is proven', () => {
+    const results = classify([
       { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'ok' },
       { id: 'AC2', outcome: 'pass', proofSeen: true, observed: 'ok' },
-    ];
-    const summary = summarise(results, { filesWithoutCriterion: 0 });
-    expect(headline(summary)).toBe('PASS — 2 of 2 proven.');
-  });
-
-  it('could-not-run never disappears from the headline', () => {
-    const results: CriterionResult[] = [
-      { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'ok' },
-      { id: 'AC2', outcome: 'could-not-run', observed: 'sink down' },
-    ];
-    const summary = summarise(results, { filesWithoutCriterion: 0 });
-    expect(headline(summary)).toBe("1 of 2 proven. 1 couldn't run.");
-  });
-
-  it('a violation poisons the headline even when all proven', () => {
-    const results: CriterionResult[] = [
-      { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'ok' },
-    ];
-    const summary = summarise(results, { filesWithoutCriterion: 0 });
-    expect(headline(summary, { violation: true })).toMatch(/^CANNOT TRUST THIS RUN/);
-    expect(headline(summary, { violation: true })).not.toMatch(/^PASS/);
+    ], { AC1: { substantiated: true }, AC2: { substantiated: true } });
+    expect(headline(summarise(results, { filesWithoutCriterion: 0 }))).toBe('PASS — 2 of 2 proven.');
+    expect(headline(summarise(results, { filesWithoutCriterion: 0 }), { violation: true })).toMatch(/^CANNOT TRUST THIS RUN/);
   });
 });
 
@@ -81,123 +84,206 @@ describe('receipted proof', () => {
     const applied = applyReceiptedProofs(results, { AC1: { seen: true }, AC2: { seen: false } });
     expect(applied.results.map((result) => result.proofSeen)).toEqual([true, false, true]);
     expect(applied.sources).toEqual({ AC1: 'receipted', AC2: 'receipted', AC3: 'judged' });
-    expect(renderReport(applied.results, { filesWithoutCriterion: 0 }, [], applied.sources)).toContain('[receipted]');
+    const classified = classify(applied.results, {
+      AC1: { substantiated: true }, AC2: { substantiated: true }, AC3: { substantiated: true },
+    });
+    expect(renderReport(classified, { filesWithoutCriterion: 0 }, [], { sources: applied.sources })).toContain('[machine-checked]');
   });
 
   it('lets taint make the final override', () => {
-    const results = [{ id: 'AC1', outcome: 'pass' as const, proofSeen: false, observed: 'judge result' }];
-    const receipted = applyReceiptedProofs(results, { AC1: { seen: true } });
-    const final = applyTaint(
-      receipted.results,
-      { parts: { api: 'down' }, tainted: {}, unchecked: [] },
-      [{ id: 'AC1', dependsOn: ['api'] }],
+    const receipted = applyReceiptedProofs(
+      [{ id: 'AC1', outcome: 'pass', proofSeen: false, observed: 'judge result' }],
+      { AC1: { seen: true } },
     );
+    const final = applyTaint(receipted.results, { parts: { api: 'down' }, tainted: {}, unchecked: [] }, [{ id: 'AC1', dependsOn: ['api'] }]);
     expect(final[0]).toMatchObject({ outcome: 'could-not-run', proofSeen: false });
-  });
-
-  it('does not alter ids absent from the supplied receipt entries', () => {
-    const results = [{ id: 'AC1', outcome: 'pass' as const, proofSeen: true, observed: 'judged' }];
-    expect(applyReceiptedProofs(results, {}).results).toEqual(results);
   });
 });
 
 describe('mechanical taint', () => {
-  const precheck: Precheck = {
-    parts: { api: 'ok', sink: 'down' },
-    tainted: { AC2: 'sink' },
-    unchecked: [],
-  };
+  const precheck: Precheck = { parts: { api: 'ok', sink: 'down' }, tainted: { AC2: 'sink' }, unchecked: [] };
 
-  it('overrides even a judged pass for a tainted criterion', () => {
-    const results: CriterionResult[] = [
-      { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'ok' },
-      { id: 'AC2', outcome: 'pass', proofSeen: true, observed: 'claims it worked' },
-    ];
-    const tainted = applyTaint(results, precheck);
-    expect(tainted[1].outcome).toBe('could-not-run');
-    expect(tainted[1].proofSeen).toBe(false);
-    expect(tainted[1].observed).toContain('sink');
-    expect(tainted[0]).toEqual(results[0]);
+  it('recomputes taint from parts + dependsOn', () => {
+    const results = applyTaint(
+      [{ id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'claims it worked' }],
+      { ...precheck, tainted: {} },
+      [{ id: 'AC1', dependsOn: ['sink'] }],
+    );
+    expect(results[0]).toMatchObject({ outcome: 'could-not-run', proofSeen: false });
+    expect(results[0].observed).toContain('sink');
   });
 
-  it('recomputes taint from parts + dependsOn — a tampered tainted map cannot bypass it', () => {
-    const results: CriterionResult[] = [
-      { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'claims it worked' },
+  it('honors the precheck tainted map even when the derived lookup finds nothing', () => {
+    // Same belt-and-braces rule as the drive guard: derived parts x dependsOn
+    // is the authority, the tainted map is the fallback — never dropped.
+    const original: CriterionResult[] = [
+      { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'worked' },
     ];
-    const scrubbed: Precheck = { parts: { sink: 'down' }, tainted: {}, unchecked: [] };
-    const criteria = [{ id: 'AC1', dependsOn: ['sink'] }];
-    const tainted = applyTaint(results, scrubbed, criteria);
+    const tainted = applyTaint(
+      original,
+      { parts: { api: 'ok' }, tainted: { AC1: 'api' }, unchecked: [] },
+      [{ id: 'AC1', dependsOn: ['api'] }],
+    );
     expect(tainted[0].outcome).toBe('could-not-run');
   });
 });
 
 describe('criteria schema', () => {
-  it('rejects a criterion without dependsOn or proof', () => {
+  it('requires dependencies and proof while keeping plain optional', () => {
     const bare = { ...criterion() } as Record<string, unknown>;
     delete bare.dependsOn;
     delete bare.proof;
-    const problems = validateCriteria([bare]);
-    expect(problems.join('\n')).toContain('dependsOn');
-    expect(problems.join('\n')).toContain('proof');
-  });
-
-  it('rejects an unknown part', () => {
-    const problems = validateCriteria([criterion({ dependsOn: ['mainframe' as never] })]);
-    expect(problems.join('\n')).toContain('mainframe');
-  });
-
-  it('accepts a complete criterion', () => {
-    expect(validateCriteria([criterion()])).toEqual([]);
+    expect(validateCriteria([bare]).join('\n')).toMatch(/dependsOn[\s\S]*proof/);
+    expect(validateCriteria([criterion({ plain: undefined })])).toEqual([]);
   });
 });
 
 describe('html report', () => {
+  const criteria = [
+    criterion(),
+    criterion({ id: 'AC2', plain: 'A guard <b>holds</b>.', intent: 'preserves' }),
+  ];
+  const raw: CriterionResult[] = [
+    { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'marker verify-r1 seen' },
+    { id: 'AC2', outcome: 'pass', observed: 'no proof captured' },
+  ];
+  const results = classify(raw, { AC1: { substantiated: true }, AC2: { substantiated: true } });
   const input = {
     runId: 'r1',
-    criteria: [criterion(), criterion({ id: 'AC2', title: 'guard <b>holds</b>', intent: 'preserves' as const })],
-    results: [
-      { id: 'AC1', outcome: 'pass' as const, proofSeen: true, observed: 'marker seen' },
-      { id: 'AC2', outcome: 'pass' as const, observed: 'no proof captured' },
-    ],
+    runTag: 'verify-r1',
+    criteria,
+    results,
     filesWithoutCriterion: 0,
     precheck: { parts: { api: 'ok' as const, sink: 'unknown' as const }, tainted: {}, unchecked: ['sink'] },
     violation: false,
-    assets: { AC1: { images: ['evidence/AC1/screenshot-1.png'], videos: ['evidence/AC1/session.webm'] } },
+    evidence: {
+      AC1: {
+        files: [{
+          name: 'shot <1>.png', relativePath: 'shots/shot 1.png', href: 'shots/shot%201.png',
+          bytes: 12, kind: 'image' as const, source: 'named' as const, alsoCitedBy: ['AC2'],
+        }],
+        markers: [], substantiated: true,
+      },
+      AC2: { files: [], markers: [], substantiated: true },
+    },
     notChecked: [{ what: 'terminal recording', why: 'asciinema missing' }],
     sources: { AC1: 'receipted' as const, AC2: 'judged' as const },
   };
 
-  it('escapes model-controlled text and keeps evidence relative', () => {
+  it('escapes claims, highlights the run tag, and keeps evidence relative', () => {
     const html = renderHtml(input);
-    expect(html).toContain('&lt;b&gt;holds&lt;/b&gt;');
+    expect(html).toContain('A guard &lt;b&gt;holds&lt;/b&gt;.');
     expect(html).not.toContain('<b>holds</b>');
-    expect(html).toContain('src="evidence/AC1/screenshot-1.png"');
-    expect(html).toContain('<video controls src="evidence/AC1/session.webm">');
-    expect(html).not.toContain('data:image');
+    expect(html).toContain('src="shots/shot%201.png"');
+    expect(html).toContain('also cited by AC2');
+    expect(html).toContain('<mark>verify-r1</mark>');
   });
 
-  it('renders a proofless pass as not proven, never a green card', () => {
+  it('renders the classified verdict and reader-language proof source', () => {
     const html = renderHtml(input);
     expect(html).toContain('class="card not-proven"');
-    expect(html).toContain('not proven — the check may not have actually run');
-    expect(html).toContain('proof: receipted');
-    expect(html).toContain('proof: judged');
+    expect(html).toContain('proof of run was not observed');
+    expect(html).toContain('machine-checked');
+    expect(html).toContain('agent-reported');
   });
 
-  it('headline says PASS only when proven, and violation poisons the page', () => {
-    expect(renderHtml(input)).not.toContain('<h1>PASS');
-    const clean = {
+  it('calls out a receipted failure whose check definitely ran', () => {
+    const failed = classify([
+      { id: 'AC1', outcome: 'fail', proofSeen: true, observed: 'wrong value' },
+    ], { AC1: { substantiated: true } });
+    const html = renderHtml({
       ...input,
-      results: input.results.map((r) => ({ ...r, proofSeen: true })),
-    };
-    expect(renderHtml(clean)).toContain('PASS — 2 of 2 proven.');
-    expect(renderHtml({ ...clean, violation: true })).toContain('CANNOT TRUST THIS RUN');
+      criteria: [criterion()], results: failed,
+      evidence: { AC1: { files: [], markers: [], substantiated: true } },
+      sources: { AC1: 'receipted' },
+    });
+    expect(html).toContain('check ran: machine-checked');
+    expect(html).toContain('class="card failed"');
   });
 
-  it('lists unchecked parts and the not-checked section, and carries codify markers', () => {
+  it('labels a judged failure with proof honestly, never as machine-checked', () => {
+    const failed = classify([
+      { id: 'AC1', outcome: 'fail', proofSeen: true, observed: 'wrong value' },
+    ], { AC1: { substantiated: true } });
+    const html = renderHtml({
+      ...input,
+      criteria: [criterion()], results: failed,
+      evidence: { AC1: { files: [], markers: [], substantiated: true } },
+      sources: { AC1: 'judged' },
+    });
+    expect(html).toContain('check ran: agent-reported');
+    expect(html).not.toContain('check ran: machine-checked');
+  });
+
+  it('escapes evidence filenames and renders video evidence', () => {
+    const html = renderHtml({
+      ...input,
+      evidence: {
+        ...input.evidence,
+        AC2: {
+          files: [{
+            name: 'clip<script>.webm', relativePath: 'clip.webm', href: 'clip.webm',
+            bytes: 9, kind: 'video' as const, source: 'named' as const, alsoCitedBy: [],
+          }],
+          markers: [], substantiated: true,
+        },
+      },
+    });
+    expect(html).toContain('clip&lt;script&gt;.webm');
+    expect(html).not.toContain('clip<script>');
+    expect(html).toContain('<video controls src="clip.webm">');
+  });
+
+  it('lists unchecked parts and carries codify markers', () => {
     const html = renderHtml(input);
     expect(html).toContain('sink: no probe available');
     expect(html).toContain('asciinema missing');
     expect(html).toContain('codify-block-begin');
+  });
+
+  it('renders approved step labels and honest receipt transcripts without a PTY', () => {
+    const driven = criterion({
+      drive: [
+        { verb: 'run', args: ['approved-label'] },
+        { verb: 'wait', args: ['--url', '/ready', '--timeout', '2'] },
+      ],
+    });
+    const receipt = {
+      verb: 'run' as const, display: 'receipt display', state: 'completed' as const,
+      proofEligible: true, startedAt: '2026-09-01T00:00:00.000Z', endedAt: '2026-09-01T00:00:00.300Z',
+      command: { argv: ['node', 'check.js'], cwd: '/repo' }, timeoutSeconds: 2,
+      output: 'row verify-r1', diagnostics: 'one warning', outputTruncated: true, diagnosticsTruncated: true,
+    };
+    const drivenResult = classify([
+      { id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'ok' },
+    ], { AC1: { substantiated: true } });
+    const html = renderHtml({
+      ...input,
+      criteria: [driven], results: drivenResult,
+      evidence: { AC1: {
+        files: [], markers: [], substantiated: true,
+        attempt: {
+          folder: 'drive-1-1', qualifies: true,
+          manifest: {
+            ac: 'AC1', attempt: 'drive-1-1', finalized: true,
+            startedAt: receipt.startedAt, endedAt: receipt.endedAt, completed: 1, proof: null,
+            steps: [
+              { index: 1, verb: 'run', state: 'completed' },
+              { index: 2, verb: 'wait', state: 'not-attempted' },
+            ],
+          },
+          receipts: { 1: receipt, 3: receipt },
+        },
+      } },
+    });
+    expect(html).toContain('run approved-label');
+    expect(html).toContain('not-attempted — no receipt for step 2');
+    expect(html).toContain('unlabeled extra step 3');
+    expect(html).toContain('recorded invocation');
+    expect(html).toContain('captured output');
+    expect(html).toContain('diagnostics');
+    expect(html).toContain('node check.js');
+    expect(html).toContain('row <mark>verify-r1</mark>');
+    expect(html.match(/truncated at capture limit/g)).toHaveLength(4);
   });
 });

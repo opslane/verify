@@ -59,10 +59,11 @@ fi
 Run that before the first engine call of a session. Do not fall back to plain `npx`, which
 would fetch an unpinned package from the network.
 
-**Optional recorders.** `asciinema` and `agg` produce `run.cast` and `run.gif`. Neither is
-required: when either is missing, run the verification anyway and record the absence under
-`Not checked`. On a fresh box: `brew install asciinema agg`, or the equivalent for the
-platform.
+**Optional recorder garnish.** Driven criteria get an engine-recorded transcript from their
+receipts; no PTY is involved. `asciinema` and `agg` are attempted only for hand-driven
+flows, under hard wall-clock limits. A missing, hanging, or broken recorder never blocks
+verification: record it under `Not checked` and continue. On a fresh box:
+`brew install asciinema agg`, or the equivalent for the platform.
 
 The skill runs in the target repository, not the plugin repository. Resolve every target-repository path with `pwd -P` and pass absolute paths for `--repo`, `--dir`, `--criteria`, `--results`, and `--claims`.
 
@@ -197,6 +198,10 @@ Translate the plan into concrete, observable criteria. Each criterion has:
 
 - `id`: stable `AC1`, `AC2`, and so on.
 - `title`: one behavior.
+- `plain`: reader-facing claim, one sentence with no implementation jargon. Draft it for
+  every new criterion: this is the report-card headline the user approves. The engine
+  keeps the field schema-optional only so older runs can re-render, falling back to
+  `title`.
 - `doIt`: the intent of the real action, kept short because an approved `drive` plan is
   the execution authority when one exists.
 - `expectIt`: a measurable observation.
@@ -355,8 +360,9 @@ VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
   --criteria "$RUN_DIR/criteria.json") > "$RUN_DIR/criteria.md"
 ```
 
-The rendered artifact includes a **Drive plans (what will actually run)** section; its
-verbatim steps and designated proof line are part of what the user approves.
+The rendered artifact shows each `plain` claim alongside `expectIt` and includes a
+**Drive plans (what will actually run)** section; its verbatim steps and designated proof
+line are part of what the user approves.
 
 ### 6. Seed script and second opinion, then stop
 
@@ -475,29 +481,39 @@ reports `unknown` and never taints; a FAIL on a criterion relying on an
 unknown part gets "the failure may be environmental: <part> was never
 health-checked" appended to its observation.
 
-### 1. Prepare recording
+### 1. Prepare optional recording for hand-driven flows
 
-Check both optional recorders:
+Driven criteria need no live recorder: their finalized receipts produce the step list and
+terminal transcript in `report.html`. If the run has no hand-driven criteria, skip
+asciinema entirely.
+
+For hand-driven criteria, check `asciinema`, `agg`, and GNU `timeout`, then perform one
+bounded start-check. Never retry or debug a recorder during the run:
 
 ```bash
 command -v asciinema >/dev/null || echo "asciinema missing: brew install asciinema"
 command -v agg >/dev/null || echo "agg missing: brew install agg"
+command -v timeout >/dev/null || echo "timeout missing: recorder stages cannot be bounded"
+timeout --signal=TERM --kill-after=2s 10s \
+  asciinema rec --overwrite --command "printf recorder-ok" "$RUN_DIR/recorder-check.cast"
 ```
 
-If either is missing, run verification anyway and add a `Not checked` entry saying no terminal recording was made and why. A missing recorder never blocks the run.
-
-When both exist, record the actual commands and their output from start to finish. Either:
-
-- run all verification commands in one persistent PTY after starting `asciinema rec <absolute-run.cast>`, then exit that PTY cleanly; or
-- generate a bounded verification script under the run directory and use `asciinema rec --command "bash <absolute-script>" <absolute-run.cast>`.
-
-Do not start `asciinema` in one shell and run the evidence commands through unrelated shell tool calls; those commands will not be captured. After recording, render:
+If the start-check hangs or fails, skip recording loudly, add the exact failure under
+`Not checked`, and continue. When it succeeds, generate one bounded hand-drive script
+under the run directory. Give each operation its own timeout, then set
+`RECORDING_BUDGET_SECONDS` to their total plus a small shutdown allowance. Bound the whole
+recorder process group as well:
 
 ```bash
-agg <absolute-run.cast> <absolute-run.gif>
+timeout --signal=TERM --kill-after=5s "${RECORDING_BUDGET_SECONDS}s" \
+  VERIFY_HAND_DRIVE="$RUN_DIR/hand-drive.sh" \
+    asciinema rec --overwrite --command 'exec bash "$VERIFY_HAND_DRIVE"' "$RUN_DIR/run.cast"
+timeout --signal=TERM --kill-after=5s 60s agg "$RUN_DIR/run.cast" "$RUN_DIR/run.gif"
 ```
 
-If recording or rendering fails, keep running the criteria and add the failure to `Not checked`.
+If recording fails, continue the hand-driven checks without it and record the failure in
+`Not checked`. If `agg` fails, keep `run.cast`, omit `run.gif`, and record that failure.
+No recorder stage may run without its own wall-clock timeout.
 
 ### 2. Drive the real system
 
@@ -513,8 +529,9 @@ Replace `AC1` with that criterion's id; do not batch or repeat planned criteria.
 
 The JSON manifest is the neutral execution summary. Carry its `completed`, per-step
 `completed` / `command-error` / `timeout` / `not-attempted` states, and proof result into
-the criterion's evidence and result. The judge maps command errors and timeouts to the
-behavioral rubric using the receipts and prechecks.
+the result. The report reads the newest finalized attempt itself and synthesizes its
+numbered step list and transcript; do not name receipt files in `evidence`. The judge maps
+command errors and timeouts to the behavioral rubric using the receipts and prechecks.
 
 **Report, don't rescue.** Never rerun a driven criterion or tweak its approved arguments
 mid-run. A plan that needs changes goes back through criteria approval. Criteria without
@@ -553,8 +570,9 @@ installed.
    steps rather than assuming a click landed.
 4. Read the observable the criterion names. Prefer text and state a user could see over
    internal attributes.
-5. Capture a screenshot at the moment of observation and keep it under the run's
-   directory. The screenshot is the evidence for that criterion, not decoration.
+5. Capture a screenshot at the moment of observation anywhere under the run directory,
+   then name its run-relative path in that criterion's result `evidence` list. The
+   screenshot is evidence, not decoration.
 
 A UI criterion that cannot be judged without reading the page source is the wrong
 criterion. Rewrite it as something a person could confirm by looking.
@@ -657,7 +675,8 @@ Record exactly one result for every approved criterion:
   "id": "AC1",
   "outcome": "pass",
   "proofSeen": true,
-  "observed": "50 rows containing marker verify-<run> (was HTTP 500)"
+  "observed": "50 rows containing marker verify-<run> (was HTTP 500)",
+  "evidence": ["ac1-rows.json", "screens/ac1-result.png"]
 }
 ```
 
@@ -665,6 +684,20 @@ Record exactly one result for every approved criterion:
 the command showed. `proofSeen` is true only when the criterion's declared
 proof is quotable from the evidence; a pass without it renders "not proven"
 and never counts toward the headline. Never set it optimistically.
+
+`evidence` is an optional array of paths relative to the run folder. It is required by
+the workflow for a hand-driven `pass` or `fail`: name at least one nonempty file that
+backs the observation. Screenshots, logs, JSON, and text may live anywhere inside the run
+folder; there is no folder-layout convention. A driven `pass` or `fail` is substantiated
+only by its finalized drive attempt, so its `evidence` list is optional and may contain
+extra screenshots or logs but can never replace the receipt trail. A `could-not-run`
+result names no evidence and must put the concrete blocker in `observed`.
+
+The renderer opens each named path, rejects absolute paths, symlinks, escapes from the run
+folder, empty or non-regular files, the run's own report/input outputs, and reserved drive
+attempt folders. Missing and rejected items stay visible on the card. The same valid file
+may support several criteria, but the report calls out every reuse. When precheck taint
+blocked a criterion, its existing `prechecks/<part>.log` attaches automatically.
 
 ### 3. Preserve generated tests
 
@@ -716,11 +749,13 @@ VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
   --run-dir "$RUN_DIR") > "$RUN_DIR/report.md"
 ```
 
-The `--precheck` flag enforces taint mechanically: a tainted criterion renders
-`could-not-run` no matter what was recorded for it. The report opens with the
-headline — checks that did not run never disappear from the count, and `PASS`
-appears only when every criterion is proven (pass WITH its declared proof
-observed).
+The `--precheck` flag enforces taint mechanically. In run-directory mode the engine
+reconciles results, applies receipted proofs, resolves evidence, applies taint, and then
+classifies every criterion once as `proven`, `failed`, `not-proven`, or `blocked`.
+Every output consumes that classification. A hand-driven pass/fail without valid named
+evidence, or a driven pass/fail without a qualifying finalized attempt, renders not
+proven. A `could-not-run` without a nonblank reason also renders not proven. Checks that
+did not run never disappear, and `PASS` appears only when every criterion is proven.
 
 Then render and serve the visual page:
 
@@ -748,7 +783,11 @@ done
 
 (On a remote box, forward the port or bind explicitly if the user asks.)
 
-Print `report.md` and the artifact paths. When recording succeeded, confirm `run.cast` and `run.gif` exist and that the cast contains real commands and output. Confirm `criteria.json`, `criteria.md`, `claims.json`, `coverage.json`, `results.json`, `report.md`, and `tests/` exist. Confirm the target repository has no verification changes outside `.verify/`.
+Print `report.md` and the artifact paths. When recording succeeded, confirm `run.cast`
+exists and contains real commands and output; when GIF rendering also succeeded, confirm
+`run.gif`. Confirm `criteria.json`, `criteria.md`, `claims.json`, `coverage.json`,
+`results.json`, `report.md`, `report.html`, and `tests/` exist. Confirm the target
+repository has no verification changes outside `.verify/`.
 
 For each generated test, print its artifact path and the source-tree path where it would belong. Ask separately whether the user wants that test checked in. Do not move or commit any test without that explicit choice.
 

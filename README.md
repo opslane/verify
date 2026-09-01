@@ -34,13 +34,14 @@ the set shows the new behaviour working.
 
 Nothing runs until you say go.
 
-**Half two runs them and reports.** It drives the real system with real tools, records the run, and reports on three separate axes:
+**Half two runs them and reports.** It drives the real system with real tools, keeps engine-recorded receipt transcripts and named evidence, and reports on four separate axes:
 
 ```
 AC1  ✔  HTTP 401 at the HTTP layer, no tool dispatched
 AC2  ✔  good Bearer + stale X-API-KEY authorized; bad Bearer + good key denied
 AC3  ~  could not run, staging rejected the create
 
+Proven     2 of 3
 Behaviour  2 passed, 0 failed
 Ran        3 criteria, 1 could not run
 Covered    3 criteria, 2 changed files have none
@@ -50,7 +51,7 @@ Not checked
   vue3 settings UI        16 changed files, needs a logged-in session
 ```
 
-Those axes are separate on purpose. "Your code is wrong", "the database container died", and "we never looked at half the branch" are three different answers, and one word cannot carry all three.
+Those axes are separate on purpose. "The check was substantiated", "your code is wrong", "the database container died", and "we never looked at half the branch" are different answers, and one word cannot carry all four.
 
 `Not checked` is always printed, even when empty. A tool that quietly omits what it skipped is worse than one that finds nothing.
 
@@ -73,7 +74,7 @@ Requires Claude Code with `claude login`.
 
 The plugin registers the `/verify` command and a Playwright MCP server for browser criteria. On first run it installs the engine's dependencies inside the plugin directory, pinned to a lockfile.
 
-Optional, for terminal recordings: `brew install asciinema agg`. Without them the run still completes and records the absence.
+Optional garnish for hand-driven terminal flows: `brew install asciinema agg`. Driven checks synthesize transcripts from receipts, so the run never depends on a recorder.
 
 ## Use
 
@@ -89,9 +90,11 @@ Artifacts land in `.verify/runs/<timestamp>/`:
 
 ```
 criteria.md      what you approved
-report.md        results per criterion, three axes, what was not checked
-run.cast         asciinema recording of the real commands
+report.md        results per criterion, four axes, what was not checked
+report.html      acceptance cards, evidence, and receipt transcripts
+run.cast         optional asciinema garnish for hand-driven commands
 run.gif
+<named files>    screenshots, logs, JSON, or video cited by results.json
 run.sh           re-runnable by hand
 ```
 

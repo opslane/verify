@@ -135,12 +135,13 @@ describe('drive CLI end to end', () => {
 
     const report = await runCli(['report', '--repo-root', repo, '--run-dir', runDir, '--results', results]);
     expect(report).toContain('PASS — 2 of 2 proven.');
-    expect(report).toMatch(/^AC1.*\[receipted\]$/m);
-    expect(report).toMatch(/^AC2.*\[receipted\]$/m);
+    expect(report).toMatch(/^AC1.*\[machine-checked\].*receipt trail \(3 steps\)$/m);
+    expect(report).toMatch(/^AC2.*\[machine-checked\].*receipt trail \(2 steps\)$/m);
 
     const outputPath = (await runCli(['html', '--repo-root', repo, '--run-dir', runDir, '--results', results])).trim();
     expect(outputPath).toBe(join(runDir, 'report.html'));
-    expect(readFileSync(outputPath, 'utf8')).toContain('proof: receipted');
+    expect(readFileSync(outputPath, 'utf8')).toContain('machine-checked');
+    expect(readFileSync(outputPath, 'utf8')).toContain('recorded invocation');
   }, 20_000);
 
   it('structurally rejects a refusal-status HTTP step as proof', () => {

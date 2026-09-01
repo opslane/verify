@@ -80,7 +80,7 @@ describe('criteria', () => {
     });
 
     const output = runCli(['criteria', '--criteria', input]);
-    expect(output).toContain('| AC | From | Intent | Base | Shows | Behaviour | How it is driven | Expect |');
+    expect(output).toContain('| AC | From | Intent | Base | Shows | Behaviour | Plain claim | How it is driven | Expect |');
     expect(output).toMatch(/^\| AC1 \| plan line 12 \| changes \| fail \| success \|/m);
     expect(output).toContain('No criterion covers: src/log.ts');
     expect(output).toContain('What these criteria prove');
@@ -132,17 +132,52 @@ describe('report', () => {
     writeFileSync(precheck, JSON.stringify({ parts: { api: 'ok' }, tainted: {}, unchecked: [] }));
 
     const output = runCli(['report', '--results', results, '--criteria', criteriaPath, '--precheck', precheck]);
+    // Legacy mode (no --run-dir) keeps the pre-drive line shape: no claim
+    // prefix, "could not run" wording — only the banner is new.
     expect(output).toContain('AC1  ✔  50 rows');
     // AC2 had no result: it can never disappear from the count.
     expect(output).toContain('AC2  ~  could not run, no result was recorded for this criterion');
     expect(output).toContain('1 of 2 proven');
     expect(output).toContain('/healthz');
+    expect(output).toContain('evidence not verified (legacy mode)');
   });
 
   it('fails closed when criteria have dependencies but no precheck exists', () => {
     const dir = mkdtempSync(join(tmpdir(), 'verify-cli-'));
     const { results, criteriaPath } = writeReportInputs(dir);
     expect(() => runCli(['report', '--results', results, '--criteria', criteriaPath])).toThrow();
+  });
+
+  it('gates a hand-driven pass on validated named evidence in run-dir mode', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'verify-report-v2-'));
+    const runDir = join(repo, '.verify', 'runs', 'r1');
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(join(runDir, 'criteria.json'), JSON.stringify({ criteria: [criterion({
+      plain: 'A working credential returns asset rows.',
+      proof: { kind: 'live-read', detail: 'fresh asset row' },
+    })] }));
+    writeFileSync(join(runDir, 'precheck.json'), JSON.stringify({ parts: { api: 'ok' }, tainted: {}, unchecked: [] }));
+    const results = join(runDir, 'results.json');
+    const body = (evidence: string[]) => JSON.stringify({
+      results: [{ id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'one row', evidence }],
+      coverage: { filesWithoutCriterion: 0 }, notChecked: [],
+    });
+    writeFileSync(results, body([]));
+    expect(runCli(['report', '--repo-root', repo, '--run-dir', runDir, '--results', results]))
+      .toContain('not proven — reported pass, no evidence');
+
+    writeFileSync(results, body(['missing.png']));
+    expect(runCli(['report', '--repo-root', repo, '--run-dir', runDir, '--results', results]))
+      .toContain('missing/rejected: missing.png');
+
+    writeFileSync(join(runDir, 'asset row.png'), 'pixels');
+    writeFileSync(results, body(['asset row.png']));
+    const output = runCli(['report', '--repo-root', repo, '--run-dir', runDir, '--results', results]);
+    expect(output).toContain('PASS — 1 of 1 proven.');
+    expect(output).toContain('A working credential returns asset rows.');
+    expect(output).toContain('evidence: asset row.png');
+    const htmlPath = runCli(['html', '--repo-root', repo, '--run-dir', runDir, '--results', results]).trim();
+    expect(readFileSync(htmlPath, 'utf8')).toContain('src="asset%20row.png"');
   });
 });
 
@@ -179,7 +214,7 @@ describe('drive', () => {
     }));
     const output = runCli(['report', '--repo-root', repo, '--run-dir', runDir, '--results', results]);
     expect(output).toContain('not proven');
-    expect(output).toContain('[receipted]');
+    expect(output).toContain('[machine-checked]');
   });
 });
 
