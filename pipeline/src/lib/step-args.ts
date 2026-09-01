@@ -76,8 +76,8 @@ function parseWait(args: string[]): StepArgsResult {
   if (Number(values['--sql'] !== undefined) + Number(values['--url'] !== undefined) !== 1) {
     return { ok: false, problem: 'wait needs exactly one of --sql or --url' };
   }
-  const timeout = integer(values['--timeout'], '--timeout');
-  if (typeof timeout === 'string') return { ok: false, problem: timeout };
+  if (values['--timeout'] === undefined) return { ok: false, problem: '--timeout needs a value' };
+  const timeout = Number(values['--timeout']);
   if (!Number.isFinite(timeout) || timeout <= 0) {
     return { ok: false, problem: '--timeout must be finite and positive' };
   }
