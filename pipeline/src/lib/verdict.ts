@@ -21,6 +21,24 @@ export interface Precheck {
   unchecked: string[];
 }
 
+export type ProofSource = 'receipted' | 'judged';
+export interface ReceiptedProofEntry { seen: boolean }
+
+export function applyReceiptedProofs(
+  results: CriterionResult[],
+  entries: Record<string, ReceiptedProofEntry>,
+): { results: CriterionResult[]; sources: Record<string, ProofSource> } {
+  const sources: Record<string, ProofSource> = {};
+  return {
+    results: results.map((result) => {
+      const entry = entries[result.id];
+      sources[result.id] = entry === undefined ? 'judged' : 'receipted';
+      return entry === undefined ? result : { ...result, proofSeen: entry.seen };
+    }),
+    sources,
+  };
+}
+
 /**
  * A criterion whose dependent part failed its pipeline check is could-not-run
  * regardless of what the judge or driver reported — a broken pipe must never
@@ -160,18 +178,20 @@ export function renderReport(
   results: CriterionResult[],
   coverage: Coverage,
   notChecked: NotChecked[],
+  sources?: Record<string, ProofSource>,
 ): string {
   const summary = summarise(results, coverage);
 
   const resultLines = results.map((result) => {
+    const source = sources?.[result.id] ? ` [${sources[result.id]}]` : '';
     if (result.outcome === 'pass' && result.proofSeen !== true) {
-      return `${result.id}  ~  not proven — the check may not have actually run; ${result.observed}`;
+      return `${result.id}  ~  not proven — the check may not have actually run; ${result.observed}${source}`;
     }
     const observed =
       result.outcome === 'could-not-run'
         ? `could not run, ${result.observed}`
         : result.observed;
-    return `${result.id}  ${MARK[result.outcome]}  ${observed}`;
+    return `${result.id}  ${MARK[result.outcome]}  ${observed}${source}`;
   });
 
   const axes = [

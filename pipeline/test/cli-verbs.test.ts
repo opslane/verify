@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,37 @@ function runCli(args: string[]): string {
     cwd: pkgRoot,
     encoding: 'utf8',
   });
+}
+
+function driveRepo(options: { git?: boolean; tainted?: boolean; runId?: string } = {}) {
+  const repo = mkdtempSync(join(tmpdir(), 'verify-drive-cli-'));
+  const runId = options.runId ?? 'r1';
+  const verifyDir = join(repo, '.verify');
+  const runDir = join(verifyDir, 'runs', runId);
+  mkdirSync(runDir, { recursive: true });
+  writeFileSync(join(verifyDir, 'current-run'), 'r1\n');
+  writeFileSync(join(verifyDir, 'run-env.json'), JSON.stringify({ run_id: 'r1', marker: 'verify-m1' }));
+  writeFileSync(join(verifyDir, 'setup.json'), JSON.stringify({
+    mode: 'none', base_url: 'http://localhost:3000',
+    auth: { header: '', value_env: '' }, observe: {},
+  }));
+  writeFileSync(join(runDir, 'criteria.json'), JSON.stringify({ criteria: [criterion({
+    drive: [{ verb: 'run', args: ['node', '-e', "console.log('row {{marker}}')"] }],
+    proof: { kind: 'marker-in-data', detail: 'marker in stdout', step: 1, expect: 'present' },
+  })] }));
+  writeFileSync(join(runDir, 'precheck.json'), JSON.stringify({
+    parts: { api: 'ok' }, tainted: options.tainted ? { AC1: 'api' } : {}, unchecked: [],
+  }));
+  if (options.git !== false) {
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' });
+    git('init', '-q');
+    git('config', 'user.email', 'v@example.com');
+    git('config', 'user.name', 'v');
+    writeFileSync(join(repo, 'README.md'), 'fixture\n');
+    git('add', 'README.md');
+    git('commit', '-qm', 'fixture');
+  }
+  return { repo, runDir };
 }
 
 
@@ -115,6 +146,43 @@ describe('report', () => {
   });
 });
 
+describe('drive', () => {
+  it('executes the approved plan from pipeline cwd and records the repository commit', () => {
+    const { repo, runDir } = driveRepo();
+    const manifest = JSON.parse(runCli(['drive', 'AC1', '--repo-root', repo, '--run-dir', runDir]));
+    expect(manifest).toMatchObject({ finalized: true, ac: 'AC1', proof: { result: 'present', seen: true } });
+    expect(readFileSync(join(runDir, 'manifest.json'), 'utf8')).toMatch(/"commit":\s*"[0-9a-f]+"/);
+  });
+
+  it('uses an unknown commit fallback outside git', () => {
+    const { repo, runDir } = driveRepo({ git: false });
+    runCli(['drive', 'AC1', '--repo-root', repo, '--run-dir', runDir]);
+    expect(JSON.parse(readFileSync(join(runDir, 'manifest.json'), 'utf8')).commit).toBe('unknown');
+  });
+
+  it('refuses to drive a criterion tainted by precheck', () => {
+    const { repo, runDir } = driveRepo({ tainted: true });
+    expect(() => runCli(['drive', 'AC1', '--repo-root', repo, '--run-dir', runDir])).toThrow(/taint/i);
+  });
+
+  it('binds the requested run directory to the current run', () => {
+    const { repo, runDir } = driveRepo({ runId: 'r2' });
+    expect(() => runCli(['drive', 'AC1', '--repo-root', repo, '--run-dir', runDir])).toThrow(/r1[\s\S]*r2|r2[\s\S]*r1/);
+  });
+
+  it('does not let a judge rescue missing receipted proof', () => {
+    const { repo, runDir } = driveRepo();
+    const results = join(runDir, 'results.json');
+    writeFileSync(results, JSON.stringify({
+      results: [{ id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'judge claimed proof' }],
+      coverage: { filesWithoutCriterion: 0 }, notChecked: [],
+    }));
+    const output = runCli(['report', '--repo-root', repo, '--run-dir', runDir, '--results', results]);
+    expect(output).toContain('not proven');
+    expect(output).toContain('[receipted]');
+  });
+});
+
 describe('changed-files', () => {
   function tempRepo(): string {
     const dir = mkdtempSync(join(tmpdir(), 'verify-repo-'));
@@ -167,4 +235,3 @@ describe('changed-files', () => {
     expect(output.filesWithoutCriterion).toBe(1);
   });
 });
-
