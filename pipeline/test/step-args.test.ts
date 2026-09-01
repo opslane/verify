@@ -40,6 +40,8 @@ describe('parseStepArgs', () => {
   it('accepts one wait source and a positive timeout', () => {
     expect(parseStepArgs('wait', ['--url', '/health', '--contains', 'ok', '--timeout', '3']))
       .toEqual({ ok: true, parsed: { url: '/health', contains: 'ok', timeoutSeconds: 3 } });
+    expect(parseStepArgs('wait', ['--sql', 'select 1', '--timeout', '0.5']))
+      .toEqual({ ok: true, parsed: { sql: 'select 1', timeoutSeconds: 0.5 } });
   });
 
   it('rejects an invalid run expected exit and empty argv', () => {
