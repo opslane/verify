@@ -74,6 +74,12 @@ ones a lazy implementation would pass. And nothing runs until I say go."
 
 ## The criteria it wrote
 
+Opslane runs an AI investigation on every incident a customer reports. Sometimes that investigation dies halfway: the model runs out of turns, or the provider is down. The customer used to see "needs a human" for what was really our failure.
+
+It wrote five criteria from that plan. I wrote none of them. One of them:
+
+> When the model runs out of room on a real investigation of a real repository, the job is not retried, the incident is not shown to the customer, and the failure is labelled as ours.
+
 <!-- 1:40
 "Here's a run from last night. Quick context so the criteria make sense.
 Opslane runs an AI investigation on every incident a customer reports.
@@ -82,34 +88,32 @@ provider is down. Before this change, the customer saw 'needs a human' on their
 dashboard for what was really our failure. The change makes it retry quietly
 instead."
 
-SWITCH → criteria.md, zoomed so one Plain claim fills the screen.
 "It wrote five criteria. I wrote none of them. Here's one."
-Read AC3: "When the model runs out of room on a real investigation of a real
-repository, the job is not retried, the incident is not shown to the customer,
-and the failure is labelled as ours."
-Translate: "In plain terms: when our AI gives up halfway, don't retry forever,
+Read the quote on screen out loud, then translate: "In plain terms: when our AI gives up halfway, don't retry forever,
 don't show the customer a half-finished answer, and mark it as our bug, not
 theirs. No file names in there. Everything in it can be watched from outside
 the code."
 "It also told me it wasn't sure about one of the five. I ran it anyway."
 
-SWITCH → back to this file.
+Optional, only if you have spare time: SWITCH → criteria.md to show all five,
+then straight back. The one on screen here is enough.
 -->
 
 ## It boots your whole stack
 
 ```mermaid
-flowchart LR
+flowchart TD
+    seed["Seed through the front door<br>run marker in every record"]
     subgraph stack["Its own compose project, torn down after"]
+        direction LR
         api["API"]
         db["Database"]
         worker["Worker"]
         browser["Real browser"]
     end
-    seed["Seed through the front door<br>run marker in every record"]
     probe["Probe each part"]
     drive["Drive the criteria"]
-    verdict["Pass / fail"]
+    verdict["Pass or fail"]
     cnr["Could not run"]
 
     seed --> stack --> probe
