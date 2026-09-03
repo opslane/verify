@@ -38,16 +38,13 @@ tests are green, and both of those came from the agent."
 ```mermaid
 flowchart TD
     plan["Your plan<br>what you meant"]
-    old["The old code<br>how it behaved before"]
     ac["Acceptance criteria"]
     codex["Second model<br>flags what a stub would pass"]
     you["You approve"]
     run["Boot the stack<br>drive every criterion"]
     rep["Report<br>commands, verdicts, evidence"]
 
-    plan --> ac
-    old --> ac
-    ac --> codex --> you --> run --> rep
+    plan --> ac --> codex --> you --> run --> rep
 ```
 
 <!-- 0:50 · THE CORE IDEA. Slow down here.
