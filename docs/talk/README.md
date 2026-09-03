@@ -74,7 +74,7 @@ about thirty seconds went in the five-minute run.
 
 ## What is an acceptance criterion?
 
-A user requirement. It states the intent behind the change, written down before anyone looks at the implementation, so there is something to compare the implementation against.
+A user requirement. It states the intent behind the change.
 
 Here is one from a change where I put billing behind a feature flag:
 
@@ -87,7 +87,6 @@ Underneath, it is a row of `criteria.json`:
   "id": "AC1",
   "plain": "With billing off, the billing API routes return 404 as if they were never added.",
   "source":    { "kind": "plan", "ref": "design: 'Unset: no billing routes (404)'" },
-  "intent":    "preserves",
   "dependsOn": ["api"],
   "proof":     { "kind": "marked-request-rejected", "detail": "404 paired with the marker-bearing request URL" },
   "drive": [
@@ -95,8 +94,6 @@ Underneath, it is a row of `criteria.json`:
   ]
 }
 ```
-
-Four verbs exist: `run`, `db`, `http`, `wait`. No shell strings, no assertions, no verbs specific to my app. The model writes this plan. A plain engine runs it verbatim, with no model in the loop.
 
 <!-- 1:35 · about 50 seconds. The technical beat.
 "So what is an acceptance criterion? It's a user requirement. It says what the
@@ -167,7 +164,7 @@ Say "a real cloud sandbox" and "a real model run", not "my Claude sandbox
 provider" or "anthropic tests".
 -->
 
-## It gives you the receipts
+## It gives you a report
 
 ![A Verify report. The headline reads 4 of 5 proven, 1 failed, above a criterion card with its plain-language claim, its pass badges, and the two commands that ran with their exit codes](../../assets/report-receipts.png)
 
