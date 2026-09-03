@@ -6,7 +6,7 @@ cd "$TMP"
 mkdir -p .verify/runs/r1
 echo r1 > .verify/current-run
 echo "spec text" > spec.md && echo "spec.md" > .verify/.spec_path
-echo '{"criteria":[{"id":"ac1","title":"x","doIt":"d","expectIt":"e","source":{"kind":"plan","ref":"R1"},"intent":"changes","baseline":"fail","witness":"success","dependsOn":["api"],"proof":{"kind":"live-read","detail":"d"}}],"uncoveredFiles":[]}' > .verify/runs/r1/criteria.json
+echo '{"criteria":[{"id":"ac1","title":"x","doIt":"d","expectIt":"e","source":{"kind":"plan","ref":"R1","quote":"x holds"},"why":"w","intent":"changes","baseline":"fail","witness":"success","dependsOn":["api"],"proof":{"kind":"live-read","detail":"d"}}],"uncoveredFiles":[]}' > .verify/runs/r1/criteria.json
 
 GOOD=$(mktemp)
 cat > "$GOOD" << 'M'

@@ -18,7 +18,8 @@ const criterion = (over: Partial<Criterion> = {}): Criterion => ({
   plain: 'A marked event appears in the digest.',
   doIt: 'POST a marked event',
   expectIt: 'digest contains the marker',
-  source: { kind: 'plan', ref: 'R1' },
+  source: { kind: 'plan', ref: 'R1', quote: 'every event reaches the digest' },
+  why: 'a dropped event is silent; nothing else in the run would notice',
   intent: 'changes',
   baseline: 'fail',
   witness: 'success',
@@ -177,6 +178,42 @@ describe('html report', () => {
     expect(html).toContain('src="shots/shot%201.png"');
     expect(html).toContain('also cited by AC2');
     expect(html).toContain('<mark>verify-r1</mark>');
+  });
+
+  // The card is the reader's whole view of a check. Without the spec words and the
+  // reason, a pass is a claim they have to take on trust.
+  it('shows where each check came from and why it exists, escaped', () => {
+    const html = renderHtml({
+      ...input,
+      criteria: [
+        criterion({ source: { kind: 'plan', ref: 'R1 <spec>', quote: 'every <b>event</b> & reaches the digest' } }),
+        criterion({ id: 'AC2', source: { kind: 'inferred', from: 'the diff dropped a <case>' }, why: 'user said it must <still> hold' }),
+        criterion({ id: 'AC3', source: { kind: 'invented', note: 'plan names no <field>' }, why: 'guess' }),
+      ],
+    });
+    expect(html).toContain('From R1 &lt;spec&gt;: “every &lt;b&gt;event&lt;/b&gt; &amp; reaches the digest”');
+    expect(html).toContain('Why this check: a dropped event is silent; nothing else in the run would notice');
+    expect(html).toContain('Inferred from the diff: the diff dropped a &lt;case&gt;');
+    expect(html).toContain('Why this check: user said it must &lt;still&gt; hold');
+    expect(html).toContain('Invented, not in the spec: plan names no &lt;field&gt;');
+    for (const raw of ['<still>', '<b>event</b>', '<case>', '<field>']) expect(html).not.toContain(raw);
+  });
+
+  it('says a citation was never recorded rather than showing a blank line', () => {
+    const older = criterion({ source: { kind: 'plan', ref: 'design: no billing routes' } });
+    delete (older as { why?: string }).why;
+    const html = renderHtml({ ...input, criteria: [older] });
+    expect(html).toContain('From design: no billing routes — quote not recorded (drafted before citations were required)');
+    expect(html).toContain('Why this check: not recorded');
+  });
+
+  it('shows a bidi override inside the citation as an escape', () => {
+    const html = renderHtml({
+      ...input,
+      criteria: [criterion({ source: { kind: 'plan', ref: 'R1', quote: 'accept \u202etoken' } })],
+    });
+    expect(html).toContain('“accept \\u202etoken”');
+    expect(html).not.toContain('\u202e');
   });
 
   it('renders the classified verdict and reader-language proof source', () => {

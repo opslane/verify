@@ -14,7 +14,7 @@ import { EVIDENCE_EXCERPT_LIMIT, resolveEvidence } from '../src/lib/evidence.js'
 function criterion(id: string, driven = false): Criterion {
   return {
     id, title: `${id} title`, doIt: 'do it', expectIt: 'see it',
-    source: { kind: 'plan', ref: id }, intent: 'changes', baseline: 'fail', witness: 'success',
+    source: { kind: 'plan', ref: id, quote: `${id} text` }, why: 'fixture', intent: 'changes', baseline: 'fail', witness: 'success',
     dependsOn: ['api'], proof: { kind: 'live-read', detail: 'fresh value' },
     ...(driven ? { drive: [{ verb: 'run', args: ['node', '-v'] }] } : {}),
   };

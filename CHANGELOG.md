@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-09-03
+
+### Added
+- **Every criterion cites the spec and says why it exists.** A plan source now
+  carries `quote`, the verbatim spec text the criterion was read from, next to its
+  `ref`; every criterion carries `why`, the bug it would catch. Both are required:
+  the engine rejects a criterion missing either, rejects a `why` that is the title
+  restated, and now also rejects a malformed `source`, which was never validated.
+  The approval table gains `Cited` and `Why` columns, and each report card shows
+  the citation and reason under the claim.
+- **Quotes are looked up in the spec.** The `criteria` verb takes `--spec`; any
+  quote the spec does not contain is listed under the table as `NOT IN THE SPEC`,
+  as loud as a free pass. The skill records the chosen plan in `.verify/.spec_path`
+  at run creation, which also restores the spec to the second-opinion reviewer:
+  `scripts/review.sh` had read that file since 2.5 but nothing wrote it, so the
+  reviewer always saw `(no spec file)`. The reviewer prompt now asks it to check
+  quotes against the spec and `why` against the title.
+
 ### Changed
 - **README rebuilt as a landing page.** It opens on the problem (agents write more code
   than anyone can read, and the agent grading its own work has one likely answer), then
@@ -21,6 +39,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   covered where it matters.
 
 ### Fixed
+- Criteria approved before this release still report. The citation and reason are
+  required where they are authored (the `criteria` verb) and optional where an
+  approved snapshot is merely read (`drive`, `report`, `html`), which is the rule
+  `plain` already followed. A run that predates them renders `(not recorded)` in
+  the table and says so on the report card, rather than failing to render or
+  quietly showing a blank.
+- A newline, tab or indentation inside a table cell (most likely in a quote copied
+  from a wrapped spec) no longer ends the row early; it folds to one space. Bidi
+  overrides and control characters in the claim, citation and reason are shown as
+  escapes in both the table and the report, so what the reader compares to the
+  spec is what was written.
 - The install command pointed at `opslane/opslane`; the marketplace lives at
   `opslane/verify`.
 

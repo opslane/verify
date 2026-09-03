@@ -1,10 +1,18 @@
 import { parseStepArgs, type DriveVerb, type ParsedHttp } from './step-args.js';
+import { sanitizeLine } from './text.js';
 
-/** Where a criterion came from. Printed so the reader knows what was invented. */
+/**
+ * Where a criterion came from. Printed so the reader can check it against the spec
+ * without opening the spec: a plan source carries the verbatim words it was read
+ * from, an inferred one the diff observation and the user's answer, an invented one
+ * the assumption that was made.
+ */
 export type Source =
-  | { kind: 'plan'; ref: string }
+  | { kind: 'plan'; ref: string; quote?: string }
   | { kind: 'inferred'; from: string }
   | { kind: 'invented'; note: string };
+
+export const SOURCE_KINDS = ['plan', 'inferred', 'invented'] as const;
 
 /** What the criterion is for. Kept separate from what the base commit does with it. */
 export type Intent = 'changes' | 'preserves';
@@ -52,6 +60,12 @@ export interface Criterion {
   doIt: string;
   expectIt: string;
   source: Source;
+  /**
+   * Why this check exists: what would go wrong, or what bug it would catch. Required
+   * when drafting, like `source.quote`; optional in the type only so a run approved
+   * before citations were required still renders, with the gap shown.
+   */
+  why?: string;
   intent: Intent;
   baseline: Baseline;
   witness: Witness;
@@ -73,11 +87,81 @@ export function freePasses(criteria: Criterion[]): Criterion[] {
 }
 
 /**
+ * A field is recorded when it is a non-blank string. `why` and `source.quote` are
+ * required of every new criterion but absent from runs approved before they existed,
+ * so renderers ask rather than assume.
+ */
+export function recorded(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+/** What a renderer prints where the run recorded nothing. */
+const NOT_RECORDED = '(not recorded)';
+
+/**
+ * Text as a reader would match it by eye: case, wrapping, indentation, a trailing full
+ * stop and the straight-or-curly shape of a quote mark do not make two strings differ.
+ */
+function loose(text: string): string {
+  return text.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"')
+    .replace(/\s+/g, ' ').trim().replace(/\.$/, '');
+}
+
+/**
+ * Plan-sourced criteria whose quote the spec does not contain. A citation the reader
+ * cannot find is either a paraphrase to reword or an invention to relabel, and either
+ * way it must not sit in the table looking like the spec's own words.
+ */
+export function quotesNotInSpec(criteria: Criterion[], spec: string): Criterion[] {
+  const haystack = loose(spec);
+  return criteria.filter((c) => {
+    const quote = c.source.kind === 'plan' ? c.source.quote : undefined;
+    return recorded(quote) && !haystack.includes(loose(quote));
+  });
+}
+
+/**
+ * A source is only useful if it carries what the reader needs to check it: the spec
+ * words for a plan criterion, the observation and answer for an inferred one, the
+ * assumption for an invented one.
+ */
+function sourceProblems(label: string, source: unknown, citationRequired: boolean): string[] {
+  if (typeof source !== 'object' || source === null) return [`${label} has no source`];
+  const s = source as Record<string, unknown>;
+  switch (s.kind) {
+    case 'plan': {
+      const problems: string[] = [];
+      if (!recorded(s.ref)) problems.push(`${label} source.ref must say where in the spec the quote is`);
+      if (!recorded(s.quote) && citationRequired) {
+        problems.push(`${label} source.quote must be the verbatim spec text the criterion was read from`);
+      }
+      return problems;
+    }
+    case 'inferred':
+      return recorded(s.from) ? [] : [`${label} source.from must name the diff observation and the answer the user gave`];
+    case 'invented':
+      return recorded(s.note) ? [] : [`${label} source.note must say what assumption was made`];
+    default:
+      return [`${label} has source.kind=${JSON.stringify(s.kind)}, expected one of ${SOURCE_KINDS.join(', ')}`];
+  }
+}
+
+/**
  * The declarations are the whole point of the approval artifact, so a criterion that
  * omits one is rejected rather than rendered with a blank cell. Returns human-readable
  * problems; empty means valid.
  */
-export function validateCriteria(criteria: unknown): string[] {
+export interface ValidateOptions {
+  /**
+   * `required` (the default) is the drafting gate: no new criterion is approved
+   * without its citation and reason. `optional` is for re-reading a snapshot that
+   * was already approved, which may predate both.
+   */
+  provenance?: 'required' | 'optional';
+}
+
+export function validateCriteria(criteria: unknown, options: ValidateOptions = {}): string[] {
+  const provenanceRequired = options.provenance !== 'optional';
   if (!Array.isArray(criteria)) return ['criteria must be an array'];
 
   const problems: string[] = [];
@@ -105,6 +189,12 @@ export function validateCriteria(criteria: unknown): string[] {
     if (c.plain !== undefined && (typeof c.plain !== 'string' || c.plain.trim() === '')) {
       problems.push(`${label} plain must be a non-empty string when present`);
     }
+    if (!recorded(c.why)) {
+      if (provenanceRequired) problems.push(`${label} has no why`);
+    } else if ([c.title, c.plain].some((text) => typeof text === 'string' && loose(text) === loose(c.why as string))) {
+      problems.push(`${label} why restates the title — say what bug this check would catch`);
+    }
+    problems.push(...sourceProblems(label, c.source, provenanceRequired));
 
     const enums = [
       ['intent', INTENTS],
@@ -229,9 +319,32 @@ function sourceLabel(source: Source): string {
   }
 }
 
-/** A pipe inside a cell would split the column and silently corrupt the table. */
+/**
+ * The words a criterion was read from, whatever kind of source they came from, or
+ * undefined when the run predates citations.
+ */
+function citation(source: Source): string | undefined {
+  switch (source.kind) {
+    case 'plan':
+      return recorded(source.quote) ? source.quote : undefined;
+    case 'inferred':
+      return source.from;
+    case 'invented':
+      return source.note;
+  }
+}
+
+/**
+ * A pipe inside a cell would split the column, and a newline would end the row, either
+ * one silently corrupting the table. A verbatim quote wraps wherever the spec wrapped it,
+ * so newlines are the common case, not the edge. Bidi overrides and other controls are
+ * made visible: the reader compares the quote to the spec by eye.
+ */
 function cell(text: string): string {
-  return text.replace(/\|/g, '\\|');
+  // Ordinary spec formatting (wrapping, indentation, tabs, a stray CR) folds to one
+  // space. Only what remains after that is a control worth showing as an escape.
+  const folded = text.replace(/[ \t]*(?:\r\n?|\n)[ \t]*/g, ' ').replace(/[ \t]+/g, ' ');
+  return sanitizeLine(folded).replace(/\|/g, '\\|');
 }
 
 /**
@@ -262,10 +375,15 @@ function renderGrid(criteria: Criterion[]): string {
   return lines.join('\n');
 }
 
-export function renderCriteria(criteria: Criterion[], uncoveredFiles: string[]): string {
+export interface RenderOptions {
+  /** The spec's full text. Absent means the quotes could not be looked up. */
+  spec?: string;
+}
+
+export function renderCriteria(criteria: Criterion[], uncoveredFiles: string[], options: RenderOptions = {}): string {
   const header = [
-    '| AC | From | Intent | Base | Shows | Behaviour | Plain claim | How it is driven | Expect |',
-    '|----|------|--------|------|-------|-----------|-------------|------------------|--------|',
+    '| AC | From | Cited | Why | Intent | Base | Shows | Behaviour | Plain claim | How it is driven | Expect |',
+    '|----|------|-------|-----|--------|------|-------|-----------|-------------|------------------|--------|',
   ];
 
   const rows = criteria.map((criterion) =>
@@ -273,6 +391,8 @@ export function renderCriteria(criteria: Criterion[], uncoveredFiles: string[]):
       '',
       cell(criterion.id),
       cell(sourceLabel(criterion.source)),
+      cell(citation(criterion.source) ?? NOT_RECORDED),
+      cell(recorded(criterion.why) ? criterion.why : NOT_RECORDED),
       cell(criterion.intent),
       cell(criterion.baseline),
       cell(criterion.witness),
@@ -297,6 +417,24 @@ export function renderCriteria(criteria: Criterion[], uncoveredFiles: string[]):
         'Rewrite them or mark them as preserves. Do not approve as they stand.',
       ].join('\n'),
     );
+  }
+
+  // A quote is the reader's handle on the spec. One the spec does not contain is as
+  // loud as a free pass, because it is the same failure: a check that looks anchored
+  // to a requirement and is not.
+  if (options.spec === undefined) {
+    sections.push('No spec was supplied, so the quotes were not looked up. Check each Cited cell against the spec yourself.');
+  } else {
+    const missing = quotesNotInSpec(criteria, options.spec);
+    if (missing.length > 0) {
+      sections.push(
+        [
+          'NOT IN THE SPEC. These quote words the spec does not contain:',
+          ...missing.map((c) => `- ${c.id}: "${(c.source as { quote: string }).quote}"`),
+          'Copy the spec\'s own words, or mark the criterion invented. Do not approve as they stand.',
+        ].join('\n'),
+      );
+    }
   }
 
   const unknown = criteria.filter((c) => c.baseline === 'unknown');

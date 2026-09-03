@@ -11,6 +11,7 @@ const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
     criteria: { type: "string" },
+    spec: { type: "string" },
     results: { type: "string" },
     repo: { type: "string" },
     base: { type: "string" },
@@ -77,7 +78,9 @@ if (command === "drive") {
       ? pathFromRepo(repoRoot, values.criteria)
       : join(requestedRun, 'criteria.json');
     const criteriaInput = readJson(criteriaPath) as { criteria?: unknown };
-    const problems = validateCriteria(criteriaInput.criteria);
+    // An approved snapshot is read, not gated: the `criteria` verb is where a
+    // criterion without its citation and reason is refused.
+    const problems = validateCriteria(criteriaInput.criteria, { provenance: 'optional' });
     if (problems.length > 0) fail(`criteria.json is not valid:\n  ${problems.join('\n  ')}`);
     const criteria = criteriaInput.criteria as Criterion[];
     const criterion = criteria.find((item) => item.id === ac);
@@ -174,7 +177,11 @@ if (command === "drive") {
     process.exit(1);
   }
 
-  console.log(renderCriteria(input.criteria, input.uncoveredFiles ?? []));
+  // The spec is optional only so an artifact can still be rendered without one; the
+  // artifact then says so, and the skill always passes it.
+  if (values.spec !== undefined && !existsSync(values.spec)) fail(`criteria: --spec file does not exist: ${values.spec}`);
+  const spec = values.spec === undefined ? undefined : readFileSync(values.spec, 'utf8');
+  console.log(renderCriteria(input.criteria, input.uncoveredFiles ?? [], { spec }));
 
 } else if (command === "report") {
   const {
@@ -217,7 +224,7 @@ if (command === "drive") {
   const criteriaInput = JSON.parse(readFileSync(criteriaPath, "utf8"));
   const criteria = criteriaInput.criteria ?? [];
   if (runDir) {
-    const criteriaProblems = validateCriteria(criteria);
+    const criteriaProblems = validateCriteria(criteria, { provenance: 'optional' });
     if (criteriaProblems.length > 0) fail(`criteria.json is not valid:\n  ${criteriaProblems.join('\n  ')}`);
   }
 
@@ -285,7 +292,7 @@ if (command === "drive") {
     fail(`html: --criteria ${values.criteria} does not match approved snapshot ${approvedCriteriaPath}`);
   }
   const criteriaInput = JSON.parse(readFileSync(approvedCriteriaPath, "utf8"));
-  const problems = validateCriteria(criteriaInput.criteria);
+  const problems = validateCriteria(criteriaInput.criteria, { provenance: 'optional' });
   if (problems.length > 0) {
     console.error("criteria.json is not valid:");
     for (const problem of problems) console.error(`  ${problem}`);
@@ -419,7 +426,7 @@ if (command === "drive") {
 } else {
   console.error("Usage:");
   console.error("  npx tsx src/cli.ts drive <ac>    --repo-root <dir> --run-dir <dir> [--dry-run] [--draft] [--step N] [--criteria <json>]");
-  console.error("  npx tsx src/cli.ts criteria      --criteria <json>");
+  console.error("  npx tsx src/cli.ts criteria      --criteria <json> [--spec <file>]");
   console.error("  npx tsx src/cli.ts report        --results <json> [--criteria <json>] [--run-dir <dir>] [--repo-root <dir>] [--precheck <json>]");
   console.error("  npx tsx src/cli.ts html          --results <json> --run-dir <dir> [--criteria <json>] [--repo-root <dir>] [--precheck <json>] [--review <json>] [--run-id <id>]");
   console.error("  npx tsx src/cli.ts changed-files --repo <dir> --base <rev> [--claims <json>]");

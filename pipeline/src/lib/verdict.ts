@@ -1,5 +1,6 @@
 import type { Criterion } from './criteria.js';
 import type { CriterionEvidence } from './evidence.js';
+import { sanitizeLine } from './text.js';
 
 export type Outcome = 'pass' | 'fail' | 'could-not-run';
 export type DisplayVerdict = 'proven' | 'failed' | 'not-proven' | 'blocked';
@@ -243,12 +244,9 @@ export function sourceLabel(source: ProofSource): string {
   return source === 'receipted' ? 'machine-checked' : 'agent-reported';
 }
 
-/** Terminal output is a forgery surface too: strip C0/C1 controls, line and
- * bidi overrides from every author-written string a report line embeds. */
-export function sanitizeLine(text: string): string {
-  return text.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, (ch) =>
-    ch === '\n' ? ' ' : `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
-}
+// Terminal output is a forgery surface too: every author-written string a report
+// line embeds goes through the shared stripper.
+export { sanitizeLine };
 
 function evidenceSummary(evidence: CriterionEvidence | undefined): string {
   if (!evidence) return '';
