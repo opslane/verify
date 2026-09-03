@@ -42,12 +42,11 @@ done and the tests are green, and both of those came from the agent."
 flowchart TD
     plan["Your plan<br>what you meant"]
     ac["Acceptance criteria"]
-    codex["Second model<br>flags what a stub would pass"]
     you["You approve"]
     run["Boot the stack<br>drive every criterion"]
     rep["Report<br>commands, verdicts, evidence"]
 
-    plan --> ac --> codex --> you --> run --> rep
+    plan --> ac --> you --> run --> rep
 ```
 
 <!-- 0:50 · about 35 seconds. Keep it short; the JSON beat does the explaining.
