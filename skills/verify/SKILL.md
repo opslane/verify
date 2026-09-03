@@ -149,7 +149,7 @@ route in the same hunk that added a new one, while the backend still served it; 
 the plan mentioned the deletion, because a plan records what someone meant to add and is
 silent on what went out with it.
 
-If an earlier run on the current branch has a `criteria.md`, show its path and offer to start from it. Stop for the user's choice before replacing or reusing it.
+If an earlier run on the current branch has a `criteria.md`, show its path and offer to start from it. Stop for the user's choice before replacing or reusing it. A run drafted before criteria carried `source.quote` and `why` still reports, with the gap printed where the citation would be, but its criteria cannot be approved again as they stand: add both, from the spec, to every criterion you carry forward.
 
 ### 2. Create the run
 
@@ -162,9 +162,15 @@ TARGET_REPO="$(pwd -P)"
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$TARGET_REPO/.verify/runs/$RUN_ID/tests"
 printf '%s\n' "$RUN_ID" > "$TARGET_REPO/.verify/current-run"
+printf '%s\n' "<path to the plan chosen in step 1>" > "$TARGET_REPO/.verify/.spec_path"
 ```
 
 The empty `tests/` directory is intentional and must exist even when no test is generated.
+
+`.spec_path` is how the engine and the second-opinion reviewer get the spec: the
+engine looks every quote up in it, and the reviewer reads it. When the plan is not a
+file (it came from the conversation or a pull request body), write it verbatim to
+`$TARGET_REPO/.verify/runs/$RUN_ID/spec.md` first and record that path.
 
 Snapshot the working tree now — before any model-driven step (including the
 second-opinion reviewer) runs with permissions — so the run can later prove
@@ -205,7 +211,20 @@ Translate the plan into concrete, observable criteria. Each criterion has:
 - `doIt`: the intent of the real action, kept short because an approved `drive` plan is
   the execution authority when one exists.
 - `expectIt`: a measurable observation.
-- `source`: `{ "kind": "plan", "ref": "..." }`, `{ "kind": "inferred", "from": "..." }`, or `{ "kind": "invented", "note": "..." }`.
+- `source`: `{ "kind": "plan", "ref": "...", "quote": "..." }`,
+  `{ "kind": "inferred", "from": "..." }`, or `{ "kind": "invented", "note": "..." }`.
+  For a plan source, `ref` says where in the spec (a requirement id, a heading, a line)
+  and `quote` is the spec's own words, copied verbatim, that the criterion was read
+  from. Keep the quote to the sentence or clause that carries the requirement. The
+  engine looks every quote up in the spec and lists the ones it cannot find under the
+  table, so a paraphrase has to be reworded or the criterion relabelled. For an
+  inferred source, `from` names the diff observation and the answer the user gave. For
+  an invented one, `note` states the assumption.
+- `why`: one sentence on why this check exists: the bug it would catch, or what would
+  go wrong if the behaviour did not hold. Not a restatement of the title. "The retry
+  schedule is the whole feature" and "over-eager code clears valid selections too" are
+  reasons; "checks that retries work" is the title again. The engine rejects a `why`
+  that is the title or the plain claim word for word.
 - `intent`: `"changes"` or `"preserves"`. What the criterion is for.
 - `baseline`: `"fail"`, `"pass"`, `"not-applicable"`, or `"unknown"`. What you expect the
   base commit to do with it.
@@ -357,7 +376,8 @@ RUN_ID="$(cat "$TARGET_REPO/.verify/current-run")"
 RUN_DIR="$TARGET_REPO/.verify/runs/$RUN_ID"
 VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
 (cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts criteria \
-  --criteria "$RUN_DIR/criteria.json") > "$RUN_DIR/criteria.md"
+  --criteria "$RUN_DIR/criteria.json" \
+  --spec "$(cat "$TARGET_REPO/.verify/.spec_path")") > "$RUN_DIR/criteria.md"
 ```
 
 The rendered artifact shows each `plain` claim alongside `expectIt` and includes a
@@ -400,6 +420,12 @@ jq -r --slurpfile s .verify/setup.json '
 Print `criteria.md`, the seed script (verbatim), the reviewer's table and missing
 list, and the unprobed-parts line, including invented specifics and uncovered
 changed files. Ask the user to edit, correct, or say `go`.
+
+The table carries each criterion's citation and reason so the user can check every
+row against the spec without opening it. The engine prints a `NOT IN THE SPEC` block
+for any quote the spec does not contain, and rejects a criterion that omits a quote or
+a `why`, or whose `why` is the title restated. A `why` that says nothing the title did
+not, in different words, is still a reason to send the criterion back.
 
 Before approval, a plan may be inspected without counting as evidence. Dry-run the
 fully substituted plan, or exercise one original step into the isolated `drafts/`

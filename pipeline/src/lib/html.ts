@@ -1,9 +1,10 @@
 // html.ts — the acceptance report. Dynamic strings are model-controlled and
 // must remain escaped; receipt and evidence drawers reveal raw detail without
 // letting it become markup.
-import type { Criterion, DriveStep } from './criteria.js';
+import { recorded, type Criterion, type DriveStep } from './criteria.js';
 import { EVIDENCE_EXCERPT_LIMIT, type CriterionEvidence, type EvidenceFile } from './evidence.js';
 import type { StepReceipt } from './steps.js';
+import { sanitizeLine } from './text.js';
 import type {
   ClassifiedCriterionResult,
   Precheck,
@@ -54,6 +55,36 @@ const GUARD_LABEL: Record<string, string> = {
   changes: 'proves the new behavior',
   preserves: 'guards existing behavior',
 };
+
+/**
+ * The claim and its provenance are the lines a reader compares to the spec by eye, so
+ * a bidi override or control character in either is shown as its escape rather than
+ * allowed to reorder the text.
+ */
+const shown = (text: string) => esc(sanitizeLine(text));
+
+function claim(criterion: Criterion): string {
+  return shown(criterion.plain ?? criterion.title);
+}
+
+/**
+ * Where the check came from and why it is here. A pass a reader cannot trace to the
+ * spec is a claim they have to take on trust, so this sits directly under the claim.
+ */
+function provenance(criterion: Criterion): string[] {
+  // A run approved before citations were required has nothing to show here. Saying so
+  // is the point: a blank line would read as a criterion nobody could source.
+  const source = criterion.source;
+  const from = source.kind === 'inferred' ? `Inferred from the diff: ${shown(source.from)}`
+    : source.kind === 'invented' ? `Invented, not in the spec: ${shown(source.note)}`
+    : recorded(source.quote) ? `From ${shown(source.ref)}: “${shown(source.quote)}”`
+    : `From ${shown(source.ref)} — quote not recorded (drafted before citations were required)`;
+  const why = recorded(criterion.why) ? shown(criterion.why) : 'not recorded';
+  return [
+    `<p class="provenance">${from}</p>`,
+    `<p class="provenance">Why this check: ${why}</p>`,
+  ];
+}
 
 function seconds(receipt: StepReceipt): string {
   const duration = Date.parse(receipt.endedAt) - Date.parse(receipt.startedAt);
@@ -169,7 +200,7 @@ h1{font-size:1.3rem}.banner{background:#c62828;color:#fff;padding:.75rem 1rem;bo
 .card{border:1px solid #ddd;border-radius:8px;padding:1rem;margin:1rem 0;background:#fff}.claim{font-size:1.12rem;margin:.15rem 0 .7rem}
 .proven{border-left:6px solid #2e7d32}.failed{border-left:6px solid #c62828}.blocked,.not-proven{border-left:6px solid #f9a825}
 .tag{display:inline-block;font-size:.8rem;color:#555;background:#f2f2f2;border-radius:4px;padding:2px 8px;margin:0 6px 4px 0}
-.why,.bytes,.timestamps{color:#777;font-size:.85rem}.warning{color:#8a5a00}.notice{color:#8a5a00;font-size:.8rem;margin-left:.4rem}
+.why,.bytes,.timestamps{color:#777;font-size:.85rem}.provenance{color:#555;font-size:.9rem;margin:.1rem 0 .3rem;padding-left:.75rem;border-left:3px solid #e0e0e0}.warning{color:#8a5a00}.notice{color:#8a5a00;font-size:.8rem;margin-left:.4rem}
 h2{font-size:1.05rem;margin-top:2rem}h4,h5{margin:.65rem 0 .2rem}.steps{padding-left:1.6rem}.steps li{margin:.45rem 0}.step-state{color:#555}
 details{margin:.55rem 0}summary{cursor:pointer}.terminal{background:#151515;color:#eee;border-radius:7px;padding:.6rem .9rem;margin:.5rem 0}
 .terminal pre{background:#090909;color:#e8e8e8}.terminal .timestamps{color:#aaa}mark{background:#ffe082;color:#111}
@@ -189,14 +220,16 @@ img,video{max-width:100%;border:1px solid #eee;border-radius:6px;margin-top:.5re
       // Checks never disappear: even a caller that skipped reconcile gets a
       // visible card for a criterion with no recorded result.
       parts.push(`<section class="card not-proven">`);
-      parts.push(`<strong>${esc(criterion.id)}</strong>`, `<p class="claim">${esc(criterion.plain ?? criterion.title)}</p>`);
+      parts.push(`<strong>${esc(criterion.id)}</strong>`, `<p class="claim">${claim(criterion)}</p>`);
+      parts.push(...provenance(criterion));
       parts.push(`<span class="tag">${esc(STATUS_LABEL['not-proven'])}</span>`);
       parts.push('<p class="warning">no result was recorded for this criterion</p>', '</section>');
       continue;
     }
     const evidence = input.evidence[criterion.id] ?? { files: [], markers: [], substantiated: false };
     parts.push(`<section class="card ${esc(result.displayVerdict)}">`);
-    parts.push(`<strong>${esc(criterion.id)}</strong>`, `<p class="claim">${esc(criterion.plain ?? criterion.title)}</p>`);
+    parts.push(`<strong>${esc(criterion.id)}</strong>`, `<p class="claim">${claim(criterion)}</p>`);
+    parts.push(...provenance(criterion));
     parts.push(`<span class="tag">${esc(STATUS_LABEL[result.displayVerdict])}</span>`);
     parts.push(`<span class="tag">${esc(GUARD_LABEL[criterion.intent] ?? criterion.intent)}</span>`);
     const source = input.sources?.[criterion.id];

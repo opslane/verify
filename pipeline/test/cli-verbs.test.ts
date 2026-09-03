@@ -55,7 +55,8 @@ function criterion(overrides: Record<string, unknown> = {}) {
     // A bare status code proves the transport worked, not that the tool did. The skill
     // asks for the side effect, so the fixture models one.
     expectIt: 'HTTP 200 whose result carries at least one asset row',
-    source: { kind: 'plan', ref: 'plan line 12' },
+    source: { kind: 'plan', ref: 'plan line 12', quote: 'search_assets works with an OAuth token' },
+    why: 'the token path is the new code; a bare 200 would not show it reached the tool',
     intent: 'changes',
     baseline: 'fail',
     witness: 'success',
@@ -80,9 +81,22 @@ describe('criteria', () => {
     });
 
     const output = runCli(['criteria', '--criteria', input]);
-    expect(output).toContain('| AC | From | Intent | Base | Shows | Behaviour | Plain claim | How it is driven | Expect |');
-    expect(output).toMatch(/^\| AC1 \| plan line 12 \| changes \| fail \| success \|/m);
+    expect(output).toContain('| AC | From | Cited | Why | Intent | Base | Shows | Behaviour | Plain claim | How it is driven | Expect |');
+    expect(output).toMatch(/^\| AC1 \| plan line 12 \| search_assets works with an OAuth token \| the token path [^|]+ \| changes \| fail \| success \|/m);
     expect(output).toContain('No criterion covers: src/log.ts');
+    expect(output).toContain('No spec was supplied');
+  });
+
+  it('looks each quote up in --spec and lists the ones it cannot find', () => {
+    const input = writeInput({ criteria: [criterion(), criterion({ id: 'AC2', source: { kind: 'plan', ref: 'R2', quote: 'not in there' } })] });
+    const spec = join(dirname(input), 'spec.md');
+    writeFileSync(spec, '# Plan\n\nsearch_assets works\n  with an OAuth token.\n');
+    const output = runCli(['criteria', '--criteria', input, '--spec', spec]);
+    expect(output).toContain('NOT IN THE SPEC');
+    expect(output).toContain('- AC2: "not in there"');
+    expect(output).not.toContain('- AC1:');
+    expect(output).not.toContain('No spec was supplied');
+    expect(() => runCli(['criteria', '--criteria', input, '--spec', join(dirname(input), 'nope.md')])).toThrow(/does not exist/);
     expect(output).toContain('What these criteria prove');
   });
 
@@ -146,6 +160,31 @@ describe('report', () => {
     const dir = mkdtempSync(join(tmpdir(), 'verify-cli-'));
     const { results, criteriaPath } = writeReportInputs(dir);
     expect(() => runCli(['report', '--results', results, '--criteria', criteriaPath])).toThrow();
+  });
+
+  // The upgrade case: a run approved before citations existed still reports.
+  it('reports a run approved before citations, and still refuses to draft one', () => {
+    const repo = mkdtempSync(join(tmpdir(), 'verify-older-run-'));
+    const runDir = join(repo, '.verify', 'runs', 'r1');
+    mkdirSync(runDir, { recursive: true });
+    const older = criterion({ source: { kind: 'plan', ref: 'design: no billing routes' }, proof: { kind: 'live-read', detail: 'fresh route table' } });
+    delete (older as { why?: string }).why;
+    writeFileSync(join(runDir, 'criteria.json'), JSON.stringify({ criteria: [older] }));
+    writeFileSync(join(runDir, 'precheck.json'), JSON.stringify({ parts: { api: 'ok' }, tainted: {}, unchecked: [] }));
+    writeFileSync(join(runDir, 'evidence.png'), 'pixels');
+    const results = join(runDir, 'results.json');
+    writeFileSync(results, JSON.stringify({
+      results: [{ id: 'AC1', outcome: 'pass', proofSeen: true, observed: 'no billing routes', evidence: ['evidence.png'] }],
+      coverage: { filesWithoutCriterion: 0 }, notChecked: [],
+    }));
+    expect(runCli(['report', '--repo-root', repo, '--run-dir', runDir, '--results', results]))
+      .toContain('PASS — 1 of 1 proven.');
+    const html = readFileSync(runCli(['html', '--repo-root', repo, '--run-dir', runDir, '--results', results]).trim(), 'utf8');
+    expect(html).toContain('quote not recorded');
+    expect(html).toContain('Why this check: not recorded');
+    // Drafting is still gated: the same criterion cannot be approved anew.
+    expect(() => runCli(['criteria', '--criteria', writeInput({ criteria: [older] })]))
+      .toThrow(/has no why[\s\S]*source\.quote/);
   });
 
   it('gates a hand-driven pass on validated named evidence in run-dir mode', () => {
