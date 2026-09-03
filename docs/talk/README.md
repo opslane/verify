@@ -12,25 +12,28 @@ headings, the diagrams, and the screenshot.
 **Abhishek Ray, founder of Opslane**
 
 <!-- 0:00
-"Hey everybody, my name is Abhishek. I'm the founder of Opslane. We're building
-an open-source agent that finds user-facing issues, investigates them, and
-opens PRs for them. I'm not going to talk about Opslane today. I'll talk about
-a skill I built to check my own work while building it."
+"Hi everybody, my name is Abhishek. I'm the founder of Opslane. Today I'm going
+to talk about a skill I've been building called Verify. The thesis is simple:
+don't trust what your agent did, verify it."
+
+Do NOT add "I won't go into the details, the repo has everything." It tells the
+room the interesting part is elsewhere, and then you go into details anyway.
+The repo link belongs at the end.
 -->
 
 ## Verification is the bottleneck now
 
-Write a spec with Claude. Have Codex implement it. The unit tests pass, because Claude does not write unit tests that fail. Then sit down and click through every edge case by hand.
+Claude writes the spec. Codex implements it. The unit tests pass, because Claude does not write unit tests that fail. Then I am the manual QA.
 
 The agent says done and the tests are green, and both of those came from the agent.
 
 <!-- 0:20
-"I'm guessing this is true for most of us. As the coding agents got better, the
-bottleneck moved from writing code to trusting it. Here's my loop. Spec with
-Claude, Codex implements, unit tests pass, and they always pass, because Claude
-does not write unit tests that fail. Then I click through everything by hand
-and find that half of it isn't what I asked for. The agent says done and the
-tests are green, and both of those came from the agent."
+"I think for all of us, as the coding agents have gotten better over the last
+six months, writing code is no longer the bottleneck. It moved from writing
+code to trusting it. My loop used to be: Claude writes the spec, Codex
+implements it, and then I'm the manual QA. The unit tests pass, and they always
+pass, because Claude does not write unit tests that fail. So the agent says
+done and the tests are green, and both of those came from the agent."
 -->
 
 ## Where the checks come from
@@ -62,11 +65,10 @@ Point at the dotted arrow.
 "This is the only arrow coming from the diff. It's dotted, and it only carries
 questions. If something in the change isn't explained by my plan, it asks me
 about it. It never answers on its own."
-"That's the whole trick. My first version wrote the criteria by reading the
-diff, and they passed every single time. Of course they did. The code had
-already told them what to expect. That's also why your agent's own tests pass:
-the test and the code came from the same understanding, so they agree even
-when they're both wrong."
+"The first version of this skill built the criteria straight from the diff, and
+they passed every single time. Criteria written from the code can't fail. The
+test and the code came from the same understanding, so they agree even when
+they're both wrong. That's also why your agent's own tests pass."
 Point at the second model and the approval box.
 "Then a second model that hasn't seen my criteria attacks them, looking for
 ones a lazy implementation would pass. And nothing runs until I say go."
@@ -161,9 +163,11 @@ those criteria come back as 'could not run'. They don't come back as my change
 being broken. That distinction is the difference between a report I trust and
 a flaky test suite I learn to ignore."
 "Last night that meant a real Postgres, a real cloud sandbox, and a real model
-running against a real repository. For the outage case it stood up a fake
-provider that answers 529 to every call. I used to mock those parts, and the
-failures just moved to staging."
+running against a real repository. Opslane integrates with Slack and GitHub, so
+I keep simple twins of those to drive end to end. And for the outage case it
+stood up a fake provider that answers 529 to every call, which is how I can
+test model failures at all. I used to mock those parts, and the failures just
+moved to staging."
 -->
 
 ## It gives you the receipts
@@ -183,7 +187,10 @@ Expand it. Read only the first sentence, flat:
 "The expectation was built on a wrong premise, mine."
 Paraphrase the rest: "It had assumed a feature worked one way. It works another
 way. So instead of failing my code, it told me my criterion was wrong, and
-showed me the log line that proves it."
+showed me the log line that proves it. That's when I started trusting it."
+
+THIS IS THE MOMENT. Every version of the practice run that drops it becomes a
+features talk with no proof. Twenty seconds. Do not cut it for time.
 
 Scroll to Not checked.
 "And every report ends with what it did not check. This one noticed, without
