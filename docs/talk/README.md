@@ -59,8 +59,13 @@ Point at the space around the diagram.
 "Notice what isn't in this picture. Your code. If you derive the criteria from
 the diff they always pass, because the test and the code came from the same
 understanding."
-"Then a second model, Codex, reviews the criteria before they come to me. I
+"A second model, Codex, reviews the criteria first, then they come to me. I
 approve them. Then it boots the whole stack, drives each one, and reports."
+
+The Codex box is no longer on the diagram, so say this line without pointing.
+If you would rather show it, put the node back:
+    codex["Second model<br>flags what a stub would pass"]
+    plan --> ac --> codex --> you --> run --> rep
 
 Do NOT also say here that the criteria trace back to your plan file. You say it
 again over the JSON, pointing at the actual field. Saying it twice is where
