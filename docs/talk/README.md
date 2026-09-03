@@ -68,60 +68,60 @@ again over the JSON, pointing at the actual field. Saying it twice is where
 about thirty seconds went in the five-minute run.
 -->
 
-## What an acceptance criterion looks like
+## What is an acceptance criterion?
 
-Opslane runs an AI investigation on every incident a customer reports. Sometimes that investigation dies halfway: the model runs out of turns, or the provider is down. The customer used to see "needs a human" for what was really our failure. That was the change.
+A user requirement. It states the intent behind the change, written down before anyone looks at the implementation, so there is something to compare the implementation against.
 
-It wrote five criteria from that plan. I wrote none of them. In plain language, one of them says:
+Here is one from a change where I put billing behind a feature flag:
 
-> A transient dead letter is re-run once about an hour after it died, again about four hours after the next death, and again after sixteen; one that is a minute short of each boundary is left alone.
+> With billing off, the billing API routes return 404, as if they were never added.
 
-Underneath, it is a row of [`criteria.json`](../../examples/agent-fail-v2/criteria.json):
+Underneath, it is a row of `criteria.json`:
 
 ```json
 {
   "id": "AC1",
-  "plain": "A transient dead letter is re-run once about an hour after it died ...",
-  "source":    { "kind": "plan", "ref": "Task 4: interval requeue 1h x 4^requeues" },
-  "intent":    "changes",
-  "dependsOn": ["db"],
-  "proof":     { "kind": "marker-in-data", "step": 2 },
+  "plain": "With billing off, the billing API routes return 404 as if they were never added.",
+  "source":    { "kind": "plan", "ref": "design: 'Unset: no billing routes (404)'" },
+  "intent":    "preserves",
+  "dependsOn": ["api"],
+  "proof":     { "kind": "marked-request-rejected", "detail": "404 paired with the marker-bearing request URL" },
   "drive": [
-    { "verb": "run", "args": ["timeout","30","env","REAPER_INTERVAL_MS=5000","node","packages/worker/dist/index.js","--expect-exit","124"] },
-    { "verb": "db",  "args": ["SELECT g.title, j.status, j.requeues FROM error_group_jobs j JOIN error_groups g ON g.id = j.error_group_id WHERE g.title LIKE 'AC1 {{marker}} %'"] }
+    { "verb": "http", "args": ["GET", "/api/v1/billing/summary?m={{marker}}"] }
   ]
 }
 ```
 
 Four verbs exist: `run`, `db`, `http`, `wait`. No shell strings, no assertions, no verbs specific to my app. The model writes this plan. A plain engine runs it verbatim, with no model in the loop.
 
-<!-- 1:35 · THE TECHNICAL BEAT. This is what the room hasn't seen elsewhere.
-Show it live in the terminal if you prefer; the page carries the same thing as
-a backup.
+<!-- 1:35 · about 50 seconds. The technical beat.
+"So what is an acceptance criterion? It's a user requirement. It says what the
+change was meant to do, written down before anyone looks at the code, so you
+have something to compare the implementation against."
 
-"Here's a change from yesterday. My agent on Opslane runs an investigation on
-every incident a customer reports, and sometimes it dies halfway. The model
-runs out of turns, the provider is down. The customer used to see 'needs a
-human' for what was really our failure."
+"Here's one. I was putting billing behind a feature flag." Read the claim.
+"With billing off, the billing routes should 404, as if we never added them.
+That's a requirement anyone can check. You don't need to know my codebase."
 
-"It wrote five criteria from that plan. I wrote none of them. In plain
-language, here's one." Read the quote.
+"But a criterion isn't just a sentence. Underneath it's this."
+Point at source. "Where it came from. It traces back to a line in my design
+doc, so I can check it against what I actually asked for."
+Point at dependsOn. "What has to be running. This one needs the API. If the API
+is down, it comes back as could-not-run rather than as my change being broken."
+Point at proof. "How you know the check really happened. There's a marker
+unique to this run in the query string, so the 404 is paired with a request I
+can point at."
+Point at drive. "And the plan itself. One HTTP call. There are four verbs in
+total: run, db, http, wait. No shell strings, no assertions, nothing specific
+to my app."
 
-"But a criterion isn't a sentence. Underneath it's this."
-Point at source. "Where it came from. This traces back to a line in my plan, so
-I can check it against what I actually asked for."
-Point at dependsOn. "What has to be up. If the database is down, this comes
-back as could-not-run, not as my change being broken."
-Point at proof. "How you know the check happened. Step two's output has to
-contain a marker unique to this run. If that string isn't there, it doesn't
-pass, whatever the model thinks."
-Point at drive. "And the plan. Exactly four verbs: run, db, http, wait. No
-shell strings, no assertions, nothing specific to my app."
+"That's what makes runs reproducible. The model writes this plan, and a plain
+engine executes it verbatim with no model in the loop. A plan that needs
+changing goes back through approval; it never gets patched mid-run."
 
-"That's the split that makes runs reproducible. The model writes the plan. A
-dumb engine executes it verbatim, and there's no model in the loop while it
-runs. A plan that needs changing goes back through approval. It never gets
-patched halfway through a run."
+NOTE: this example is from the billing change. The report you show later is
+from a different run. Say "here's one from another change" if you want, or just
+don't imply they're the same run.
 -->
 
 ## It boots your whole stack
