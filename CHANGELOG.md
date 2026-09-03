@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- README rewritten as a landing page: the problem first, then a worked example from a
+  real run, why the agent's own tests are not enough, how the stack is booted and
+  seeded, what each surface needs, and what makes a repository easy to verify.
+
+### Fixed
+- The install command pointed at `opslane/opslane`; the marketplace lives at
+  `opslane/verify`.
+
 ## [2.8.0] - 2026-09-01
 
 ### Added
