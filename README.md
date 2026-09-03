@@ -10,9 +10,9 @@ It is a Claude Code plugin. You run it locally, after the agent finishes impleme
 
 ## Before and after
 
-**Without Verify.** The agent says done. Tests are green. You boot the stack, seed an incident, kill the model mid-investigation, and read the job row by hand. Forty minutes later you notice the failure is labelled as the customer's problem when the plan said it was yours.
+Without Verify, the agent says done and the tests are green. You boot the stack, seed an incident, kill the model mid-investigation, and read the job row by hand. Forty minutes later you notice the failure is labelled as the customer's problem when the plan said it was yours.
 
-**With Verify.** Five criteria you approved. One run. The report names the label mismatch, with the row that proves it.
+With Verify, you approve five criteria and run once. The report names the label mismatch, with the row that proves it.
 
 That run is real, and it is walked through [below](#an-example-from-a-real-run).
 
