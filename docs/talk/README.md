@@ -33,7 +33,7 @@ and find that half of it isn't what I asked for. The agent says done and the
 tests are green, and both of those came from the agent."
 -->
 
-## Where the checks come from
+## How verify works?
 
 ```mermaid
 flowchart TD
