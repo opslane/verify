@@ -6,6 +6,16 @@ Opslane Verify does that check, with three things between the agent and "done" t
 
 It is a Claude Code plugin. You run it locally, after the agent finishes implementing and before you open the PR.
 
+## What it does, in five steps
+
+1. Takes the plan for the change.
+2. Works out what the change was meant to do, from the plan, not from the diff.
+3. Writes acceptance criteria from that, and has a second model review them.
+4. Stops and asks you to approve them.
+5. Drives the real system against each criterion and writes a report.
+
+The criteria are the part that matters. Written before anything looks at the code, they are the one definition of "correct" the implementation had no say in. Criteria written from the diff pass every time, because the code already told them what to expect.
+
 ## Requirements
 
 - Claude Code, logged in with `claude login`.
@@ -44,9 +54,9 @@ It boots the stack, seeds it, drives each criterion, tears the stack down, and p
 
 ## An example, from a real run
 
-The plan changed how a background worker handles failed jobs: which failures get retried, which get shown to the customer, and which are labelled as the vendor's own fault. The agent implemented it and its tests were green.
+The change, to Opslane's own worker: when the AI worker fails to investigate an incident, that is Opslane's failure, not the customer's. It should retry on its own instead of showing the customer "needs a human". The agent implemented it and its tests were green. The files from the run are in [`examples/agent-fail-v2/`](examples/agent-fail-v2/).
 
-Verify proposed five criteria, Codex reviewed them, the user approved. Verify then drove a real investigation against a real repository with the model's turn budget cut to one, and read the job row after it died.
+Verify proposed five criteria, Codex reviewed them, the user approved. Then it ran with nothing mocked in process: a real Postgres, a real E2B sandbox, and a real model against a real repository with its turn budget cut to one. For the outage case it stood up a local stand-in for the model provider that answers 529 to every call. After each criterion it read the job and incident rows and kept them as evidence.
 
 Four criteria passed. But the report flagged something no criterion had asked about: the plan said this failure should be classed as a limit, and the code classed it as an agent error. Same behaviour, wrong label, and the label is what the Slack event and the health endpoint report. The agent's tests were green because the code did what it was written to do. Nobody had checked it against what the plan said.
 
@@ -54,7 +64,7 @@ The fifth criterion failed, and the report blamed the criterion, not the code:
 
 > Job completed; route_map has 2 rows, not 40-120. The expectation was built on a wrong premise: the route classifier does not discover routes from the repository, it classifies the routes observed in the project's incidents.
 
-Codex had flagged that criterion before the run, because its check compared the worker's output against the worker's own count. The user approved it anyway. The report says all of that, so nobody mistakes it for a bug.
+Verify had marked that criterion as uncertain before the run, and Codex had flagged it too, because its check compared the worker's output against the worker's own count. The user approved it anyway. The report says all of that, so nobody mistakes it for a bug.
 
 The summary at the bottom of every report keeps those cases apart:
 
