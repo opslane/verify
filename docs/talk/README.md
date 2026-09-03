@@ -67,7 +67,9 @@ Point at the second model and the approval box.
 ones a lazy implementation would pass. And nothing runs until I say go."
 -->
 
-## The criteria it wrote
+## What the Acceptance Criteria's look like
+
+(example in terminal)
 
 <!-- 1:40
 "Here's a run from last night. Quick context so the criteria make sense.
