@@ -39,7 +39,6 @@ tests are green, and both of those came from the agent."
 flowchart TD
     plan["Your plan<br>what you meant"]
     old["The old code<br>how it behaved before"]
-    diff["The diff<br>what the agent built"]
     ac["Acceptance criteria"]
     codex["Second model<br>flags what a stub would pass"]
     you["You approve"]
@@ -48,7 +47,6 @@ flowchart TD
 
     plan --> ac
     old --> ac
-    diff -.->|"gaps only, as questions for you"| ac
     ac --> codex --> you --> run --> rep
 ```
 
