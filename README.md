@@ -1,4 +1,4 @@
-# Opslane Verify
+# Verify Skill
 
 Don't trust your agent. Verify it.
 
