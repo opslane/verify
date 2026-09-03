@@ -7,11 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Changed
-- README rewritten as a landing page: the problem first, a before/after, the five steps,
-  a worked example from a real run, and why the agent's own tests are not enough. The
-  technical depth moved to `docs/what-it-can-test.md` (surfaces and what each needs) and
-  `docs/how-it-runs-your-stack.md` (setup contract, boot, seed, probe, teardown, login,
-  run directory, and what makes a repository easy to verify).
+- **README rebuilt as a landing page.** It opens on the problem (agents write more code
+  than anyone can read, and the agent grading its own work has one likely answer), then
+  the mechanism as five bullets and a mermaid diagram showing that criteria come from
+  the plan and the base commit and never from the diff. The body is three principles:
+  we test the intent not the code, we run your whole stack for every change, and we
+  give you the receipts, with a screenshot of a real report.
+- **Depth moved into `docs/`.** `example-run.md` walks a real run, including what the
+  second model flagged and what the report found unasked. `what-it-can-test.md` covers
+  the surfaces and what each needs from you. `how-it-runs-your-stack.md` covers the
+  setup contract, boot modes, seeding, probes, teardown, and login capture.
+- Dropped the Requirements section. Node.js is named in Install, and the rest is
+  covered where it matters.
 
 ### Fixed
 - The install command pointed at `opslane/opslane`; the marketplace lives at
