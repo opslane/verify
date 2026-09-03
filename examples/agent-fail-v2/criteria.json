@@ -1,0 +1,299 @@
+{
+  "criteria": [
+    {
+      "id": "AC1",
+      "title": "Transient dead letters re-run exactly at the 1h, 4h, and 16h boundaries (time hacked by backdating)",
+      "plain": "A transient dead letter is re-run once about an hour after it died, again about four hours after the next death, and again after sixteen; one that is a minute short of each boundary is left alone.",
+      "doIt": "Seed six transient dead letters with backdated death times (61m/59m at requeues 0, 4h01/3h59 at requeues 1, 16h01/15h59 at requeues 2), run the worker binary for 30s with the reaper ticking every 5s, read the six rows.",
+      "expectIt": "The three 'due' rows have requeues incremented by one and requeued_at set; the three 'short' rows are unchanged (same requeues, requeued_at NULL, status dead_letter).",
+      "source": {
+        "kind": "plan",
+        "ref": "Task 4 Interfaces: interval requeue 1h x 4^requeues, requeues < 3"
+      },
+      "intent": "changes",
+      "baseline": "not-applicable",
+      "witness": "success",
+      "dependsOn": [
+        "db"
+      ],
+      "proof": {
+        "kind": "marker-in-data",
+        "detail": "the six groups are titled with the run marker and returned with their counters",
+        "step": 2
+      },
+      "drive": [
+        {
+          "verb": "run",
+          "args": [
+            "timeout",
+            "30",
+            "env",
+            "DATABASE_URL=postgres://opslane:<password>@localhost:5473/opslane?sslmode=disable",
+            "HEALTH_PORT=8181",
+            "POLL_INTERVAL_MS=1000",
+            "USAGE_EVENTS_SLACK_WEBHOOK=http://127.0.0.1:8790/hook",
+            "OPSLANE_E2B_JAVASCRIPT_TEMPLATE=<e2b-template>",
+            "REAPER_INTERVAL_MS=5000",
+            "node",
+            "packages/worker/dist/index.js",
+            "--expect-exit",
+            "124"
+          ],
+          "timeoutSeconds": 60
+        },
+        {
+          "verb": "db",
+          "args": [
+            "SELECT g.title, j.status, j.requeues, j.requeued_at IS NOT NULL AS requeued FROM error_group_jobs j JOIN error_groups g ON g.id = j.error_group_id WHERE g.title LIKE 'AC1 {{marker}} %' ORDER BY g.title"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AC2",
+      "title": "A repository the worker cannot clone is still a needs_human incident with repo_access_denied",
+      "plain": "With a real sandbox but no GitHub credential, a private repository cannot be cloned, and the incident lands in needs_human for the customer with the repo_access_denied reason.",
+      "doIt": "Wait for the seeded job on the private <private-repo> project, run the worker binary for 200s with real E2B and model keys but GITHUB_TOKEN unset, read the group and job.",
+      "expectIt": "Group status needs_human, reason_code repo_access_denied, needs_human_at set; job completed (not dead-lettered), attempts 0.",
+      "source": {
+        "kind": "plan",
+        "ref": "Decisions: needs_human is reserved for things the customer must act on, including a repository the worker cannot access"
+      },
+      "intent": "preserves",
+      "baseline": "pass",
+      "witness": "success",
+      "dependsOn": [
+        "db"
+      ],
+      "proof": {
+        "kind": "marker-in-data",
+        "detail": "the group is titled with the run marker and returned with its terminal fields",
+        "step": 3
+      },
+      "drive": [
+        {
+          "verb": "wait",
+          "args": [
+            "--sql",
+            "SELECT count(*) FROM error_group_jobs j LEFT JOIN error_groups g ON g.id = j.error_group_id WHERE g.title = 'AC2 {{marker}}' AND j.available_at <= now()",
+            "--contains",
+            "1",
+            "--timeout",
+            "1500"
+          ],
+          "timeoutSeconds": 1510
+        },
+        {
+          "verb": "run",
+          "args": [
+            "timeout",
+            "200",
+            "env",
+            "-u",
+            "GITHUB_TOKEN",
+            "DATABASE_URL=postgres://opslane:<password>@localhost:5473/opslane?sslmode=disable",
+            "HEALTH_PORT=8181",
+            "POLL_INTERVAL_MS=1000",
+            "USAGE_EVENTS_SLACK_WEBHOOK=http://127.0.0.1:8790/hook",
+            "OPSLANE_E2B_JAVASCRIPT_TEMPLATE=<e2b-template>",
+            "node",
+            "packages/worker/dist/index.js",
+            "--expect-exit",
+            "124"
+          ],
+          "timeoutSeconds": 230
+        },
+        {
+          "verb": "db",
+          "args": [
+            "SELECT g.title, g.status, g.reason_code, g.needs_human_at IS NOT NULL AS has_needs_human_at, j.status AS job_status, j.attempts, j.dead_letter_class, left(j.last_error, 100) AS last_error FROM error_groups g JOIN error_group_jobs j ON j.error_group_id = g.id WHERE g.title = 'AC2 {{marker}}'"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AC3",
+      "title": "A real investigation capped at one turn ends in one execution, labelled limit or agent, with the incident still in analyzing",
+      "plain": "When the model runs out of room on a real investigation of a real repository, the job is not retried, the incident is not shown to the customer, and the failure is labelled as ours.",
+      "doIt": "Wait for the seeded job, run the worker binary for 300s with real E2B, model, and GitHub credentials and FRICTION_INVESTIGATION_MAX_TURNS=1, read the group and job.",
+      "expectIt": "Either group awaiting_approval with a verdict, or: job dead_letter, attempts 1, dead_letter_class limit or agent, group analyzing, reason_code NULL. The worker output has no 'Friction investigation API call failed' line and no 'retry the job'. Report which class was observed.",
+      "source": {
+        "kind": "plan",
+        "ref": "Task 7 smoke step 4; Tasks 1 and 2"
+      },
+      "intent": "changes",
+      "baseline": "fail",
+      "witness": "success",
+      "dependsOn": [
+        "db"
+      ],
+      "proof": {
+        "kind": "marker-in-data",
+        "detail": "the group title carries the marker and is read with the job row after the run",
+        "step": 3
+      },
+      "drive": [
+        {
+          "verb": "wait",
+          "args": [
+            "--sql",
+            "SELECT count(*) FROM error_group_jobs j LEFT JOIN error_groups g ON g.id = j.error_group_id WHERE g.title = 'AC3 {{marker}}' AND j.available_at <= now()",
+            "--contains",
+            "1",
+            "--timeout",
+            "1500"
+          ],
+          "timeoutSeconds": 1510
+        },
+        {
+          "verb": "run",
+          "args": [
+            "timeout",
+            "300",
+            "env",
+            "DATABASE_URL=postgres://opslane:<password>@localhost:5473/opslane?sslmode=disable",
+            "HEALTH_PORT=8181",
+            "POLL_INTERVAL_MS=1000",
+            "USAGE_EVENTS_SLACK_WEBHOOK=http://127.0.0.1:8790/hook",
+            "OPSLANE_E2B_JAVASCRIPT_TEMPLATE=<e2b-template>",
+            "FRICTION_INVESTIGATION_MAX_TURNS=1",
+            "node",
+            "packages/worker/dist/index.js",
+            "--expect-exit",
+            "124"
+          ],
+          "timeoutSeconds": 330
+        },
+        {
+          "verb": "db",
+          "args": [
+            "SELECT g.title, g.status, g.reason_code, j.status AS job_status, j.attempts, j.dead_letter_class, j.requeues, left(j.last_error, 120) AS last_error FROM error_groups g JOIN error_group_jobs j ON j.error_group_id = g.id WHERE g.title = 'AC3 {{marker}}'"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AC4",
+      "title": "A provider outage retries through the queue and never becomes a customer verdict",
+      "plain": "If the model provider answers 529 to every call, the job is retried with backoff and finally dead-lettered as transient; the incident is never written to the customer as an evidence verdict.",
+      "doIt": "Wait for the seeded job, run the worker binary for 480s with ANTHROPIC_BASE_URL pointing at a local stub that always answers 529 (real E2B and GitHub credentials), read the job and group.",
+      "expectIt": "attempts >= 2 within the window (3 and status dead_letter with dead_letter_class transient if the provider retries fit); the group is analyzing with reason_code NULL and no decision row written; last_error names the 529 or 'model unavailable'.",
+      "source": {
+        "kind": "plan",
+        "ref": "Task 2 steps 3 and 5: transient failures use the queue's backoff; no insufficient_context or unable_to_establish_cause write"
+      },
+      "intent": "changes",
+      "baseline": "fail",
+      "witness": "success",
+      "dependsOn": [
+        "db"
+      ],
+      "proof": {
+        "kind": "marker-in-data",
+        "detail": "the group title carries the marker and is read with the job row after the run",
+        "step": 3
+      },
+      "drive": [
+        {
+          "verb": "wait",
+          "args": [
+            "--sql",
+            "SELECT count(*) FROM error_group_jobs j LEFT JOIN error_groups g ON g.id = j.error_group_id WHERE g.title = 'AC4 {{marker}}' AND j.available_at <= now()",
+            "--contains",
+            "1",
+            "--timeout",
+            "1500"
+          ],
+          "timeoutSeconds": 1510
+        },
+        {
+          "verb": "run",
+          "args": [
+            "timeout",
+            "480",
+            "env",
+            "DATABASE_URL=postgres://opslane:<password>@localhost:5473/opslane?sslmode=disable",
+            "HEALTH_PORT=8181",
+            "POLL_INTERVAL_MS=1000",
+            "USAGE_EVENTS_SLACK_WEBHOOK=http://127.0.0.1:8790/hook",
+            "OPSLANE_E2B_JAVASCRIPT_TEMPLATE=<e2b-template>",
+            "ANTHROPIC_BASE_URL=http://127.0.0.1:8791",
+            "node",
+            "packages/worker/dist/index.js",
+            "--expect-exit",
+            "124"
+          ],
+          "timeoutSeconds": 510
+        },
+        {
+          "verb": "db",
+          "args": [
+            "SELECT g.title, g.status, g.reason_code, j.status AS job_status, j.attempts, j.dead_letter_class, left(j.last_error, 120) AS last_error, (SELECT count(*) FROM diagnosis_decisions dd WHERE dd.error_group_id = g.id) AS decisions FROM error_groups g JOIN error_group_jobs j ON j.error_group_id = g.id WHERE g.title = 'AC4 {{marker}}'"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AC5",
+      "title": "The route classifier completes on a real Vue repository and writes one route_map row per discovered route",
+      "plain": "The daily route map for a real app finishes within its (route-scaled) budget instead of dying, and every discovered route gets a row.",
+      "doIt": "Wait for the seeded route_map job for the papermark project, run the worker binary for 480s with real credentials, read the job and the route_map rows, compare against the independently listed page files.",
+      "expectIt": "Job completed (not dead_letter). route_map rows for project ...0020 number between 40 and 120, against 80 page files (7 app-router page.tsx plus pages/*.tsx excluding api, _app, _document) listed independently in expected-routes.txt; the worker's 'Product context persisted' line agrees with the row count. A count of 0 or 1, or a dead letter on budget, fails.",
+      "source": {
+        "kind": "plan",
+        "ref": "Task 6 step 3 acceptance"
+      },
+      "intent": "changes",
+      "baseline": "unknown",
+      "witness": "success",
+      "dependsOn": [
+        "db"
+      ],
+      "proof": {
+        "kind": "live-read",
+        "detail": "route_map rows and the job status are read after the run; the worker's persisted-count log line is in the run output"
+      },
+      "drive": [
+        {
+          "verb": "wait",
+          "args": [
+            "--sql",
+            "SELECT count(*) FROM error_group_jobs j LEFT JOIN error_groups g ON g.id = j.error_group_id WHERE j.job_type = 'route_map' AND j.project_id = '00000000-0000-0000-0000-000000000020' AND j.available_at <= now()",
+            "--contains",
+            "1",
+            "--timeout",
+            "1500"
+          ],
+          "timeoutSeconds": 1510
+        },
+        {
+          "verb": "run",
+          "args": [
+            "timeout",
+            "480",
+            "env",
+            "DATABASE_URL=postgres://opslane:<password>@localhost:5473/opslane?sslmode=disable",
+            "HEALTH_PORT=8181",
+            "POLL_INTERVAL_MS=1000",
+            "USAGE_EVENTS_SLACK_WEBHOOK=http://127.0.0.1:8790/hook",
+            "OPSLANE_E2B_JAVASCRIPT_TEMPLATE=<e2b-template>",
+            "node",
+            "packages/worker/dist/index.js",
+            "--expect-exit",
+            "124"
+          ],
+          "timeoutSeconds": 510
+        },
+        {
+          "verb": "db",
+          "args": [
+            "SELECT j.job_type, j.status, j.attempts, j.dead_letter_class, left(j.last_error, 120) AS last_error, (SELECT count(*) FROM route_map rm WHERE rm.project_id = j.project_id) AS route_rows FROM error_group_jobs j WHERE j.job_type = 'route_map' AND j.project_id = '00000000-0000-0000-0000-000000000020'"
+          ]
+        }
+      ]
+    }
+  ],
+  "uncoveredFiles": [
+    "docs/superpowers/plans/2026-09-02-investigation-failure-classification.md"
+  ]
+}
