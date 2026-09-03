@@ -72,31 +72,58 @@ Point at the second model and the approval box.
 ones a lazy implementation would pass. And nothing runs until I say go."
 -->
 
-## The criteria it wrote
+## What an acceptance criterion actually is
 
-Opslane runs an AI investigation on every incident a customer reports. Sometimes that investigation dies halfway: the model runs out of turns, or the provider is down. The customer used to see "needs a human" for what was really our failure.
+Opslane runs an AI investigation on every incident a customer reports. Sometimes that investigation dies halfway: the model runs out of turns, or the provider is down. The customer used to see "needs a human" for what was really our failure. That was the change.
 
-It wrote five criteria from that plan. I wrote none of them. One of them:
+It wrote five criteria from that plan. I wrote none of them. In plain language, one of them says:
 
-> When the model runs out of room on a real investigation of a real repository, the job is not retried, the incident is not shown to the customer, and the failure is labelled as ours.
+> A transient dead letter is re-run once about an hour after it died, again about four hours after the next death, and again after sixteen; one that is a minute short of each boundary is left alone.
 
-<!-- 1:40
-"Here's a run from last night. Quick context so the criteria make sense.
-Opslane runs an AI investigation on every incident a customer reports.
-Sometimes that investigation dies halfway: the model runs out of turns, or the
-provider is down. Before this change, the customer saw 'needs a human' on their
-dashboard for what was really our failure. The change makes it retry quietly
-instead."
+Underneath, it is a row of [`criteria.json`](../../examples/agent-fail-v2/criteria.json):
 
-"It wrote five criteria. I wrote none of them. Here's one."
-Read the quote on screen out loud, then translate: "In plain terms: when our AI gives up halfway, don't retry forever,
-don't show the customer a half-finished answer, and mark it as our bug, not
-theirs. No file names in there. Everything in it can be watched from outside
-the code."
-"It also told me it wasn't sure about one of the five. I ran it anyway."
+```json
+{
+  "id": "AC1",
+  "plain": "A transient dead letter is re-run once about an hour after it died ...",
+  "source":    { "kind": "plan", "ref": "Task 4: interval requeue 1h x 4^requeues" },
+  "intent":    "changes",
+  "baseline":  "not-applicable",
+  "dependsOn": ["db"],
+  "proof":     { "kind": "marker-in-data", "step": 2 },
+  "drive": [
+    { "verb": "run", "args": ["timeout","30","env","REAPER_INTERVAL_MS=5000","node","packages/worker/dist/index.js","--expect-exit","124"] },
+    { "verb": "db",  "args": ["SELECT g.title, j.status, j.requeues FROM error_group_jobs j JOIN error_groups g ON g.id = j.error_group_id WHERE g.title LIKE 'AC1 {{marker}} %'"] }
+  ]
+}
+```
 
-Optional, only if you have spare time: SWITCH → criteria.md to show all five,
-then straight back. The one on screen here is enough.
+Four verbs exist: `run`, `db`, `http`, `wait`. No shell strings, no assertions, no verbs specific to my app. The model writes this plan. A plain engine runs it, verbatim, with no model in the loop.
+
+<!-- 1:35 · THE TECHNICAL BEAT. This is the part the room hasn't seen elsewhere.
+"Here's a change from yesterday. My agent on Opslane runs an investigation on
+every incident a customer reports, and sometimes it dies halfway. The model
+runs out of turns, the provider is down. The customer used to see 'needs a
+human' for what was really our failure."
+
+"It wrote five criteria from that plan. I wrote none of them. In plain
+language, here's one." Read the quote.
+
+Point at the JSON. "But a criterion isn't a sentence. It's this."
+Point at source. "Where it came from. This one traces back to a line in my
+plan, so I can check it against what I actually asked for."
+Point at dependsOn. "What it needs to be up. If the database is down, this one
+comes back as 'could not run', not as my change being broken."
+Point at proof. "How you'll know the check really happened. Step two's output
+has to contain a marker unique to this run. If that string isn't there, it
+doesn't pass, no matter what the model thinks."
+Point at drive. "And the plan. There are exactly four verbs: run, db, http,
+wait. No shell strings, no assertions, nothing specific to my app."
+
+"That's the split that makes it reproducible. The model writes this plan. A
+dumb engine runs it verbatim, and there's no model in the loop while it runs.
+If a plan is wrong, it goes back through approval. It never gets patched
+halfway through a run."
 -->
 
 ## It boots your whole stack
@@ -164,14 +191,23 @@ being asked, that my plan and my code disagreed about how one failure gets
 classified. This is the section I read first now."
 -->
 
-## What I'd want you to take from this
+## Three things to steal
 
-Write the acceptance criteria first, from what you meant. Don't let the judge read the code.
+1. **Write the criteria from your spec, not the implementation.** Code that wrote its own test agrees with itself.
+2. **Separate the part that thinks from the part that runs.** A model writes the plan. A deterministic engine executes it and records receipts. Nothing gets patched mid-run.
+3. **Make a pass provable.** A marker unique to the run, woven into every record, so a check that never ran cannot quietly pass.
 
 `github.com/opslane/verify`
 
 <!-- 3:40
-"If you take one thing away: write the acceptance criteria first, from what you
-meant, and don't let the judge read the code. It's open source, and the run I
-just showed you is checked into the repo. Thanks."
+"Three things you can steal even if you never install this."
+"One: write the criteria from your spec, not from the implementation. Code that
+wrote its own test will always agree with itself."
+"Two: separate the part that thinks from the part that runs. Let a model write
+the plan, then let a boring engine execute it and keep the receipts. Nothing
+gets patched halfway through a run."
+"Three: make a pass provable. A marker unique to the run, woven into every
+record it creates, so a check that never actually ran can't quietly pass."
+"It's open source, and the run I just showed you is checked into the repo.
+Thanks."
 -->
