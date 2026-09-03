@@ -13,7 +13,7 @@ It is a Claude Code plugin. You run it locally, after the agent finishes impleme
 ## How it works
 
 - **It reads your plan, not the diff.** The criteria come from what the change was meant to do, so the implementation gets no say in what "correct" means.
-- **A second model reviews the criteria.** Codex when installed, otherwise a fresh Claude session that has seen only the plan. It flags the criteria a stub could pass.
+- **A second model reviews the criteria.** Codex when installed, otherwise a fresh Claude session that has seen only the plan. It catches the checks that broken code would still pass.
 - **You approve them.** Nothing runs until you say go. Fix any criterion that does not match what you meant.
 - **It boots your whole stack and drives every criterion.** Real HTTP, real rows, real browser. Nothing mocked in process.
 - **It hands you the receipts.** Every command it ran, what came back, and the evidence behind each verdict.
@@ -24,10 +24,10 @@ flowchart TD
     old["The old code<br>how it behaved before"]
     diff["The diff<br>what the agent built"]
     ac["Acceptance criteria"]
-    codex["Second model<br>flags what a stub would pass"]
+    codex["Second model<br>catches checks broken code would pass"]
     you["You approve"]
-    run["Boot the stack<br>drive every criterion"]
-    rep["Report<br>commands, verdicts, evidence"]
+    run["Boot the stack<br>run every criterion against it"]
+    rep["Report<br>what ran, what happened, the proof"]
 
     plan --> ac
     old --> ac
@@ -70,7 +70,7 @@ A check written from the implementation confirms the implementation against itse
 
 Verify reads the diff once, to find what the plan does not explain. Each of those becomes a question for you rather than an answer it invents. If it cannot find a plan at all, it asks for one and stops.
 
-Two guards sit on top of that. Each criterion records whether the old code would have passed it, so one meant to prove new behaviour that the old code already passes gets flagged before you approve. And the second model reads the whole set looking for criteria a lazy implementation would satisfy. On a real run it caught one that any code labelling every job as access-denied would have passed, and another whose check compared the worker's output against the worker's own count.
+Two guards sit on top of that. Each criterion records whether the old code would have passed it, so one meant to prove new behaviour that the old code already passes gets flagged before you approve. And the second model reads the whole set looking for checks that broken code would still pass. On a real run it caught one that any code labelling every job as access-denied would have satisfied, and another whose check compared the worker's output against the worker's own count.
 
 ## We run your whole stack for every change
 
