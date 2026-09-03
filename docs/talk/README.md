@@ -189,21 +189,19 @@ never sees the report. Do not say the report goes back to a second model that
 confirms the tests succeeded.
 -->
 
-## Three things to steal
+## Three things that helped
 
-1. **Write the criteria from your spec, not the implementation.** Code that wrote its own test agrees with itself.
-2. **Separate the part that thinks from the part that runs.** A model writes the plan. A deterministic engine executes it and keeps the receipts. Nothing gets patched mid-run.
-3. **Make a pass provable.** A marker unique to the run, woven into every record, so a check that never ran cannot quietly pass.
+1. Write the criteria from your spec, not the implementation.
+2. Test the whole stack.
+3. Get the agent to give you evidence.
 
 `github.com/opslane/verify`
 
-<!-- 3:40
-"Three things you can steal even if you never install this."
-"One: write the criteria from your spec, not from the implementation. Code that
-wrote its own test will always agree with itself."
-"Two: separate the part that thinks from the part that runs. Let a model write
-the plan, then let a boring engine execute it and keep the receipts."
-"Three: make a pass provable. A marker unique to the run in every record, so a
-check that never actually ran can't quietly pass."
-"It's open source, and the run I just showed you is in the repo. Thanks."
+<!-- 3:20
+"Three things that were useful for me, if you're building something like this."
+"One: write your criteria from your spec, not the implementation."
+"Two: make it easy to spin up your whole stack, so the agent can test end to
+end."
+"Three: get evidence back, so you can check what it actually ran."
+"It's open source, and the run I showed you is in the repo. Thanks."
 -->
