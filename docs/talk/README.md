@@ -5,7 +5,7 @@ Windows, in alt-tab order:
   1  this file, rendered (the diagrams live here)
   2  examples/agent-fail-v2/criteria.md, rendered, zoomed so one claim fills the screen
   3  examples/agent-fail-v2/report.html, opened as a local file
-Budget: about 3:50 spoken. The comments hold the words; the room sees only the
+Budget: about 3:30 spoken. The comments hold the words; the room sees only the
 headings, the diagrams, and the screenshot.
 -->
 
@@ -50,25 +50,22 @@ flowchart TD
     plan --> ac --> codex --> you --> run --> rep
 ```
 
-<!-- 0:50 · THE CORE IDEA. Slow down here.
-"So I built a Claude Code skill called Verify. This is the whole thing in one
-picture."
-Point at "Your plan".
-"Everything starts here. The acceptance criteria come from my plan, from what I
-meant the change to do."
-Then point at the empty space around the diagram.
-"Notice what isn't in this picture. The diff. The code the agent wrote is not
-an input to the criteria. It reads the diff exactly once, to find things my
-plan doesn't explain, and each of those comes back to me as a question rather
-than an answer it invented."
-"That matters because the first version of this skill built the criteria
-straight from the diff, and they passed every single time. Criteria written
-from the code can't fail. The test and the code came from the same
-understanding, so they agree even when they're both wrong. That's also why your
-agent's own tests pass."
-Point at the second model, then at the approval box.
-"Then a second model that didn't write them attacks the criteria, looking for
-ones a lazy implementation would satisfy. And nothing runs until I say go."
+<!-- 0:50 · about 35 seconds. Keep it short; the JSON beat does the explaining.
+"So I built a Claude Code skill called Verify. Four or five steps."
+Point along the chain as you say them.
+"You start with the plan you already wrote. From the plan it derives acceptance
+criteria, which are really just user requirements: what has to be true for this
+change to have worked."
+Point at the space around the diagram.
+"Notice what isn't in this picture. Your code. If you derive the criteria from
+the diff they always pass, because the test and the code came from the same
+understanding."
+"Then a second model, Codex, reviews the criteria before they come to me. I
+approve them. Then it boots the whole stack, drives each one, and reports."
+
+Do NOT also say here that the criteria trace back to your plan file. You say it
+again over the JSON, pointing at the actual field. Saying it twice is where
+about thirty seconds went in the five-minute run.
 -->
 
 ## What an acceptance criterion looks like
@@ -149,69 +146,62 @@ flowchart TD
     probe -.->|"part is down"| cnr
 ```
 
-<!-- 2:25
-"Second thing. It doesn't test the code in isolation. Every run boots the whole
-stack in its own compose project, so it never collides with my dev environment
-or another run, and it tears it down afterwards, volumes and all."
-"It seeds through the app's front door, and it weaves a marker unique to the
-run into every record it creates, so a check that never actually ran can't
-quietly pass."
+<!-- 2:25 · about 30 seconds.
+"Second thing that mattered. These are end-to-end tests, not unit tests, so
+every run boots the whole stack with docker compose, in its own project, and
+tears it down afterwards. I had to re-architect a bit to make that possible."
+"It seeds through the app's front door, with a marker unique to the run in
+every record it creates."
 Point at the dotted branch.
-"Then it probes every part before judging anything. If the database is down,
-those criteria come back as 'could not run'. They don't come back as my change
-being broken. That distinction is the difference between a report I trust and
-a flaky test suite I learn to ignore."
-"Last night that meant a real Postgres, a real cloud sandbox, and a real model
-running against a real repository. Opslane integrates with Slack and GitHub, so
-I keep simple twins of those to drive end to end. And for the outage case it
-stood up a fake provider that answers 529 to every call, which is the only way
-I can test model failures at all. I used to mock those parts, and the failures
-just moved to staging."
+"Then it probes each part before judging anything. A part that's down turns its
+criteria into could-not-run, rather than my change looking broken."
+"For this change that meant a real Postgres in Docker, a real cloud sandbox,
+and a real model run against a real repository. Opslane integrates with Slack
+and GitHub, so I keep small twins of those to drive end to end."
+
+Say "a real cloud sandbox" and "a real model run", not "my Claude sandbox
+provider" or "anthropic tests".
 -->
 
 ## It gives you the receipts
 
 ![A Verify report. The headline reads 4 of 5 proven, 1 failed, above a criterion card with its plain-language claim, its pass badges, and the two commands that ran with their exit codes](../../assets/report-receipts.png)
 
-<!-- 3:05
-"Third. A verdict you can't check is just another agent saying done. So every
-criterion carries the commands that ran and what came back."
-Point at the headline, then the badges, then the two commands.
-"Four of five proven, one failed. Every claim in plain language, and underneath
-it the actual commands, with exit codes."
+<!-- 3:05 · about 40 seconds.
+"Last part, and the one that matters most. If you don't get evidence, you can't
+tell whether the agent really ran anything. So the report carries every command
+it ran and what came back."
+Point at the headline, the badges, then the commands.
+"Four of five proven, one failed. Each claim in plain language, the actual
+commands underneath, with exit codes."
 
 SWITCH → report.html.
-"And the one that failed is my favourite part."
-Expand it. Read only the first sentence, flat:
-"The expectation was built on a wrong premise, mine."
-Paraphrase the rest: "It had assumed a feature worked one way. It works another
-way. So instead of failing my code, it told me my criterion was wrong, and
-showed me the log line that proves it. That's when I started trusting it."
-
-THIS IS THE MOMENT. Every practice run that drops it becomes a features talk
-with no proof. Twenty seconds. Do not cut it for time.
+"One of the five failed. When I looked, the criterion was wrong, not the code.
+It had assumed the feature worked one way and it works another, and it pointed
+at the log line that showed the actual behaviour."
 
 Scroll to Not checked.
-"And every report ends with what it did not check. This one noticed, without
-being asked, that my plan and my code disagreed about how one failure gets
-classified. This is the section I read first now."
+"And every report ends with what it did not check, including anything the
+reviewer asked for that never got driven."
+
+ACCURACY: the second model reviews the criteria before you approve them. It
+never sees the report. Do not say the report goes back to a second model that
+confirms the tests succeeded.
 -->
 
-## Three things to steal
+## Three things that helped
 
-1. **Write the criteria from your spec, not the implementation.** Code that wrote its own test agrees with itself.
-2. **Separate the part that thinks from the part that runs.** A model writes the plan. A deterministic engine executes it and keeps the receipts. Nothing gets patched mid-run.
-3. **Make a pass provable.** A marker unique to the run, woven into every record, so a check that never ran cannot quietly pass.
+1. Write the criteria from your spec, not the implementation.
+2. Test the whole stack.
+3. Get the agent to give you evidence.
 
 `github.com/opslane/verify`
 
-<!-- 3:40
-"Three things you can steal even if you never install this."
-"One: write the criteria from your spec, not from the implementation. Code that
-wrote its own test will always agree with itself."
-"Two: separate the part that thinks from the part that runs. Let a model write
-the plan, then let a boring engine execute it and keep the receipts."
-"Three: make a pass provable. A marker unique to the run in every record, so a
-check that never actually ran can't quietly pass."
-"It's open source, and the run I just showed you is in the repo. Thanks."
+<!-- 3:20
+"Three things that were useful for me, if you're building something like this."
+"One: write your criteria from your spec, not the implementation."
+"Two: make it easy to spin up your whole stack, so the agent can test end to
+end."
+"Three: get evidence back, so you can check what it actually ran."
+"It's open source, and the run I showed you is in the repo. Thanks."
 -->
