@@ -61,22 +61,29 @@ means."
 
 ## A real run
 
-The change: when Opslane's AI worker fails to investigate an incident, that is our failure. It should retry on its own instead of showing the customer "needs a human."
+Context: Opslane runs an AI investigation on every incident a customer reports. Sometimes that investigation dies halfway. The model runs out of turns, or the provider is down. Before this change, the customer saw "needs a human" on their dashboard for what was really our failure.
+
+The change: those failures are ours. Retry quietly. Never show them to the customer.
 
 Files from the run are in [`examples/agent-fail-v2/`](../../examples/agent-fail-v2/).
 
 <!-- 1:35
-"Here's a run from last night. The change: when our AI worker fails to
-investigate an incident, that's our failure, not the customer's. It should
-retry quietly instead of putting 'needs a human' on the customer's dashboard."
+"Here's a run from last night. Quick context so the criteria make sense.
+Opslane runs an AI investigation on every incident a customer reports.
+Sometimes that investigation dies halfway: the model runs out of turns, the
+provider is down. Before this change the customer saw 'needs a human' on their
+dashboard. That's wrong. It's our failure. The change makes it retry quietly
+instead."
 
-SWITCH → criteria.md, plain claim column visible.
-"It wrote five criteria. I wrote none of them. Read AC3."
+SWITCH → criteria.md, zoomed so one Plain claim fills the screen.
+"It wrote five criteria. I wrote none of them. Here's AC3."
 Read it: "When the model runs out of room on a real investigation of a real
 repository, the job is not retried, the incident is not shown to the customer,
 and the failure is labelled as ours."
-"There are no file names or function names in there. Everything in it can be
-observed from outside the code."
+Translate it: "In plain terms: when our AI gives up halfway, don't retry
+forever, don't show the customer a half-finished answer, and mark it as our
+bug, not theirs. No file names or function names in there. Everything in it
+can be observed from outside the code."
 Scroll to the yellow line, "Unknown against the base commit. Confirm before
 approving: AC5."
 "It also told me it wasn't sure about AC5. I said run it anyway."
@@ -92,10 +99,11 @@ stood up a fake provider that answers 529 to everything. I used to mock those
 parts, and the failures just showed up in staging instead."
 
 "Four criteria held. One failed. AC5, the one it warned me about."
-Expand AC5 and read it flat:
+Expand AC5. Read only the first sentence, flat:
 "The expectation was built on a wrong premise, mine."
-"It did not blame the code. It blamed its own assumption, and it showed me the
-log line that proves it."
+Then paraphrase, do not read the rest: "It had assumed a feature worked one
+way. It works another way. And instead of failing the code, it said: that was
+my assumption, and here's the log line that shows it."
 
 Scroll to Not checked.
 "And every report ends with what it did not check. This one found, without
