@@ -145,6 +145,28 @@ describe('drive CLI end to end', () => {
     expect(readFileSync(outputPath, 'utf8')).toContain('recorded invocation');
   }, 20_000);
 
+  it('drives with the contract env file, the same values boot and precheck used', async () => {
+    const { repo, runDir } = await fixture();
+    const address = server!.address();
+    if (!address || typeof address === 'string') throw new Error('missing server address');
+    // The documented contract: the port and the DSN live in env_file, not in
+    // the shell that runs the engine. A stale shell value must not win either.
+    writeFileSync(join(repo, '.verify', 'setup.json'), JSON.stringify({
+      mode: 'none', base_url: 'http://127.0.0.1:${VERIFY_E2E_PORT:-9}', env_file: '.env.verify',
+      auth: { header: '', value_env: '' }, observe: { db_url_env: 'TESTDB' },
+    }));
+    writeFileSync(join(repo, '.env.verify'),
+      `# throwaway stack\nVERIFY_E2E_PORT=${address.port}\nTESTDB="postgres://file:file@localhost/throwaway"\n`);
+    delete process.env.TESTDB;
+    process.env.VERIFY_E2E_PORT = '9';
+
+    const happy = JSON.parse(await runCli(['drive', 'AC1', '--repo-root', repo, '--run-dir', runDir]));
+    expect(happy.steps.map((step: { state: string }) => step.state)).toEqual(['completed', 'completed', 'completed']);
+    expect(happy).toMatchObject({ finalized: true, proof: { result: 'present', seen: true } });
+    const dbReceipt = JSON.parse(readFileSync(join(runDir, 'evidence', 'AC1', happy.attempt, 'step-3.json'), 'utf8'));
+    expect(JSON.stringify(dbReceipt)).not.toContain('file:file');
+  }, 20_000);
+
   it('structurally rejects a refusal-status HTTP step as proof', () => {
     const dir = mkdtempSync(join(tmpdir(), 'verify-invalid-refusal-'));
     const fixturePath = join(dir, 'criteria.json');

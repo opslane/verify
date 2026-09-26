@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- **`drive` loads the contract's env file.** Boot, seed and precheck read
+  `env_file` (or `VERIFY_ENV_FILE`, or the shared-store fallback); the drive
+  engine read only the calling shell. With the documented contract
+  (`base_url: http://localhost:${APP_PORT:-3000}`, `db_url_env: DATABASE_URL`
+  from `.env.example`), http steps went to the default port and `db` steps
+  failed with `$DATABASE_URL is not set`, or queried whatever database the
+  shell pointed at, after precheck had vouched for the one the file names. The
+  engine now parses the same file with the same rules before resolving either.
+
 ## [2.9.0] - 2026-09-03
 
 ### Added

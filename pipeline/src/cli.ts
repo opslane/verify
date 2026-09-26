@@ -5,6 +5,7 @@
 import { parseArgs } from "node:util";
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { sep, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Criterion } from './lib/criteria.js';
 
 const { positionals, values } = parseArgs({
@@ -122,9 +123,41 @@ if (command === "drive") {
 
     const setup = readJson(join(repoRoot, '.verify', 'setup.json')) as {
       base_url?: unknown;
+      env_file?: unknown;
       auth?: { header?: unknown; value_env?: unknown };
       observe?: { db_ro_env?: unknown; db_url_env?: unknown };
     };
+    // Boot, seed and precheck all run with the contract's env file loaded
+    // (VERIFY_ENV_FILE override, then env_file, then the shared-store
+    // fallback). The drive must too, or base_url placeholders and the DSN
+    // resolve from whatever the calling shell holds — a different stack, or
+    // none — while precheck vouched for the one the file names.
+    let envFile: string | undefined;
+    if (process.env.VERIFY_ENV_FILE) {
+      envFile = pathFromRepo(repoRoot, process.env.VERIFY_ENV_FILE);
+      if (!existsSync(envFile)) fail(`drive: VERIFY_ENV_FILE does not exist: ${envFile}`);
+    } else if (typeof setup.env_file === 'string' && setup.env_file) {
+      envFile = pathFromRepo(repoRoot, setup.env_file);
+      if (!existsSync(envFile)) {
+        let storeEnv = '';
+        try {
+          const sharedStore = fileURLToPath(new URL('../../scripts/shared-store.sh', import.meta.url));
+          storeEnv = join(execFileSync('bash', [sharedStore, 'path'], {
+            cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+          }).trim(), 'local.env');
+        } catch {
+          // No store is the same as no fallback.
+        }
+        if (!storeEnv || !existsSync(storeEnv)) {
+          fail(`drive: configured env file missing: ${setup.env_file} (no shared fallback either)`);
+        }
+        envFile = storeEnv;
+      }
+    }
+    if (envFile) {
+      const { parseEnvFile } = await import('./lib/env-file.js');
+      Object.assign(process.env, parseEnvFile(readFileSync(envFile, 'utf8')));
+    }
     if (typeof setup.base_url !== 'string') fail('drive: setup.json base_url must be a string');
     const authHeader = setup.auth?.header ?? '';
     const authValueEnv = setup.auth?.value_env ?? '';
