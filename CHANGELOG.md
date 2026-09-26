@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- **`expand.sh --load-env` reads the env file the way boot does.** It kept the
+  double quotes that `env.sh` and `precheck.sh` strip, so `APP_PORT="4000"` gave
+  the seed script and login capture `http://localhost:"4000"`, and a key starting
+  with a digit made it exit with no output. It now skips and unquotes the same
+  lines they do.
+
 ## [2.9.0] - 2026-09-03
 
 ### Added

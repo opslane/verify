@@ -27,12 +27,16 @@ if [ "${1:-}" = "--load-env" ]; then
     fi
   fi
   if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+    # Same parse as env.sh/precheck.sh, so expansion sees the values boot saw.
     while IFS= read -r line || [ -n "$line" ]; do
       key="${line%%=*}"
       val="${line#*=}"
       case "$key" in
-        ''|'#'*|*[!A-Za-z0-9_]*) continue ;;
+        *[!A-Za-z0-9_]*|""|[0-9]*) continue ;;
+        PATH|IFS|ENV|BASH_ENV|SHELL|CDPATH|LD_*|DYLD_*|PS4|PROMPT_COMMAND|TMPDIR) continue ;;
       esac
+      [ "$line" = "$key" ] && continue            # no '=' present
+      case "$val" in \"*\") val="${val#\"}"; val="${val%\"}" ;; esac   # strip only PAIRED quotes
       export "$key=$val"
     done < "$ENV_FILE"
   fi
