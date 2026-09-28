@@ -1,6 +1,6 @@
 // cli.ts — engine for the /verify skill.
 //
-// Three verbs, each a thin wrapper over a pure module. The skill is the
+// A few verbs, each a thin wrapper over a pure module. The skill is the
 // control loop; this only does plumbing it would be silly to do in markdown.
 import { parseArgs } from "node:util";
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -423,6 +423,36 @@ if (command === "drive") {
   } else {
     console.log(JSON.stringify({ changed }, null, 2));
   }
+} else if (command === "profile-check") {
+  const { checkProfile } = await import("./lib/profile.js");
+
+  const repo = values.repo ?? process.cwd();
+  const profilePath = join(repo, ".verify", "profile.json");
+  if (!existsSync(profilePath)) fail(`profile-check: no profile at ${profilePath}`);
+
+  let profile: unknown;
+  try {
+    profile = readJson(profilePath);
+  } catch (err) {
+    fail(`profile-check: ${profilePath} is not valid JSON: ${(err as Error).message}`);
+  }
+
+  // A cited path must stay inside the repo; anything else is reported as missing.
+  const root = realpathSync(repo);
+  const lineCount = (path: string): number | null => {
+    const full = resolve(root, path);
+    if (full !== root && !full.startsWith(root + sep)) return null;
+    if (!existsSync(full)) return null;
+    try {
+      return readFileSync(full, "utf8").split("\n").length;
+    } catch {
+      return null;
+    }
+  };
+
+  const { errors, counts } = checkProfile(profile, lineCount);
+  console.log(JSON.stringify({ ok: errors.length === 0, counts, errors }, null, 2));
+  if (errors.length > 0) process.exit(1);
 } else {
   console.error("Usage:");
   console.error("  npx tsx src/cli.ts drive <ac>    --repo-root <dir> --run-dir <dir> [--dry-run] [--draft] [--step N] [--criteria <json>]");
@@ -430,5 +460,6 @@ if (command === "drive") {
   console.error("  npx tsx src/cli.ts report        --results <json> [--criteria <json>] [--run-dir <dir>] [--repo-root <dir>] [--precheck <json>]");
   console.error("  npx tsx src/cli.ts html          --results <json> --run-dir <dir> [--criteria <json>] [--repo-root <dir>] [--precheck <json>] [--review <json>] [--run-id <id>]");
   console.error("  npx tsx src/cli.ts changed-files --repo <dir> --base <rev> [--claims <json>]");
+  console.error("  npx tsx src/cli.ts profile-check --repo <dir>");
   process.exit(1);
 }

@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- **`/break`: try to break a change the way the real world will.** A new skill that
+  runs after `/verify` on the same disposable local stack. It maps where the change
+  hands work to other actors, stops for approval of a short charter, then attacks:
+  crashes between writes, two actors at once, a person acting mid-job, dependencies
+  down or hanging, shipped defaults (flags unset, optional keys empty), the proxy chain
+  in front of production, restarts on old data, and operator scripts run end to end.
+  It also produces the shapes other producers leave (older code, retries, customer
+  build tools) and checks that every consumer of changed data agrees. Findings are
+  things it made happen on the running system, each with a reproduction script;
+  guarantees are reported as held N of M attempts. It never fixes anything.
+- **App profile.** `/verify-setup` now builds `.verify/profile.json` from the code:
+  services, background actors, status transitions, outside services, behaviour-changing
+  config and the chain in front of production, each item citing its file and line. It
+  asks at most a closed question or two. `/break` reads the slice a change touches and
+  rebuilds the profile when it is missing or stale.
+- **`profile-check` engine verb.** Validates the profile's shape and that every cited
+  file and line exists inside the repo.
+
 ## [2.9.0] - 2026-09-03
 
 ### Added
