@@ -5,8 +5,10 @@ what it observed.
 
 ## Architecture
 ```
-skills/verify/SKILL.md   the workflow. Claude is the control loop.
-pipeline/                the engine. Three CLI verbs over three pure modules.
+skills/verify/SKILL.md        the workflow. Claude is the control loop.
+skills/verify-setup/SKILL.md  one-time repo setup: the setup contract and the app profile.
+skills/break/SKILL.md         tries to break a change on a disposable local stack.
+pipeline/                     the engine. A few CLI verbs over pure modules.
 ```
 
 The skill decides what to check and judges the result. The engine only does plumbing that
@@ -15,6 +17,7 @@ would be silly to do in markdown:
 - `criteria`      renders the approval artifact from JSON
 - `report`        renders the report from JSON
 - `changed-files` lists behaviour-bearing changed files, and coverage gaps given claims
+- `profile-check` validates `.verify/profile.json`, the app profile /verify-setup writes
 
 Run artifacts land in the target repository under `.verify/runs/<id>/` and are gitignored
 there. The engine holds no state.
@@ -38,5 +41,5 @@ cd pipeline && npm ci
 npm test          # vitest
 npm run typecheck # tsc --noEmit, expected clean
 ```
-The three lib modules are pure functions over plain data. Keep them that way: everything
+The lib modules are pure functions over plain data. Keep them that way: everything
 that touches the filesystem, git, or the network lives in `cli.ts`.

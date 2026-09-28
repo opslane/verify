@@ -1,6 +1,6 @@
 ---
 name: verify-setup
-description: One-time setup for /verify. Sniffs the repo, confirms boot/seed/health with you, writes .verify/setup.json. Also captures auth if the app needs login.
+description: One-time setup for /verify and /break. Sniffs the repo, confirms boot/seed/health with you, writes .verify/setup.json, captures auth if the app needs login, and builds .verify/profile.json, a model of how the app runs.
 ---
 
 # /verify-setup
@@ -158,8 +158,6 @@ else
 fi
 ```
 
-Finish with: `✓ Setup complete. Run /verify before your next PR.`
-
 ## 6. Share with your worktrees
 
 A git worktree gets the committed contract for free but not the gitignored
@@ -175,3 +173,92 @@ This copies `.verify/auth.json` and the chosen env file to
 folder stops NEW worktrees inheriting the login; copies already pulled into
 worktrees remain until their `.verify/` is deleted. Run `push` again whenever auth is
 recaptured or the env file changes.
+
+## 7. Build the app profile
+
+`/break` attacks a change on a local copy of the app. To pick attacks that match how the
+app really runs, it reads a profile of the app: what runs in the background, which
+tables have statuses and what moves them, which outside services it calls, which
+settings change behaviour when empty, and what sits in front of it in production.
+
+Always build it; it is part of setup, not a question for the user. Build it from the
+code alone: read the repo, do not boot anything, use no network. It takes a few minutes.
+If it fails, say so in the summary and finish setup anyway: `/break` works without it.
+
+Fill exactly this shape and write it to `.verify/profile.json` (this example is
+load-bearing: a test checks it against the engine's validator):
+
+```json app-profile
+{
+  "version": 1,
+  "services": [
+    {"name": "api", "kind": "api", "run": "compose service api", "source": "compose.yaml:3"}
+  ],
+  "actors": [
+    {"name": "job-reaper", "kind": "reaper", "service": "worker", "interval_s": 60,
+     "interval_env": "REAPER_INTERVAL_MS", "touches": ["jobs"], "source": "worker/src/index.ts:191"}
+  ],
+  "entities": [
+    {"table": "jobs", "status_field": "status", "statuses": ["pending", "claimed", "completed", "dead_letter"],
+     "transitions": [
+       {"from": "claimed", "to": "pending", "by": "job-reaper", "source": "worker/src/db.ts:1323"},
+       {"from": "any", "to": "pending", "by": "request:POST /api/jobs", "source": "api/handler/jobs.go:40"}
+     ],
+     "source": "migrations/001_jobs.sql:5"}
+  ],
+  "external": [
+    {"name": "anthropic", "kind": "llm", "env": ["ANTHROPIC_API_KEY"], "stubbable": "yes",
+     "stub_how": "ANTHROPIC_BASE_URL", "source": "worker/src/llm.ts:12"}
+  ],
+  "config": [
+    {"name": "OPENAI_API_KEY", "default": null, "effect": "empty: no embeddings, duplicates are never merged",
+     "source": ".env.example:20"}
+  ],
+  "edge": {"hops": ["cloudflare", "load_balancer"], "source": "answered by the user"}
+}
+```
+
+- **services**: every process, from compose files, Procfiles, package scripts or
+  manifests. `kind` is one of `api`, `worker`, `web`, `db`, `queue`, `storage`, `other`.
+- **actors**: every loop, timer, scheduler, poller, reaper, sweeper, cron job, queue
+  consumer, boot-time task and startup migration runner. `kind` is one of `scheduler`,
+  `poller`, `reaper`, `sweeper`, `consumer`, `boot_task`, `migration`. `touches` lists
+  the tables or queues it writes; `/break` uses it to find the actors that matter for a
+  change.
+- **entities**: only tables with a status or state field. List the transitions you can
+  find; `by` is an actor name, `request:<METHOD /path>`, or `unknown`.
+- **external**: every outside API or SDK. `stubbable` says whether a local stand-in can
+  replace it and `stub_how` names the setting that points it elsewhere (or null).
+- **config**: only settings where an empty or default value changes behaviour, with
+  the effect in one line. Never record a secret value.
+- **edge**: the chain in front of production, outermost first, each hop one of
+  `cloudflare`, `cdn`, `vercel`, `load_balancer`, `nginx_or_ingress`, `none`,
+  `unknown`. Detect it from deploy files and docs when you can.
+
+Rules:
+
+- Every item cites `source` as `path:line` in this repo. No source, no item.
+- What the code does not show is `"unknown"`, never a guess. Unknowns are fine: `/break`
+  tests both ways when that is cheap.
+- Do not record which writes lack a guard, who else reads shared data, or how many
+  replicas run. They are easy to get wrong from reading, so `/break` works them out
+  fresh for each change.
+- Ask the user only when an unknown field would block a likely, valuable attack and
+  their answer changes how it is tested. Use AskUserQuestion with the field's allowed
+  values as the options, never an open question. In practice this is usually one
+  question: confirm the edge chain. Decisions about how to test (whether to point a
+  test tenant at a stub, for example) are yours to make, not questions for the user.
+- Record an answer as `"source": "answered by the user"`.
+
+Check it with the engine and fix every error it reports:
+
+```bash
+VERIFY_PIPELINE="${VERIFY_PIPELINE:-$CLAUDE_PLUGIN_ROOT/pipeline}"
+(cd "$VERIFY_PIPELINE" && npx --no-install tsx src/cli.ts profile-check --repo "$(pwd -P)")
+```
+
+Show the user a short summary: counts per section, the edge chain, and the few config
+settings with the biggest effect. Then offer: "Commit `.verify/profile.json` so your team
+and future runs share it? (y/n)". On yes, `git add -f .verify/profile.json` and commit it.
+
+Finish with: `✓ Setup complete. Run /verify before your next PR.`
