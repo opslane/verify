@@ -9,7 +9,9 @@ description: Try to break a change the way the real world will - network faults,
 "how does this change fail once it meets real networks, real users and the other
 services around it?". Run it after `/verify` passes, on the same local stack.
 
-It is not a unit test hunt. Empty strings, unicode and wrong types belong in unit tests.
+It is not a unit test hunt. Empty strings, unicode and wrong types belong in unit tests,
+unless a real producer sends them: a model filling in tool arguments is one, so an empty
+or odd-but-valid value it writes is in scope here.
 The bugs this skill looks for only exist when the whole system is running:
 
 - **Network and infrastructure:** a dependency that is slow, refuses connections or
@@ -50,8 +52,10 @@ ask for `/verify-setup`.
 Create a run directory: `.verify/breaks/<YYYYMMDD-HHMMSS>/`. Everything you write goes
 there.
 
-Find the plan the same way `/verify` does. You also read the diff, and unlike `/verify`
-you may read the changed code: this skill uses code to **aim**, never to **judge**.
+Find the plan the same way `/verify` does. Then read the diff and the code around it.
+Unlike `/verify`, this skill must read code: the plan says what should happen, and only
+the code shows where it can fail (what calls the changed code, what it trusts, where it
+gives up). Code is for **aiming**. Judging still comes from the running system.
 
 ### Read the app profile
 
@@ -112,8 +116,12 @@ A seam is anywhere the change hands work or state to something else. Write
 ### Other producers
 
 A fresh stack holds only what the happy path wrote. Real systems hold what everyone
-produced. For each piece of data the change consumes (rows, messages, files, headers,
-payloads, config, URLs, anything it parses):
+produced. Find the data the change consumes from the diff, not only from the plan: for
+every function, check or query the change edits, list what already flowed through it on
+the base commit. A change aimed at a new kind of item often edits code the older kinds
+still pass through, and the plan will not mention them. A path through code the change
+edited is never out of scope, whatever the plan is about. For each piece of data the change
+consumes (rows, messages, files, headers, payloads, config, URLs, anything it parses):
 
 1. **List the producers.** Older versions of this code, other services and background
    jobs, people (manual fixes, imports, admin tools), outside systems (webhooks, SDKs,
@@ -140,6 +148,8 @@ and the ones you could not, in the charter.
 For each piece of data the change produces or changes the meaning of (a row, a stored
 payload, a message, a status), find everything else that reads it: other endpoints,
 tools, notifiers, the UI, reports, and older versions still running during a deploy.
+When the data ends up in a prompt, the model is a consumer too: check what the prompt
+tells it, not only what is stored.
 Trace them in the code now, for this change; do not rely on a list from the profile.
 After each attack, read the data through every consumer and check they agree on what
 it means (whether it exists, what it holds, what state it is in), even if they show
@@ -167,6 +177,12 @@ cases for this app from the profile and the diff.
 | ships an operator script or deploy step | run it end to end on the stack, as the operator would |
 | stores data others read | check all consumers agree |
 | runs at startup | a restart on data left by older versions |
+| adds a rule that decides (a threshold, filter, detector, classifier) | both directions: it fires when it should not, and it stays silent when it should fire |
+| runs a model or an agent, or acts on what one returns | the model and agent attacks below |
+
+When the plan states a goal ("no customer is charged twice") as well as a mechanism
+("a lock around the charge call"), test the goal. Inputs the mechanism did not foresee
+are where it fails.
 
 ### Starting states
 
@@ -225,6 +241,44 @@ the user and stop until they say go.
 8. **Prod parity.** Compare the env vars and default hosts the change needs against
    what the deployed config provides. Put the profile's edge chain in front (a local
    proxy standing in for each hop) where the change handles requests.
+
+### Model and agent attacks
+
+A model or agent returns well-formed things the surrounding code can mishandle. Nothing
+crashes, so the attacks above miss them. Use these when the change runs a model or an
+agent, or acts on what one returns. Point the client at a local stub to choose the answer;
+use a cheap real call only where the charter lists it with its cost.
+
+1. **Every way a run can end.** Finished, hit a limit (turns, tokens, time, money), cut
+   off mid-answer, refused, empty, errored. Produce each one. Only "finished" may count
+   as a result; the others must each land somewhere sensible and be told apart. When the
+   answer is streamed, also produce the reason arriving in pieces: repeated, out of order,
+   or followed by a later piece that leaves it empty.
+2. **Checks on answers, both ways.** A wrong answer that passes the format check: it
+   claims evidence it does not give, cites something that does not exist, contradicts
+   itself, or answers a different question. And a right answer the check rejects: build
+   it from real material (the exact text a real tool prints, real names, real quoting),
+   not a tidy example. Follow each rejected answer to where it ends up.
+3. **Tool trouble.** A tool errors, returns nothing, returns something huge, is slow,
+   returns plausible but wrong data, is unavailable, or returns text that contains
+   instructions. The run should fail honestly, not reach a confident answer anyway.
+   The other direction too: the arguments the model sends a tool can be empty, missing,
+   extra, or name something that does not exist. The tool should refuse clearly or fall
+   back, not fail the whole run.
+4. **Loop control.** The agent repeats a step, never stops, stops early, or calls its
+   final tool more than once. Check the spend cap is enforced before the next call.
+5. **What the model is shown.** Two checks. Complete: list what the model needs to make
+   the decision it is asked for, and confirm each item reaches the prompt at realistic
+   sizes (a real-sized repository, history or record, not a fixture), not cut off or left
+   out. True: for each input shape from "Other producers" (odd, empty, huge, cut short to
+   fit), the prompt does not mislead. Where a cheap real call is approved, check what the
+   model concludes.
+6. **Retries around a model.** A retry can answer differently, mix with a partial result
+   from the first attempt, or multiply with the client library's own retries.
+7. **Same input, several runs.** Run one decision at least three times. Every guarantee
+   must hold on every run, not on the lucky one.
+8. **One bad answer, one bad item.** One malformed or rejected output fails its own item,
+   never the batch it arrived in.
 
 ### Optional: randomise the timing
 
@@ -298,6 +352,9 @@ end states first.
   promise, and keep attempts, committed effects and paid calls apart.
 - Good data survives. A later failure never overwrites an earlier success.
 - Spend is accounted: one ledger row per real paid call, and no loop of paid calls.
+- Only a finished answer is a result. A model or agent run that stopped for any other
+  reason never writes one, and a rejected answer reaches an end state within a fixed
+  number of attempts.
 - The user was told the truth: no 500 for a normal action, no success shown for a
   failure, no spinner that never ends.
 - The views agree once polling or caches have caught up: what the UI shows, what the
