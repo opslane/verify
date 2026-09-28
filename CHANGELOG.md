@@ -24,6 +24,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   rebuilds the profile when it is missing or stale.
 - **`profile-check` engine verb.** Validates the profile's shape and that every cited
   file and line exists inside the repo.
+- **`/break`: model and agent attacks.** Changes that run a model or an agent, or act on
+  what one returns, now get their own attack list: every way a run can end, checks on
+  answers in both directions, tool trouble in both directions, loop control, whether the
+  prompt is complete and true, retries around a model, the same input run several times,
+  and one bad answer failing only its own item. A new guarantee says only a finished
+  answer is a result.
+
+### Changed
+- **`/break` aims wider.** It must read the diff and the code around it. Scope comes from
+  the code the change edits, not only the plan, and a path through edited code is never
+  out of scope. It tests the plan's goal as well as its mechanism, attacks a new rule
+  both ways, treats the model as a consumer of the data put in its prompt, and keeps
+  odd values in scope when a model is the one writing them.
 
 ## [2.9.0] - 2026-09-03
 
