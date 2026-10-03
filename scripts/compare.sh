@@ -39,6 +39,11 @@ case "$CMD" in
     git worktree add --force "$WT" "$BASE_REF" > /dev/null
     printf '%s\n' "$WT" > "$WT_STATE"
 
+    # Bash suspends errexit for the whole body of a compound command that sits
+    # in a `||` list, so `( set -e; ... ) || { ... }` let a failed `env.sh up`
+    # fall through to "Base stack up". Run the bring-up as a plain command and
+    # test its status afterwards.
+    set +e
     (
       set -e
       cd "$WT"
@@ -66,12 +71,15 @@ case "$CMD" in
           bash .verify/seed.sh "$BASE_MARKER"
       fi
       BASE_UP_OK=1
-    ) || {
+    )
+    BRING_UP=$?
+    set -e
+    if [ "$BRING_UP" -ne 0 ]; then
       git worktree remove --force "$WT" 2>/dev/null || true
       rm -f "$WT_STATE"
       echo "✗ base environment failed to come up — report it as 'base could not run', never reinterpret"
       exit 1
-    }
+    fi
     echo "✓ Base stack up in worktree: $WT"
     echo "  Drive the chosen criteria there exactly as on the candidate, then: compare.sh down"
     ;;
