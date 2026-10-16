@@ -213,7 +213,9 @@ highest-risk interleavings from section 1 first, then the rest as time and budge
 stack you will use, and a rough time estimate. List every attack from the list below
 that you considered and skipped, each with a one-line reason ("no second actor writes
 this row"). Scale the effort to the change: a single-flow change gets two or three
-attacks, a change to background jobs gets the full list. Show it to
+attacks, a change to background jobs gets the full list. Skip an attack the change's own
+end-to-end test already ran (the same fault from the same starting state), and name that
+test in the skipped list instead of running it again. Show it to
 the user and stop until they say go.
 
 ### The attack list
